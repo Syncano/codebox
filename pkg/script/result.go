@@ -1,0 +1,137 @@
+package script
+
+import (
+	"bytes"
+	"context"
+	"encoding/binary"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"time"
+
+	validator "gopkg.in/go-playground/validator.v9"
+
+	"github.com/Syncano/codebox/pkg/docker"
+	"github.com/Syncano/codebox/pkg/util"
+)
+
+var (
+	// ErrIncorrectCustomResponse signals that passed response was malformed
+	ErrIncorrectCustomResponse = errors.New("incorrect custom response received")
+	// LimitReachedText is used when stdout/stderr is too large or custom response could not be parsed.
+	LimitReachedText = []byte("stdout and/or stderr max size exceeded.")
+	// ResponseValidationErrorText is used when HTTP response validation failed.
+	ResponseValidationErrorText = []byte("HTTP response validation failed.")
+)
+
+// Result is a response type for Runner.Run() method.
+type Result struct {
+	Code           int
+	Stdout, Stderr []byte
+	Response       *HTTPResponse
+	Took           time.Duration
+	Overhead       time.Duration
+	Cached         bool
+}
+
+func (ret *Result) String() string {
+	return fmt.Sprintf("{Code:%d, StdoutLen:%d, StderrLen:%d, Response:%v, Took:%v, Overhead:%v}",
+		ret.Code, len(ret.Stdout), len(ret.Stderr), ret.Response, ret.Took, ret.Overhead)
+}
+
+// Parse parses stdout into custom response.
+func (ret *Result) Parse(sep []byte, streamMaxLength int, processErr error) error {
+	stdoutSplit := bytes.SplitN(ret.Stdout, sep, 2)
+	ret.Stdout = stdoutSplit[0]
+
+	// Process exit code.
+	if processErr == nil && len(ret.Stderr) > 0 {
+		ret.Code = int(ret.Stderr[len(ret.Stderr)-1])
+		ret.Stderr = ret.Stderr[:len(ret.Stderr)-1]
+	} else if processErr == context.DeadlineExceeded {
+		ret.Code = 124
+	} else {
+		if processErr == docker.ErrLimitReached {
+			ret.Stderr = LimitReachedText
+		}
+		ret.Code = 1
+	}
+
+	// If streams are too long, trim them.
+	if len(ret.Stdout)+len(ret.Stderr) > streamMaxLength {
+		if len(ret.Stdout) > streamMaxLength {
+			ret.Stdout = ret.Stdout[:streamMaxLength]
+		}
+		ret.Stderr = LimitReachedText
+		ret.Code = 1
+	}
+
+	// If split==2 then we got custom response appended.
+	if len(stdoutSplit) == 2 {
+		data := stdoutSplit[1]
+		res := new(HTTPResponse)
+		// Check for first length bytes (uint32).
+		if len(data) < 4 {
+			ret.Code = 1
+			return ErrIncorrectCustomResponse
+		}
+
+		// Read json length.
+		jsonLen := binary.LittleEndian.Uint32(data[:4])
+		if len(data) < int(jsonLen+4) {
+			ret.Code = 1
+			return ErrIncorrectCustomResponse
+		}
+
+		// Process json and content.
+		if err := json.Unmarshal(data[4:jsonLen+4], res); err != nil {
+			ret.Stderr = LimitReachedText
+			ret.Code = 1
+			return ErrIncorrectCustomResponse
+		}
+		res.Content = data[jsonLen+4:]
+
+		if err := validate.Struct(res); err != nil {
+			ret.Stderr = []byte("HTTP response validation failed.")
+			ret.Code = 1
+			// Return nil as we already handled this error.
+			return nil
+		}
+		ret.Response = res
+	}
+
+	return nil
+}
+
+var validate *validator.Validate
+
+func init() {
+	validate = validator.New()
+	util.Must(validate.RegisterValidation("headermap", func(fl validator.FieldLevel) bool {
+		m := fl.Field().Interface().(map[string]string)
+		var totalLen int
+		for k, v := range m {
+			totalLen += 3 + len(k) + len(v)
+			if totalLen > 8*1024 {
+				return false
+			}
+			if validate.Var(k, "printascii,max=127") != nil || validate.Var(v, "printascii,max=4096") != nil {
+				return false
+			}
+		}
+
+		return true
+	}))
+}
+
+// HTTPResponse describes custom HTTP response JSON from script wrapper.
+type HTTPResponse struct {
+	StatusCode  int               `json:"sc" validate:"min=100,max=599"`
+	ContentType string            `json:"ct" validate:"max=255,printascii,containsrune=/"`
+	Headers     map[string]string `json:"h" validate:"max=50,headermap"`
+	Content     []byte            `json:"-"`
+}
+
+func (res *HTTPResponse) String() string {
+	return fmt.Sprintf("{Code:%d, ContentType:%.25s, ContentLen:%d, HeadersLen:%d}", res.StatusCode, res.ContentType, len(res.Content), len(res.Headers))
+}

@@ -1,0 +1,89 @@
+kind: Deployment
+apiVersion: apps/v1beta1
+metadata:
+  name: codebox-worker-${LB_NUM}
+  labels:
+    app: codebox
+    type: worker
+spec:
+  replicas: ${REPLICAS}
+  selector:
+    matchLabels:
+      name: codebox-worker-${LB_NUM}
+      app: codebox
+      type: worker
+  progressDeadlineSeconds: 600
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 50%
+    type: RollingUpdate
+
+  template:
+    metadata:
+      labels:
+        buildtime: ${BUILDTIME}
+        name: codebox-worker-${LB_NUM}
+        app: codebox
+        type: worker
+    spec:
+      tolerations:
+        - key: "type"
+          operator: "Equal"
+          value: "codebox"
+          effect: "NoSchedule"
+      terminationGracePeriodSeconds: 360
+      nodeSelector:
+        type: codebox
+      imagePullSecrets:
+        - name: syncano-k8s-pull-secret
+      volumes:
+        - name: script-storage
+          hostPath:
+            path: /mnt/codebox/storage
+        - name: varrun
+          hostPath:
+            path: /mnt/codebox/run
+
+      containers:
+        - name: codebox
+          image: ${DOCKERIMAGE}:${VERSION}
+          command: 
+            - "codebox"
+            - "worker"
+          securityContext:
+            privileged: true
+            runAsUser: 0
+          resources:
+            requests:
+              cpu: 1
+          ports:
+            - name: http-metrics
+              containerPort: 9080
+          env:
+            - name: LB_ADDR
+              value: "${LB_ADDR}"
+            - name: SERVICE_NAME
+              value: codebox-worker
+            - name: DOCKER_EXTRA_HOSTS
+              value: "${DOCKER_EXTRA_HOSTS}"
+          envFrom:
+            - configMapRef:
+                name: codebox
+            - secretRef:
+                name: codebox
+          volumeMounts:
+            - name: script-storage
+              mountPath: /home/codebox/storage
+            - name: varrun
+              mountPath: /var/run
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 9080
+            initialDelaySeconds: 180
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 9080
+            initialDelaySeconds: 30

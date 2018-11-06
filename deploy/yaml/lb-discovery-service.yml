@@ -1,0 +1,17 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: codebox-lb-discovery
+  labels:
+    k8s-app: codebox-lb
+spec:
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    app: codebox
+    type: lb
+  ports:
+    - name: http-metrics
+      protocol: TCP
+      port: 9145
+      targetPort: http-metrics

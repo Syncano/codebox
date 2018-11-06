@@ -1,0 +1,53 @@
+syntax = "proto3";
+package lb;
+option go_package = "github.com/Syncano/codebox/pkg/lb/proto";
+
+service WorkerPlug {
+  // SlotReady handles notifications sent by client whenever a slot is ready to accept connections.
+  rpc SlotReady (SlotReadyRequest) returns (SlotReadyResponse);
+
+  // ContainerRemoved handles notifications sent by client whenever a container gets removed from cache.
+  rpc ContainerRemoved (ContainerRemovedRequest) returns (ContainerRemovedResponse);
+
+  // Register is sent at the beginning by the worker.
+  rpc Register (RegisterRequest) returns (RegisterResponse);
+
+  // Heartbeat is meant to be called periodically by worker. If it's not sent for some time, worker will be removed.
+  rpc Heartbeat (HeartbeatRequest) returns (HeartbeatResponse);
+
+  // Disconnect gracefully removes worker.
+  rpc Disconnect (DisconnectRequest) returns (DisconnectResponse);
+}
+
+message SlotReadyRequest {
+  string id = 1;
+}
+message SlotReadyResponse {}
+
+message ContainerRemovedRequest {
+  string id = 1;
+  string sourceHash = 2;
+  string environment = 3;
+  string userID = 4;
+}
+message ContainerRemovedResponse {}
+
+message RegisterRequest {
+  string id = 1;
+  uint32 concurrency = 2;
+  uint32 port = 3;
+  uint64 memory = 4;
+}
+message RegisterResponse {}
+
+message HeartbeatRequest {
+  string id = 1;
+  uint64 memory = 2;
+}
+message HeartbeatResponse {
+}
+
+message DisconnectRequest {
+  string id = 1;
+}
+message DisconnectResponse {}

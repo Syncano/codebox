@@ -1,0 +1,8 @@
+build/codebox*
+vendor/
+coverage*.out
+dev/
+debug*
+*.swagger.json
+*.unenc
+python/

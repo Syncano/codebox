@@ -1,0 +1,14 @@
+version: '3'
+
+services:
+  app:
+    privileged: true
+    build: .
+    image: codebox_app
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - .:/go/src/github.com/Syncano/codebox
+      - /go/src/github.com/Syncano/codebox/vendor
+      - /tmp/storage:/home/codebox/storage
+    environment:
+      - HOST_STORAGE_PATH=/tmp/storage

@@ -1,0 +1,24 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: codebox-broker
+  labels:
+    k8s-app: codebox-broker
+spec:
+  type: ClusterIP
+  selector:
+    app: codebox
+    type: broker
+  ports:
+    - name: uwsgi
+      protocol: TCP
+      port: 8080
+      targetPort: uwsgi
+    - name: grpc
+      protocol: TCP
+      port: 9000
+      targetPort: grpc
+    - name: http-metrics
+      protocol: TCP
+      port: 9080
+      targetPort: http-metrics
