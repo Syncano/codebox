@@ -1,6 +1,6 @@
 # Codebox (Script Runner)
 
-[![CircleCI](https://circleci.com/gh/Syncano/codebox.svg?style=svg&circle-token=e98133b7cc847b59bc4b7d2a97b3fe89ff871a99)](https://circleci.com/gh/Syncano/codebox/tree/devel)
+[![CircleCI](https://circleci.com/gh/Syncano/codebox.svg?style=svg)](https://circleci.com/gh/codebox)
 
 ## Dependencies
 
