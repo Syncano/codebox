@@ -42,6 +42,7 @@ var DefaultOptions = Options{
 	BlkioDevice:   "/dev/sda",
 	Network:       "isolated_nw",
 	NetworkSubnet: "172.25.0.0/16",
+	ReservedCPU:   0.25,
 }
 
 // ErrReservedCPUTooHigh signals that too we are trying to reserve more cpu than we got.
