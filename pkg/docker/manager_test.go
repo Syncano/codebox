@@ -39,6 +39,7 @@ func TestNewManager(t *testing.T) {
 					types.Info{
 						Driver:       "overlay2",
 						DriverStatus: [][2]string{{"-", "xfs"}, {}},
+						NCPU:         1,
 					}, nil,
 				)
 				cli.On("NetworkInspect", mock.Anything, "isolated_nw", mock.Anything).Return(
@@ -54,6 +55,7 @@ func TestNewManager(t *testing.T) {
 					types.Info{
 						Driver:       "overlay2",
 						DriverStatus: [][2]string{{"-", "xfs"}, {}},
+						NCPU:         1,
 					}, nil,
 				)
 				cli.On("NetworkInspect", mock.Anything, "isolated_nw", mock.Anything).Return(
@@ -82,6 +84,7 @@ func TestNewManager(t *testing.T) {
 					types.Info{
 						Driver:       "ext4",
 						DriverStatus: [][2]string{{"-", "xfs"}, {}},
+						NCPU:         1,
 					}, nil,
 				)
 				cli.On("NetworkInspect", mock.Anything, "other_nw", mock.Anything).Return(
@@ -97,6 +100,7 @@ func TestNewManager(t *testing.T) {
 					types.Info{
 						Driver:       "ext4",
 						DriverStatus: [][2]string{{"-", "xfs"}, {}},
+						NCPU:         1,
 					}, nil,
 				)
 				m, e := NewManager(Options{Network: "other_nw", ReservedCPU: 5000}, cli)
