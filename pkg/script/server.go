@@ -203,11 +203,12 @@ func (s *Server) sendResponse(stream pb.ScriptRunner_RunServer, ret *Result) err
 // ParseError converts standard error to gRPC error with detected code.
 func (s *Server) ParseError(err error) error {
 	code := codes.Internal
-	if err == ErrPoolNotRunning {
+	switch err {
+	case ErrPoolNotRunning:
 		code = codes.ResourceExhausted
-	} else if err == ErrCriticalContainerError {
+	case ErrCriticalContainerError:
 		code = codes.Aborted
-	} else if err == filerepo.ErrResourceNotFound {
+	case filerepo.ErrResourceNotFound:
 		code = codes.FailedPrecondition
 	}
 	return status.Error(code, err.Error())

@@ -189,7 +189,8 @@ func (a *Autoscaler) Start() chan struct{} { // nolint: gocyclo
 				}
 				changed := false
 				desiredReplicas, curReplicas := replicaSpec.Spec.Replicas, replicaSpec.Status.Replicas
-				if workerCount == curReplicas && freeSlots < a.options.MinFreeSlots && curReplicas == desiredReplicas {
+				switch {
+				case workerCount == curReplicas && freeSlots < a.options.MinFreeSlots && curReplicas == desiredReplicas:
 					if desiredReplicas < a.options.MaxScale {
 						if upscaleConsecutive+1 > a.options.UpscaleConsecutive {
 							desiredReplicas++
@@ -198,7 +199,9 @@ func (a *Autoscaler) Start() chan struct{} { // nolint: gocyclo
 							upscaleConsecutive++
 						}
 					}
-				} else if freeSlots > a.options.MaxFreeSlots && time.Since(lastUpdate) > a.options.Cooldown {
+
+				case freeSlots > a.options.MaxFreeSlots && time.Since(lastUpdate) > a.options.Cooldown:
+
 					if desiredReplicas > a.options.MinScale {
 						if downscaleConsecutive+1 > a.options.DownscaleConsecutive {
 							desiredReplicas--
@@ -207,7 +210,8 @@ func (a *Autoscaler) Start() chan struct{} { // nolint: gocyclo
 							downscaleConsecutive++
 						}
 					}
-				} else {
+
+				default:
 					downscaleConsecutive = 0
 					upscaleConsecutive = 0
 				}

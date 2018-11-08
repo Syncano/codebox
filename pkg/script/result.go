@@ -45,12 +45,14 @@ func (ret *Result) Parse(sep []byte, streamMaxLength int, processErr error) erro
 	ret.Stdout = stdoutSplit[0]
 
 	// Process exit code.
-	if processErr == nil && len(ret.Stderr) > 0 {
+	switch {
+	case processErr == nil && len(ret.Stderr) > 0:
 		ret.Code = int(ret.Stderr[len(ret.Stderr)-1])
 		ret.Stderr = ret.Stderr[:len(ret.Stderr)-1]
-	} else if processErr == context.DeadlineExceeded {
+	case processErr == context.DeadlineExceeded:
 		ret.Code = 124
-	} else {
+
+	default:
 		if processErr == docker.ErrLimitReached {
 			ret.Stderr = LimitReachedText
 		}
