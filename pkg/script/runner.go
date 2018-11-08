@@ -382,8 +382,9 @@ func (r *DockerRunner) Run(logger logrus.FieldLogger, runtime, sourceHash, envir
 	}
 
 	logger.WithFields(logrus.Fields{
-		"took": took,
-		"ret":  ret,
+		"took":        took,
+		"ret":         ret,
+		"containerID": cInfo.ID,
 	}).Info("Run finished")
 
 	go r.afterRun(runtime, cInfo, fromCache, err)
