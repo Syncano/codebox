@@ -94,7 +94,7 @@ func TestNewRunner(t *testing.T) {
 							Convey("from pool", func() {
 								r.containerPool[defaultRuntime] <- cInfo
 								repo.On("Link", volKey, mock.Anything, mock.Anything).Return(nil)
-								repo.On("Link", volKey, mock.Anything, environmentMount).Return(nil)
+								repo.On("Mount", volKey, mock.Anything, environmentFileName, environmentMount).Return(nil)
 
 								// mocks for afterRun's createFreshContainer.
 								cID2 := "cID2"
@@ -110,7 +110,6 @@ func TestNewRunner(t *testing.T) {
 								So(e, ShouldBeNil)
 								cInfo2 := <-r.containerPool[defaultRuntime]
 								So(cInfo2.ID, ShouldEqual, cID2)
-								r.taskWaitGroup.Wait()
 							})
 							Convey("from cache", func() {
 								r.containerCache.Push(fmt.Sprintf("hash/user//%x", util.Hash("main.js")), cInfo)
@@ -129,6 +128,8 @@ func TestNewRunner(t *testing.T) {
 							_, e := r.Run(logrus.StandardLogger(), defaultRuntime, "hash", "", "user", RunOptions{Files: files})
 							So(e, ShouldBeNil)
 						})
+
+						r.taskWaitGroup.Wait()
 					})
 					Convey("propagates and cleans up errors", func() {
 						files := map[string]FileData{"file": {Data: []byte("content")}}
@@ -142,7 +143,7 @@ func TestNewRunner(t *testing.T) {
 						Convey("Link environment error", func() {
 							env = "env"
 							repo.On("Link", volKey, mock.Anything, mock.Anything).Return(nil).Once()
-							repo.On("Link", volKey, mock.Anything, mock.Anything).Return(err).Once()
+							repo.On("Mount", volKey, mock.Anything, mock.Anything, mock.Anything).Return(err).Once()
 						})
 
 						Convey("for conn Write", func() {

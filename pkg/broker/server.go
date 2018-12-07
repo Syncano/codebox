@@ -86,11 +86,11 @@ var (
 )
 
 const (
-	envFileName     = "squashfs.img"
-	chunkSize       = 2 * 1024 * 1024
-	lbRetrySleep    = 3 * time.Millisecond
-	defaultTimeout  = 8 * time.Minute
-	downloadTimeout = 2 * time.Minute
+	environmentFileName = "squashfs.img"
+	chunkSize           = 2 * 1024 * 1024
+	lbRetrySleep        = 3 * time.Millisecond
+	defaultTimeout      = 8 * time.Minute
+	downloadTimeout     = 2 * time.Minute
 )
 
 // NewServer initializes new Broker server.
@@ -211,7 +211,7 @@ func (s *Server) processRun(ctx context.Context, logger logrus.FieldLogger, requ
 		// Upload environment file if needed.
 		envURL := meta.GetEnvironmentURL()
 		if envURL != "" {
-			if err := s.uploadFiles(ctx, lb, scriptMeta.Environment, map[string]string{envURL: envFileName}); err != nil {
+			if err := s.uploadFiles(ctx, lb, scriptMeta.Environment, map[string]string{envURL: environmentFileName}); err != nil {
 				logger.WithError(err).WithField("key", scriptMeta.Environment).Error("Environment upload error")
 				return err
 			}

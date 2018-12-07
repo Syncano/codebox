@@ -29,7 +29,7 @@ func TestRepo(t *testing.T) {
 		sc := new(mocks.SystemChecker)
 		dir, _ := ioutil.TempDir("", "test")
 		opts := Options{CleanupInterval: time.Minute, Capacity: 12, TTL: time.Second, BasePath: dir}
-		repo := New(opts, sc, new(LinkFs))
+		repo := New(opts, sc, new(LinkFs), new(Command))
 
 		Convey("related options are properly set up", func() {
 			cacheOpts := repo.fileCache.Options()
@@ -290,6 +290,16 @@ func TestRepo(t *testing.T) {
 			So(stat.IsDir(), ShouldBeFalse)
 		})
 
+		Convey("Mount returns error when resource is not found", func() {
+			e := repo.Mount("volkey", "reskey", "file", "dest")
+			So(e, ShouldEqual, ErrResourceNotFound)
+		})
+		Convey("Mount returns error when volume is not found", func() {
+			repo.fileCache.Set("reskey", Resource{Path: "path"})
+			e := repo.Mount("volkey", "reskey", "file", "dest")
+			So(e, ShouldEqual, ErrVolumeNotFound)
+		})
+
 		Convey("CleanupUnused deletes all directories in storage except one equal to storeID", func() {
 			os.Mkdir(filepath.Join(dir, "randomdir"), os.ModePerm)
 			os.Mkdir(filepath.Join(dir, repo.storeID), os.ModePerm)
@@ -330,14 +340,15 @@ func (mr *mockReader) Read(p []byte) (n int, err error) {
 	return 0, mr.err
 }
 
-func TestRepoWithMockedFs(t *testing.T) {
-	Convey("Given file repo with mocked system checker and fs", t, func() {
+func TestRepoWithMocks(t *testing.T) {
+	Convey("Given file repo with mocked system checker, fs and commander", t, func() {
 		sc := new(mocks.SystemChecker)
 		fs := new(MockFs)
+		commander := new(MockCommander)
 		dir, _ := ioutil.TempDir("", "test")
 		opts := Options{CleanupInterval: time.Minute, Capacity: 12, TTL: time.Second, BasePath: dir}
 		fs.On("MkdirAll", dir, os.ModePerm).Return(nil)
-		repo := New(opts, sc, fs)
+		repo := New(opts, sc, fs, commander)
 		err := errors.New("some err")
 
 		Convey("storeFile propagates Create error", func() {
@@ -384,7 +395,7 @@ func TestRepoWithMockedFs(t *testing.T) {
 			})
 			Convey("CleanupVolume propagates error", func() {
 				fs.On("RemoveAll", mock.Anything).Return(nil)
-				repo.volumes["volKey"] = Volume{}
+				repo.volumes["volKey"] = &Volume{}
 				e := repo.CleanupVolume("volKey")
 				So(e, ShouldEqual, err)
 			})
@@ -418,7 +429,7 @@ func TestRepoWithMockedFs(t *testing.T) {
 				os.RemoveAll(dir)
 			})
 			Convey("CleanupVolume propagates error", func() {
-				repo.volumes["volKey"] = Volume{}
+				repo.volumes["volKey"] = &Volume{}
 				e := repo.CleanupVolume("volKey")
 				So(e, ShouldEqual, err)
 			})
@@ -428,6 +439,69 @@ func TestRepoWithMockedFs(t *testing.T) {
 			Convey("onValueEvictedHandler panics", func() {
 				So(func() { repo.onValueEvictedHandler("key", Resource{Path: "val"}) }, ShouldPanicWith, err)
 			})
+		})
+
+		Convey("deleteVolume calls unmount on all mounts", func() {
+			fs.On("RemoveAll", mock.Anything).Return(nil)
+			commander.On("Run", "fusermount", "-u", mock.Anything).Return(nil).Twice()
+			e := repo.deleteVolume(&Volume{mounts: []string{"abc", "cba"}})
+			So(e, ShouldBeNil)
+		})
+		Convey("deleteVolume propagates unmount error", func() {
+			fs.On("RemoveAll", mock.Anything).Return(nil)
+			commander.On("Run", "fusermount", "-u", mock.Anything).Return(err)
+			e := repo.deleteVolume(&Volume{mounts: []string{"abc"}})
+			So(e, ShouldEqual, err)
+		})
+
+		Convey("given existing volume and resource", func() {
+			repo.fileCache.Set("reskey", Resource{Path: "path"})
+			repo.volumes["volkey"] = &Volume{}
+
+			Convey("propagates Mkdir error", func() {
+				fs.On("Mkdir", mock.Anything, mock.Anything).Return(err)
+				e := repo.Mount("volkey", "reskey", "file", "dest")
+				So(e, ShouldEqual, err)
+			})
+			Convey("given successful Mkdir", func() {
+				fs.On("Mkdir", mock.Anything, mock.Anything).Return(nil)
+
+				Convey("propagates Run error", func() {
+					commander.On("Run", "squashfuse", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(err)
+					e := repo.Mount("volkey", "reskey", "file", "dest")
+					So(e, ShouldEqual, err)
+				})
+				Convey("given successful Run", func() {
+					commander.On("Run", "squashfuse", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+
+					Convey("sets up volume mounts", func() {
+						e := repo.Mount("volkey", "reskey", "file", "dest")
+						So(e, ShouldBeNil)
+						So(repo.volumes["volkey"].mounts, ShouldHaveLength, 1)
+					})
+				})
+			})
+		})
+
+		Convey("cleanupMounts stops if cannot open proc mounts", func() {
+			fs.On("OpenFile", "/proc/mounts", os.O_RDONLY, os.ModePerm).Return(nil, err)
+			repo.cleanupMounts()
+		})
+		Convey("cleanupMounts calls unmount on all squashfuse mount", func() {
+			file, _ := ioutil.TempFile("", "")
+			file.WriteString(
+				`proc /proc/asound proc ro,relatime 0 0
+tmpfs /proc/acpi tmpfs ro,relatime 0 0
+squashfuse /tmp/storage/abc fuse.squashfuse rw,nosuid,nodev,relatime,user_id=0,group_id=0 0 0
+`)
+			file.Seek(0, 0)
+
+			fs.On("OpenFile", "/proc/mounts", os.O_RDONLY, os.ModePerm).Return(file, nil)
+			commander.On("Run", "fusermount", "-u", mock.Anything).Return(nil).Once()
+			repo.cleanupMounts()
+
+			file.Close()
+			os.Remove(file.Name())
 		})
 
 		mock.AssertExpectationsForObjects(t, sc, fs)

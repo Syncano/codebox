@@ -178,7 +178,7 @@ var workerCmd = cli.Command{
 
 		// Initialize file repo.
 		logrus.WithField("options", repoOptions).Debug("Initializing file repo")
-		repo := filerepo.New(repoOptions, syschecker, new(filerepo.LinkFs))
+		repo := filerepo.New(repoOptions, syschecker, new(filerepo.LinkFs), new(filerepo.Command))
 
 		// Initialize script runner.
 		logrus.WithField("options", scriptOptions).Debug("Initializing script runner")
