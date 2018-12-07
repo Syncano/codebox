@@ -17,6 +17,7 @@ jobs:
       - run: 
           name: Lint
           command: |
+            sudo mount --make-rshared /
             make lint-in-docker
 
       - run: 

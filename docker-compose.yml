@@ -9,6 +9,7 @@ services:
       - .:/go/src/github.com/Syncano/codebox
       - varrun:/var/run
       - /tmp/storage:/home/codebox/storage:rshared
+      - /go/src/github.com/Syncano/codebox/vendor
     depends_on:
       - dind
     environment:
