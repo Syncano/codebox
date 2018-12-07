@@ -48,6 +48,7 @@ func TestNewManager(t *testing.T) {
 				m, e := NewManager(Options{}, cli)
 				So(e, ShouldBeNil)
 				So(m.storageLimitSupported, ShouldBeTrue)
+				So(m.runtime, ShouldEqual, "")
 			})
 
 			Convey("detects missing network", func() {
@@ -77,6 +78,25 @@ func TestNewManager(t *testing.T) {
 					_, e := NewManager(Options{}, cli)
 					So(e, ShouldEqual, io.EOF)
 				})
+			})
+
+			Convey("detects gvisor runtime", func() {
+				cli.On("Info", mock.Anything).Return(
+					types.Info{
+						Driver:       "overlay2",
+						DriverStatus: [][2]string{{"-", "xfs"}, {}},
+						Runtimes: map[string]types.Runtime{
+							gvisorRuntime: {},
+						},
+						NCPU: 1,
+					}, nil,
+				)
+				cli.On("NetworkInspect", mock.Anything, "isolated_nw", mock.Anything).Return(
+					types.NetworkResource{}, nil,
+				)
+				m, e := NewManager(Options{}, cli)
+				So(e, ShouldBeNil)
+				So(m.runtime, ShouldEqual, gvisorRuntime)
 			})
 
 			Convey("detects lack of support for storage limit", func() {

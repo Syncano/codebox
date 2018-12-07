@@ -1,11 +1,11 @@
 kind: Service
 apiVersion: v1
 metadata:
-  name: codebox-lb-${LB_NUM}
+  name: codebox-lb-{{ LB_NUM }}
 spec:
   type: ClusterIP
   selector:
-    name: codebox-lb-${LB_NUM}
+    name: codebox-lb-{{ LB_NUM }}
   ports:
     - name: grpc
       protocol: TCP

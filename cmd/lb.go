@@ -111,7 +111,7 @@ As there is no authentication, always run it in a private network.`,
 
 		// Initialize file repo.
 		logrus.WithField("options", repoOptions).Debug("Initializing file repo")
-		repo := filerepo.New(repoOptions, syschecker, new(filerepo.LinkFs))
+		repo := filerepo.New(repoOptions, syschecker, new(filerepo.LinkFs), new(filerepo.Command))
 
 		// Create new gRPC server.
 		logrus.WithField("options", lbOptions).Debug("Initializing load balancer server")

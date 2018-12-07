@@ -1,11 +1,8 @@
 const fs = require('fs')
 const path = require('path')
 const vm = require('vm')
-const childProcess = require('child_process')
 
 const APP_DIR = '/app/code'
-const ENV_IMGFILE = '/app/img/squashfs.img'
-const ENV_DIR = '/env'
 const MAX_TIMEOUT = 2147483647
 const READY_STRING = 'ready'
 const SCRIPT_FUNC = new vm.Script(`
@@ -52,7 +49,6 @@ function ExitError (code) {
 }
 
 ExitError.prototype = new Error()
-const originalExit = process.exit
 process.exit = function (code) {
   throw new ExitError(code)
 }
@@ -108,18 +104,6 @@ function processScript (context) {
     script = new vm.Script(source, {
       filename: entryPoint
     })
-
-    try {
-      if (fs.existsSync(ENV_IMGFILE)) {
-        childProcess.execSync('squashfuse ' + ENV_IMGFILE + ' ' + ENV_DIR, {
-          stdio: 'pipe'
-        })
-      }
-    } catch (e) {
-      process.stderr.write(outputSeparator)
-      console.error(e)
-      originalExit(1)
-    }
   }
 
   // Inject script context.
@@ -237,15 +221,6 @@ process.on('beforeExit', (code) => {
   renewTimeout()
   process.stdout.write(magicString)
   process.stderr.write(magicString)
-})
-
-// If mount point exists when exiting, unmount it.
-process.on('exit', () => {
-  if (fs.existsSync(ENV_IMGFILE) && fs.existsSync(ENV_DIR)) {
-    try {
-      childProcess.execSync('fusermount -u ' + ENV_DIR)
-    } catch (e) {}
-  }
 })
 
 renewTimeout()

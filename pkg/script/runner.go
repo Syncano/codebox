@@ -147,7 +147,8 @@ const (
 	containerLabel        = "workerId"
 	wrapperMount          = "wrapper"
 	userMount             = "code"
-	environmentMount      = "img"
+	environmentMount      = "env"
+	environmentFileName   = "squashfs.img"
 	defaultTimeout        = 30 * time.Second
 	graceTimeout          = 3 * time.Second
 	dockerTimeout         = 8 * time.Second
@@ -452,9 +453,9 @@ func (r *DockerRunner) afterRun(runtime string, cInfo ContainerInfo, fromCache b
 		}
 	}
 
-	r.taskWaitGroup.Done()
 	r.taskPool <- true
 	freeSlotsCounter.Add(1) // Increase free slots counter.
+	r.taskWaitGroup.Done()
 
 	r.muHandler.RLock()
 	if r.onSlotReady != nil {
@@ -603,8 +604,8 @@ func (r *DockerRunner) getContainer(runtime, sourceHash, environment, containerH
 
 	// Linking environment.
 	if environment != "" {
-		if err = r.fileRepo.Link(cInfo.volumeKey, environment, environmentMount); err != nil {
-			logger.WithError(err).WithField("environment", environment).Error("Linking error")
+		if err = r.fileRepo.Mount(cInfo.volumeKey, environment, environmentFileName, environmentMount); err != nil {
+			logger.WithError(err).WithField("environment", environment).Error("Mounting error")
 		}
 	}
 	return
@@ -632,7 +633,7 @@ func (r *DockerRunner) createFreshContainer(ctx context.Context, runtime string)
 		rInfo.Environment,
 		map[string]string{containerLabel: r.poolID},
 		rInfo.Constraints,
-		[]string{volHostPath + ":/app:ro"},
+		[]string{volHostPath + ":/app:ro,rslave"},
 	)
 	if err != nil {
 		return cInfo, err
