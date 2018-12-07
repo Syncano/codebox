@@ -27,6 +27,7 @@ services:
       - /sys/fs/cgroup:/sys/fs/cgroup:ro
     environment:
       - IPTABLES=1
+      - SETUP_FILTERING=0
       # - RUNSC_RELEASE=2018-11-22
 
 volumes:
