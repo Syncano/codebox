@@ -6,6 +6,11 @@ jobs:
       - checkout
 
       - run:
+          name: Setup system
+          command: |
+            sudo mount --make-rshared /
+
+      - run:
           name: Build application Docker image
           command: docker-compose build
 
@@ -34,6 +39,7 @@ jobs:
           name: Setup system
           command: |
               docker login -u="$DOCKER_LOGIN" -p="$DOCKER_PASS" quay.io
+              sudo mount --make-rshared /
 
       - run:
           name: Build application Docker image
