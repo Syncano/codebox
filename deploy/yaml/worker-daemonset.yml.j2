@@ -21,6 +21,7 @@ spec:
       nodeSelector:
         type: codebox
       hostPID: true
+      hostNetwork: true
       volumes:
         - name: startup-scripts
           configMap:
@@ -62,7 +63,6 @@ spec:
           image: docker:17-dind
           command:
             - "/scripts/dind-run.sh"
-          hostNetwork: true
           securityContext:
             privileged: true
           env:
