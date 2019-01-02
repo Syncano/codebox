@@ -137,7 +137,6 @@ func TestServer(t *testing.T) {
 				code codes.Code
 			}{
 				{ErrPoolNotRunning, codes.ResourceExhausted},
-				{ErrCriticalContainerError, codes.Aborted},
 				{filerepo.ErrResourceNotFound, codes.FailedPrecondition},
 			}
 			for _, t := range testData {

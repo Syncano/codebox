@@ -109,6 +109,8 @@ envsubst deploy/yaml/worker-daemonset.yml.j2 | kubectl apply -f -
 echo ". Waiting for Worker Docker Daemonset deployment to finish..."
 kubectl rollout status daemonset/codebox-docker
 
+# Deploy LB RBAC.
+envsubst deploy/yaml/lb-rbac.yml.j2 | kubectl apply -f -
 
 # Start with deployment of LB-workers pairs.
 for (( LB_NUM=1; LB_NUM <= $LB_TOTAL_NUM; LB_NUM++ )); do

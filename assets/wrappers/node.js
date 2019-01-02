@@ -1,10 +1,14 @@
 const fs = require('fs')
 const path = require('path')
 const vm = require('vm')
+const net = require('net')
+const os = require('os')
 
 const APP_DIR = '/app/code'
-const MAX_TIMEOUT = 2147483647
-const READY_STRING = 'ready'
+const APP_PORT = 8123
+const MUX_STDOUT = 1
+const MUX_STDERR = 2
+const MUX_RESPONSE = 3
 const SCRIPT_FUNC = new vm.Script(`
 {
   let __f = __func({
@@ -26,8 +30,7 @@ const SCRIPT_FUNC = new vm.Script(`
 }`)
 
 let outputResponse
-let outputSeparator
-let magicString
+let socket
 let script
 let scriptFunc
 let scriptContext = {
@@ -39,9 +42,9 @@ let scriptContext = {
   __filename,
   __dirname
 }
-let fakeTimeout
 let data
 let dataCursor
+let origStdoutWrite
 
 // Patch process.exit.
 function ExitError (code) {
@@ -53,11 +56,13 @@ process.exit = function (code) {
   throw new ExitError(code)
 }
 
+// Inject globals to script context.
 for (let attrname in global) {
   scriptContext[attrname] = global[attrname]
-  scriptContext.global = scriptContext
+  scriptContext['global'] = scriptContext
 }
 
+// HttpResponse class.
 function HttpResponse (statusCode, content, contentType, headers) {
   this.statusCode = statusCode || 200
   this.content = content || ''
@@ -80,18 +85,13 @@ function setResponse (response) {
   outputResponse = response
 }
 
-function renewTimeout () {
-  fakeTimeout = setTimeout(renewTimeout, MAX_TIMEOUT)
-}
-
 function processScript (context) {
+  const timeout = context._timeout
+  let ctx = {}
   process.exitCode = 0
   outputResponse = null
-  outputSeparator = context._outputSeparator
-  magicString = context._magicString
-  const timeout = context._timeout
 
-  // Create script and it's context if it's the first run.
+  // Create script and context if it's the first run.
   if (script === undefined) {
     const entryPoint = context._entryPoint
     const scriptFilename = path.join(APP_DIR, entryPoint)
@@ -106,89 +106,128 @@ function processScript (context) {
     })
   }
 
-  // Inject script context.
+  // Prepare context.
+  for (let key in scriptContext) {
+    ctx[key] = scriptContext[key]
+  }
+
   for (let key in context) {
     if (key.startsWith('_')) {
       continue
     }
-    scriptContext[key] = context[key]
+    ctx[key] = context[key]
   }
 
   if (scriptFunc === undefined) {
-    // Recreate vm context if it's dirty.
-    if (vm.isContext(scriptContext)) {
-      let ctx = {}
-      for (let key in scriptContext) {
-        ctx[key] = scriptContext[key]
-      }
-      scriptContext = ctx
-    }
-    scriptContext = vm.createContext(scriptContext)
-
     // Start script.
-    let ret = script.runInContext(scriptContext, {
+    let ret = script.runInNewContext(ctx, {
       timeout: timeout / 1e6
     })
     if (typeof (ret) === 'function') {
       scriptFunc = ret
-      scriptContext.__func = scriptFunc
-      processScriptFunc()
+      ctx['__func'] = scriptContext['__func'] = scriptFunc
+      processScriptFunc(ctx)
     }
   } else {
     // Run script function if it's defined.
-    processScriptFunc()
+    processScriptFunc(ctx)
   }
 }
 
-function processScriptFunc () {
-  SCRIPT_FUNC.runInContext(scriptContext)
+function processScriptFunc (ctx) {
+  SCRIPT_FUNC.runInNewContext(ctx)
 }
 
-// Unref so reading doesn't cause infinite wait.
-process.stdin.unref()
+// Create server and process data on it.
+var server = net.createServer(function (sock) {
+  socket = sock
 
-// Process data on stdin.
-process.stdin.on('data', function (chunk) {
-  if (data === undefined) {
-    let totalSize = chunk.readUInt32LE(0)
-    dataCursor = 0
-    data = Buffer.allocUnsafe(totalSize)
-  }
-  chunk.copy(data, dataCursor)
-  dataCursor += chunk.length
+  sock.on('data', function (chunk) {
+    sock.unref()
 
-  if (dataCursor !== data.length) {
+    if (data === undefined) {
+      let totalSize = chunk.readUInt32LE(0)
+      dataCursor = 0
+      data = Buffer.allocUnsafe(totalSize)
+    }
+    chunk.copy(data, dataCursor)
+    dataCursor += chunk.length
+
+    if (dataCursor !== data.length) {
+      return
+    }
+
+    // Read context JSON.
+    let contextSize = data.readUInt32LE(4)
+    let context
+    let contextJSON = data.slice(8, 8 + contextSize)
+    context = JSON.parse(contextJSON)
+
+    // Process files into context.ARGS.
+    if (context._files) {
+      context.ARGS = context.ARGS || {}
+      let cursor = 8 + contextSize
+
+      for (let i = 0; i < context._files.length; i++) {
+        let file = context._files[i]
+        let buf = data.slice(cursor, cursor + file.length)
+        buf.contentType = file.ct
+        buf.filename = file.fname
+        context.ARGS[file.name] = buf
+        cursor += file.length
+      }
+    }
+    // Clear data for next request.
+    data = undefined
+
+    try {
+      processScript(context)
+    } finally {
+      server.unref()
+    }
+  })
+
+  sock.on('close', function () {
+    socket = undefined
+  })
+})
+
+function socketWrite (sock, mux, ...chunks) {
+  if (sock === undefined) {
     return
   }
 
-  // Read context JSON.
-  let contextSize = data.readUInt32LE(4)
-  let context
-  let contextJSON = data.slice(8, 8 + contextSize)
-  context = JSON.parse(contextJSON)
-
-  // Process files into context.ARGS.
-  if (context._files) {
-    context.ARGS = context.ARGS || {}
-    let cursor = 8 + contextSize
-    for (let i = 0; i < context._files.length; i++) {
-      let file = context._files[i]
-      let buf = data.slice(cursor, cursor + file.length)
-      buf.contentType = file.ct
-      buf.filename = file.fname
-      context.ARGS[file.name] = buf
-      cursor += file.length
-    }
+  let totalLength = 0
+  for (let i = 0; i < chunks.length; i++) {
+    totalLength += chunks[i].length
   }
-  // Clear data for next request.
-  data = undefined
 
-  try {
-    processScript(context)
-  } finally {
-    clearTimeout(fakeTimeout)
+  if (totalLength === 0) {
+    return
   }
-})
+
+  let header = Buffer.allocUnsafe(5)
+  header.writeUInt8(mux)
+  header.writeUInt32LE(totalLength, 1)
+  sock.write(header)
+
+  for (let i = 0; i < chunks.length; i++) {
+    sock.write(chunks[i])
+  }
+}
+
+// Patch process.stderr and stdout.
+origStdoutWrite = process.stdout.write
+process.stdout.write = function () {
+  if (arguments.length > 0) {
+    socketWrite(socket, MUX_STDOUT, arguments[0])
+  }
+}
+process.stderr.write = function () {
+  if (arguments.length > 0) {
+    socketWrite(socket, MUX_STDERR, arguments[0])
+  }
+}
 
 // Process uncaught exception.
 process.on('uncaughtException', (e) => {
@@ -207,22 +246,21 @@ process.on('uncaughtException', (e) => {
 
 // Restart reader before exit.
 process.on('beforeExit', (code) => {
-  process.stderr.write(String.fromCharCode(code))
+  server.ref()
+
   if (outputResponse !== null && outputResponse instanceof HttpResponse) {
     let json = outputResponse.json()
-    let buf = Buffer.allocUnsafe(4)
-    buf.writeUInt32LE(json.length)
-
-    process.stdout.write(outputSeparator)
-    process.stdout.write(buf)
-    process.stdout.write(json)
-    process.stdout.write(outputResponse.content)
+    let jsonLen = Buffer.allocUnsafe(4)
+    jsonLen.writeUInt32LE(json.length)
+    socketWrite(socket, MUX_RESPONSE, String.fromCharCode(code), jsonLen, json, outputResponse.content)
+  } else {
+    socketWrite(socket, MUX_RESPONSE, String.fromCharCode(code))
   }
-  renewTimeout()
-  process.stdout.write(magicString)
-  process.stderr.write(magicString)
 })
 
-renewTimeout()
-process.stdout.write(READY_STRING)
-process.stderr.write(READY_STRING)
+// Start listening.
+let address = os.networkInterfaces()['eth0'][0].address
+server.listen(APP_PORT, address)
+server.on('listening', function () {
+  origStdoutWrite.apply(process.stdout, [address + ':' + APP_PORT + '\n'])
+})

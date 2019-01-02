@@ -1,7 +1,6 @@
 package script
 
 import (
-	"bytes"
 	"context"
 	"encoding/binary"
 	"encoding/json"
@@ -9,10 +8,13 @@ import (
 	"expvar"
 	"fmt"
 	"io"
+	"net"
 	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/docker/docker/pkg/stdcopy"
 
 	"github.com/docker/docker/api/types"
 	"github.com/imdario/mergo"
@@ -31,7 +33,7 @@ type DockerRunner struct {
 	running        uint32
 	createMu       sync.Mutex
 	containerCache *cache.StackCache
-	containerPool  map[string]chan ContainerInfo
+	containerPool  map[string]chan *Container
 	taskPool       chan bool
 	taskWaitGroup  sync.WaitGroup
 
@@ -91,7 +93,7 @@ var DefaultOptions = Options{
 type SlotReadyHandler func()
 
 // ContainerRemovedHandler is a callback function called whenever container is removed.
-type ContainerRemovedHandler func(ci ContainerInfo)
+type ContainerRemovedHandler func(ci *Container)
 
 // RunOptions holds settable options for run command.
 type RunOptions struct {
@@ -102,11 +104,11 @@ type RunOptions struct {
 	Args   []byte
 	Meta   []byte
 	Config []byte
-	Files  map[string]FileData
+	Files  map[string]File
 }
 
-// FileData holds info about a file.
-type FileData struct {
+// File holds info about a file.
+type File struct {
 	Filename    string
 	ContentType string
 	Data        []byte
@@ -116,18 +118,39 @@ func (ro RunOptions) String() string {
 	return fmt.Sprintf("{EntryPoint:%.25s, OutputLimit:%d, Timeout:%v}", ro.EntryPoint, ro.OutputLimit, ro.Timeout)
 }
 
-// ContainerInfo defines unique container information.
-type ContainerInfo struct {
+// Container defines unique container information.
+type Container struct {
 	ID          string
-	resp        types.HijackedResponse
-	volumeKey   string
 	SourceHash  string
 	Environment string
 	UserID      string
+
+	mu        sync.Mutex
+	resp      types.HijackedResponse
+	conn      io.ReadWriter
+	addr      string
+	volumeKey string
 }
 
-func (ci ContainerInfo) String() string {
-	return fmt.Sprintf("{ID:%s, VolumeKey:%s}", ci.ID, ci.volumeKey)
+// Conn returns container conn.
+func (c *Container) Conn() (io.ReadWriter, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.conn == nil {
+		conn, err := net.DialTimeout("tcp", c.addr, dockerTimeout)
+		if err != nil {
+			return nil, err
+		}
+
+		c.conn = conn
+	}
+
+	return c.conn, nil
+}
+
+func (c *Container) String() string {
+	return fmt.Sprintf("{ID:%s, VolumeKey:%s}", c.ID, c.volumeKey)
 }
 
 var (
@@ -139,8 +162,6 @@ var (
 	ErrPoolNotRunning = errors.New("pool not running")
 	// ErrPoolAlreadyCreated signals pool being already created.
 	ErrPoolAlreadyCreated = errors.New("pool already created")
-	// ErrCriticalContainerError signals that passed response was malformed
-	ErrCriticalContainerError = errors.New("critical container error")
 )
 
 const (
@@ -153,6 +174,7 @@ const (
 	graceTimeout          = 3 * time.Second
 	dockerTimeout         = 8 * time.Second
 	dockerDownloadTimeout = 5 * time.Minute
+	stdWriterPrefixLen    = 8
 )
 
 // NewRunner initializes a new script runner.
@@ -249,19 +271,22 @@ func (r *DockerRunner) DownloadAllImages() error {
 	return nil
 }
 
-func (r *DockerRunner) processRun(logger logrus.FieldLogger, runtime, sourceHash, environment, containerHash string, options RunOptions) (*Result, ContainerInfo, bool, error) {
+func (r *DockerRunner) processRun(logger logrus.FieldLogger, runtime, sourceHash, environment, containerHash string, options RunOptions) (*Result, *Container, bool, error) {
 	start := time.Now()
 	logger = logger.WithFields(logrus.Fields{"runtime": runtime, "options": options, "containerHash": containerHash})
-	cInfo, fromCache, err := r.getContainer(runtime, sourceHash, environment, containerHash)
+	cont, fromCache, err := r.getContainer(runtime, sourceHash, environment, containerHash)
 	if err != nil {
-		return nil, cInfo, fromCache, err
+		return nil, cont, fromCache, err
 	}
 
-	logger = logger.WithFields(logrus.Fields{"cache": fromCache, "container": cInfo})
+	logger = logger.WithFields(logrus.Fields{"cache": fromCache, "container": cont})
 	logger.Info("Running in container")
 
 	// Communicate with stream we got.
-	resp := cInfo.resp
+	conn, err := cont.Conn()
+	if err != nil {
+		return nil, cont, fromCache, err
+	}
 
 	// Prepare files for context.
 	var filesSize int
@@ -278,16 +303,13 @@ func (r *DockerRunner) processRun(logger logrus.FieldLogger, runtime, sourceHash
 	}
 
 	// Prepare context for container.
-	magicString := util.GenerateKey()
 	scriptContext := wrapperContext{
-		EntryPoint:      options.EntryPoint,
-		OutputSeparator: util.GenerateKey(),
-		MagicString:     magicString,
-		Timeout:         options.Timeout,
-		Args:            (*json.RawMessage)(&options.Args),
-		Meta:            (*json.RawMessage)(&options.Meta),
-		Config:          (*json.RawMessage)(&options.Config),
-		Files:           files,
+		EntryPoint: options.EntryPoint,
+		Timeout:    options.Timeout,
+		Args:       (*json.RawMessage)(&options.Args),
+		Meta:       (*json.RawMessage)(&options.Meta),
+		Config:     (*json.RawMessage)(&options.Config),
+		Files:      files,
 	}
 	scriptContextBytes, err := json.Marshal(scriptContext)
 	util.Must(err)
@@ -299,39 +321,37 @@ func (r *DockerRunner) processRun(logger logrus.FieldLogger, runtime, sourceHash
 	binary.LittleEndian.PutUint32(totalLen, uint32(contextSize+filesSize+8))
 	binary.LittleEndian.PutUint32(contextLen, uint32(contextSize))
 	for _, data := range [][]byte{totalLen, contextLen, scriptContextBytes} {
-		if _, err = resp.Conn.Write(data); err != nil {
-			return nil, cInfo, fromCache, err
+		if _, err = conn.Write(data); err != nil {
+			return nil, cont, fromCache, err
 		}
 	}
 
 	// Now send files for context.
 	for _, f := range files {
-		if _, err = resp.Conn.Write(options.Files[f.Name].Data); err != nil {
-			return nil, cInfo, fromCache, err
+		if _, err = conn.Write(options.Files[f.Name].Data); err != nil {
+			return nil, cont, fromCache, err
 		}
 	}
 
 	// Return processed response.
 	ctx, cancel := context.WithTimeout(context.Background(), options.Timeout+graceTimeout)
 	defer cancel()
-	stdout, stderr, err := r.dockerMgr.ProcessResponse(ctx, resp, magicString, options.OutputLimit)
+	mux, err := readMux(ctx, conn, options.OutputLimit)
 
-	// Process critical container error.
-	sep := []byte(scriptContext.OutputSeparator)
-	if bytes.HasPrefix(stderr, sep) {
-		logger.WithField("stderr", string(stderr[len(sep):])).Error("Critical container error")
-		err = ErrCriticalContainerError
-		return nil, cInfo, fromCache, err
+	if err == io.EOF || err == io.ErrUnexpectedEOF {
+		if stream, e := r.dockerMgr.ContainerErrorLog(ctx, cont.ID); e == nil {
+			stdcopy.StdCopy(mux[MuxStdout], mux[MuxStderr], stream) // nolint: errcheck
+		}
 	}
 
 	// Parse result.
 	var parseErr error
-	ret := &Result{Stdout: stdout, Stderr: stderr, Took: time.Since(start)}
-	parseErr = ret.Parse(sep, r.options.StreamMaxLength, err)
+	ret := &Result{Stdout: mux[MuxStdout].Bytes(), Stderr: mux[MuxStderr].Bytes(), Took: time.Since(start)}
+	parseErr = ret.Parse(mux[MuxResponse].Bytes(), r.options.StreamMaxLength, err)
 	if err == nil {
 		err = parseErr
 	}
-	return ret, cInfo, fromCache, err
+	return ret, cont, fromCache, err
 }
 
 // Run executes given script in a docker container.
@@ -365,7 +385,7 @@ func (r *DockerRunner) Run(logger logrus.FieldLogger, runtime, sourceHash, envir
 	r.taskWaitGroup.Add(1)
 
 	containerHash := fmt.Sprintf("%s/%s/%s/%x", sourceHash, userID, environment, util.Hash(options.EntryPoint))
-	ret, cInfo, fromCache, err := r.processRun(logger, runtime, sourceHash, environment, containerHash, options)
+	ret, cont, fromCache, err := r.processRun(logger, runtime, sourceHash, environment, containerHash, options)
 	took := time.Since(start)
 
 	if err != nil {
@@ -373,10 +393,10 @@ func (r *DockerRunner) Run(logger logrus.FieldLogger, runtime, sourceHash, envir
 	} else {
 		// Save container info and store it in cache.
 		ret.Cached = true
-		cInfo.SourceHash = sourceHash
-		cInfo.Environment = environment
-		cInfo.UserID = userID
-		r.containerCache.Push(containerHash, cInfo)
+		cont.SourceHash = sourceHash
+		cont.Environment = environment
+		cont.UserID = userID
+		r.containerCache.Push(containerHash, cont)
 	}
 	if ret != nil && ret.Took > 0 {
 		ret.Overhead = took - ret.Took
@@ -385,35 +405,35 @@ func (r *DockerRunner) Run(logger logrus.FieldLogger, runtime, sourceHash, envir
 	logger.WithFields(logrus.Fields{
 		"took":        took,
 		"ret":         ret,
-		"containerID": cInfo.ID,
+		"containerID": cont.ID,
 	}).Info("Run finished")
 
-	go r.afterRun(runtime, cInfo, fromCache, err)
+	go r.afterRun(runtime, cont, fromCache, err)
 	return ret, err
 }
 
-func (r *DockerRunner) afterRun(runtime string, cInfo ContainerInfo, fromCache bool, err error) {
-	logger := logrus.WithError(err).WithField("container", cInfo)
+func (r *DockerRunner) afterRun(runtime string, cont *Container, fromCache bool, err error) {
+	logger := logrus.WithError(err).WithField("container", cont)
 	// Add new container if we took it from the pool.
 	recreate := !fromCache
 
 	// If we encountered missing resource - reuse container.
 	if err == filerepo.ErrResourceNotFound {
 		// If cleanup volume fails - cleanup whole container and recreate in next block. Otherwise - return it to pool.
-		if err = r.fileRepo.CleanupVolume(cInfo.volumeKey); err == nil {
-			r.containerPool[runtime] <- cInfo
+		if err = r.fileRepo.CleanupVolume(cont.volumeKey); err == nil {
+			r.containerPool[runtime] <- cont
 			recreate = false
 		}
 	}
 
 	if err != nil {
 		// Check for non critical errors.
-		if err == docker.ErrLimitReached || err == ErrCriticalContainerError || err == io.EOF || err == context.DeadlineExceeded {
-			logger.Warn("Recovering from container error")
-		} else {
-			logger.Error("Recovering from container error")
+		logFunc := logger.Warn
+		if err != ErrLimitReached && err != io.EOF && err != context.DeadlineExceeded {
+			logFunc = logger.Error
 		}
-		r.cleanupContainer(cInfo)
+		logFunc("Recovering from container error")
+		r.cleanupContainer(cont)
 	}
 	// Add new container if needed.
 	if recreate {
@@ -493,7 +513,7 @@ func (r *DockerRunner) CreatePool() (string, error) {
 	freeSlotsCounter.Set(int64(r.options.Concurrency))
 
 	// Create and fill container pool.
-	r.containerPool = make(map[string]chan ContainerInfo)
+	r.containerPool = make(map[string]chan *Container)
 	done := make(chan error, r.options.Concurrency)
 
 	// Process concurrently each runtime.
@@ -504,7 +524,7 @@ func (r *DockerRunner) CreatePool() (string, error) {
 		}
 
 		// Create containers.
-		r.containerPool[runtime] = make(chan ContainerInfo, r.options.Concurrency)
+		r.containerPool[runtime] = make(chan *Container, r.options.Concurrency)
 
 		for i := uint(0); i < r.options.Concurrency; i++ {
 			go func(runtime string) {
@@ -556,10 +576,10 @@ func (r *DockerRunner) StopPool() {
 		Loop:
 			for {
 				select {
-				case cInfo := <-ch:
+				case cont := <-ch:
 					wg.Add(1)
 					go func() {
-						r.cleanupContainer(cInfo)
+						r.cleanupContainer(cont)
 						wg.Done()
 					}()
 				default:
@@ -583,52 +603,50 @@ func (r *DockerRunner) Shutdown() {
 	r.containerCache.StopJanitor()
 }
 
-func (r *DockerRunner) getContainer(runtime, sourceHash, environment, containerHash string) (cInfo ContainerInfo, fromCache bool, err error) {
+func (r *DockerRunner) getContainer(runtime, sourceHash, environment, containerHash string) (cont *Container, fromCache bool, err error) {
 	// Try to get a container from cache.
 	cacheVal := r.containerCache.Pop(containerHash)
 	if cacheVal != nil {
-		cInfo = cacheVal.(ContainerInfo)
+		cont = cacheVal.(*Container)
 		fromCache = true
 		return
 	}
 
 	// Fallback to pool.
-	cInfo = <-r.containerPool[runtime]
+	cont = <-r.containerPool[runtime]
 
 	// Linking sources.
-	logger := logrus.WithFields(logrus.Fields{"container": cInfo, "runtime": runtime})
-	if err = r.fileRepo.Link(cInfo.volumeKey, sourceHash, userMount); err != nil {
+	logger := logrus.WithFields(logrus.Fields{"container": cont, "runtime": runtime})
+	if err = r.fileRepo.Link(cont.volumeKey, sourceHash, userMount); err != nil {
 		logger.WithError(err).WithField("sourceHash", sourceHash).Error("Linking error")
 		return
 	}
 
 	// Linking environment.
 	if environment != "" {
-		if err = r.fileRepo.Mount(cInfo.volumeKey, environment, environmentFileName, environmentMount); err != nil {
+		if err = r.fileRepo.Mount(cont.volumeKey, environment, environmentFileName, environmentMount); err != nil {
 			logger.WithError(err).WithField("environment", environment).Error("Mounting error")
 		}
 	}
 	return
 }
 
-func (r *DockerRunner) createFreshContainer(ctx context.Context, runtime string) (ContainerInfo, error) {
-	var (
-		cInfo ContainerInfo
-		err   error
-	)
+func (r *DockerRunner) createFreshContainer(ctx context.Context, runtime string) (*Container, error) {
+	var err error
+	cont := new(Container)
 	logger := logrus.WithField("runtime", runtime)
 	start := time.Now()
 	rInfo := SupportedRuntimes[runtime]
 
 	// Create new volume and link wrapper.
 	var volHostPath string
-	cInfo.volumeKey, volHostPath, err = r.createWrapperVolume(runtime)
+	cont.volumeKey, volHostPath, err = r.createWrapperVolume(runtime)
 	if err != nil {
-		return cInfo, err
+		return cont, err
 	}
 
 	// Create container for given runtime with default constraints.
-	cInfo.ID, err = r.dockerMgr.CreateContainer(
+	cont.ID, err = r.dockerMgr.CreateContainer(
 		ctx, rInfo.Image, rInfo.User, rInfo.Command,
 		rInfo.Environment,
 		map[string]string{containerLabel: r.poolID},
@@ -636,57 +654,70 @@ func (r *DockerRunner) createFreshContainer(ctx context.Context, runtime string)
 		[]string{volHostPath + ":/app:ro,rslave"},
 	)
 	if err != nil {
-		return cInfo, err
+		return cont, err
 	}
-	logger = logger.WithField("container", cInfo)
+	logger = logger.WithField("container", cont)
 
 	// Start and attach to container (wrapper mode).
-	err = r.dockerMgr.StartContainer(ctx, cInfo.ID)
+	err = r.dockerMgr.StartContainer(ctx, cont.ID)
 	if err != nil {
-		return cInfo, err
+		return cont, err
 	}
 
-	cInfo.resp, err = r.dockerMgr.AttachContainer(ctx, cInfo.ID)
+	cont.resp, err = r.dockerMgr.AttachContainer(ctx, cont.ID)
 	if err != nil {
-		return cInfo, err
+		return cont, err
 	}
 
-	_, _, err = r.dockerMgr.ProcessResponse(ctx, cInfo.resp, "ready", 0)
-	if err == nil {
-		logger.WithField("took", time.Since(start)).Info("Container created and reported as ready")
+	// Make sure container wrapper is ready.
+	retCh := make(chan string)
+	go func() {
+		l, _, _ := cont.resp.Reader.ReadLine()
+		if len(l) > stdWriterPrefixLen {
+			l = l[stdWriterPrefixLen:]
+		}
+		retCh <- string(l)
+		cont.resp.Close()
+	}()
+	select {
+	case cont.addr = <-retCh:
+	case <-ctx.Done():
+		return cont, ctx.Err()
 	}
-	return cInfo, err
+
+	logger.WithField("took", time.Since(start)).Info("Container created and reported as ready")
+	return cont, err
 }
 
-func (r *DockerRunner) cleanupContainer(cInfo ContainerInfo) {
-	logger := logrus.WithFields(logrus.Fields{"container": cInfo})
+func (r *DockerRunner) cleanupContainer(cont *Container) {
+	logger := logrus.WithFields(logrus.Fields{"container": cont})
 	logger.Info("Stopping and cleaning up container")
 
 	// Stop the container.
-	if cInfo.ID != "" {
+	if cont.ID != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), dockerTimeout)
-		if err := r.dockerMgr.StopContainer(ctx, cInfo.ID); err != nil {
+		if err := r.dockerMgr.StopContainer(ctx, cont.ID); err != nil {
 			logger.WithError(err).Warn("Stopping container failed")
 		}
 		cancel()
 	}
 
-	if cInfo.volumeKey != "" {
-		if err := r.fileRepo.DeleteVolume(cInfo.volumeKey); err != nil {
+	if cont.volumeKey != "" {
+		if err := r.fileRepo.DeleteVolume(cont.volumeKey); err != nil {
 			logger.WithError(err).Warn("Removing volume failed")
 		}
 	}
 }
 
 func (r *DockerRunner) onEvictedContainerHandler(key string, val interface{}) {
-	cInfo := val.(ContainerInfo)
+	cont := val.(*Container)
 
 	r.muHandler.RLock()
 	if r.onContainerRemoved != nil {
-		go r.onContainerRemoved(cInfo)
+		go r.onContainerRemoved(cont)
 	}
 	r.muHandler.RUnlock()
-	r.cleanupContainer(cInfo)
+	r.cleanupContainer(cont)
 }
 
 // IsRunning returns true if pool is setup and running.

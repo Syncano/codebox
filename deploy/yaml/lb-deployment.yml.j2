@@ -21,6 +21,7 @@ spec:
         app: codebox
         type: lb
     spec:
+      serviceAccountName: codebox-lb
       terminationGracePeriodSeconds: 360
       imagePullSecrets:
         - name: syncano-k8s-pull-secret

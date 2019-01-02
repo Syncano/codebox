@@ -1,5 +1,4 @@
 build/codebox*
-build/codewrapper*
 vendor/
 coverage*.out
 dev/

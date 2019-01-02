@@ -23,9 +23,9 @@ type Manager interface {
 	ListContainersByLabel(ctx context.Context, label string) ([]types.Container, error)
 	CreateContainer(ctx context.Context, image, user string, cmd []string, env []string, labels map[string]string, constraints Constraints, binds []string) (string, error)
 	AttachContainer(ctx context.Context, containerID string) (types.HijackedResponse, error)
+	ContainerErrorLog(ctx context.Context, containerID string) (io.ReadCloser, error)
 	StartContainer(ctx context.Context, containerID string) error
 	StopContainer(ctx context.Context, containerID string) error
-	ProcessResponse(ctx context.Context, resp types.HijackedResponse, magicString string, limit uint32) ([]byte, []byte, error)
 }
 
 // Assert that StdManager is compatible with our interface.
@@ -42,9 +42,12 @@ type Client interface {
 	ContainerCreate(ctx context.Context, config *container.Config, hostConfig *container.HostConfig, networkingConfig *network.NetworkingConfig, containerName string) (container.ContainerCreateCreatedBody, error)
 	ContainerStart(ctx context.Context, container string, options types.ContainerStartOptions) error
 	ContainerStop(ctx context.Context, container string, timeout *time.Duration) error
+	ContainerRemove(ctx context.Context, containerID string, options types.ContainerRemoveOptions) error
 	ContainerPause(ctx context.Context, container string) error
 	ContainerUnpause(ctx context.Context, container string) error
 	ContainerList(ctx context.Context, options types.ContainerListOptions) ([]types.Container, error)
+	ContainerInspect(ctx context.Context, containerID string) (types.ContainerJSON, error)
+	ContainerLogs(ctx context.Context, container string, options types.ContainerLogsOptions) (io.ReadCloser, error)
 
 	ImagePull(ctx context.Context, ref string, options types.ImagePullOptions) (io.ReadCloser, error)
 	ImageInspectWithRaw(ctx context.Context, image string) (types.ImageInspect, []byte, error)

@@ -123,7 +123,7 @@ func TestRunnerIntegration(t *testing.T) {
 				err := uploadFile(repo, hash, []byte(data.script), script.SupportedRuntimes[data.runtime].DefaultEntryPoint)
 				So(err, ShouldBeNil)
 				res, err := runner.Run(logrus.StandardLogger(), data.runtime, hash, "", "user", script.RunOptions{
-					Files: map[string]script.FileData{"file": {Filename: "fname", ContentType: "ctype", Data: []byte("content123")}},
+					Files: map[string]script.File{"file": {Filename: "fname", ContentType: "ctype", Data: []byte("content123")}},
 				})
 				So(err, ShouldBeNil)
 

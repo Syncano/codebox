@@ -1,7 +1,6 @@
 package docker
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -182,12 +181,9 @@ func (m *StdManager) CreateContainer(ctx context.Context, image, user string, cm
 
 	stopTimeout := 0
 	containerConfig := container.Config{
+		AttachStdout: true,
 		Image:        image,
 		User:         user,
-		AttachStdout: true,
-		AttachStderr: true,
-		AttachStdin:  true,
-		OpenStdin:    true,
 		Labels:       labels,
 		Cmd:          cmd,
 		Env:          env,
@@ -210,7 +206,6 @@ func (m *StdManager) CreateContainer(ctx context.Context, image, user string, cm
 		},
 	}
 	hostConfig := container.HostConfig{
-		AutoRemove:  true,
 		Binds:       binds,
 		DNS:         []string{"208.67.222.222", "208.67.220.220"},
 		ExtraHosts:  m.options.ExtraHosts,
@@ -243,9 +238,12 @@ func (m *StdManager) AttachContainer(ctx context.Context, containerID string) (t
 	return m.client.ContainerAttach(ctx, containerID, types.ContainerAttachOptions{
 		Stream: true,
 		Stdout: true,
-		Stderr: true,
-		Stdin:  true,
 	})
+}
+
+// ContainerErrorLog returns container error log.
+func (m *StdManager) ContainerErrorLog(ctx context.Context, containerID string) (io.ReadCloser, error) {
+	return m.client.ContainerLogs(ctx, containerID, types.ContainerLogsOptions{ShowStderr: true, Tail: "50", Follow: true})
 }
 
 // StartContainer starts given containerID.
@@ -255,34 +253,6 @@ func (m *StdManager) StartContainer(ctx context.Context, containerID string) err
 
 // StopContainer stops given containerID.
 func (m *StdManager) StopContainer(ctx context.Context, containerID string) error {
-	return m.client.ContainerStop(ctx, containerID, nil)
-}
-
-// ProcessResponse processes response stream from docker container and returns stdout+stderr.
-func (m *StdManager) ProcessResponse(ctx context.Context, resp types.HijackedResponse, magicString string, limit uint32) ([]byte, []byte, error) {
-	stdoutCh := make(chan []byte)
-	stderrCh := make(chan []byte)
-	stdout := new(bytes.Buffer)
-	stderr := new(bytes.Buffer)
-	errCh := make(chan error)
-
-	go func() {
-		errCh <- readStreamUntil(resp.Reader, stdoutCh, stderrCh, magicString, limit)
-	}()
-	for {
-		select {
-		case b := <-stdoutCh:
-			stdout.Write(b)
-		case b := <-stderrCh:
-			stderr.Write(b)
-		case <-ctx.Done():
-			return stdout.Bytes(), stderr.Bytes(), ctx.Err()
-		case err := <-errCh:
-			if err == nil {
-				stdout.Truncate(stdout.Len() - len(magicString))
-				stderr.Truncate(stderr.Len() - len(magicString))
-			}
-			return stdout.Bytes(), stderr.Bytes(), err
-		}
-	}
+	m.client.ContainerStop(ctx, containerID, nil) // nolint: errcheck
+	return m.client.ContainerRemove(ctx, containerID, types.ContainerRemoveOptions{Force: true})
 }

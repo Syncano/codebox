@@ -300,14 +300,14 @@ func startServer(
 	defer conn.Close()
 
 	// Setup script runner event handlers.
-	runner.OnContainerRemoved(func(cInfo script.ContainerInfo) {
+	runner.OnContainerRemoved(func(cont *script.Container) {
 		ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 		if _, e := client.ContainerRemoved(ctx,
 			&lbpb.ContainerRemovedRequest{
 				Id:          poolID,
-				SourceHash:  cInfo.SourceHash,
-				Environment: cInfo.Environment,
-				UserID:      cInfo.UserID,
+				SourceHash:  cont.SourceHash,
+				Environment: cont.Environment,
+				UserID:      cont.UserID,
 			}); err != nil {
 			errCh <- e
 		}

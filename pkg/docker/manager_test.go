@@ -1,8 +1,6 @@
 package docker
 
 import (
-	"bufio"
-	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -283,29 +281,13 @@ func TestManagerMethods(t *testing.T) {
 
 		Convey("StopContainer calls ContainerStop", func() {
 			cli.On("ContainerStop", context.Background(), "id", mock.Anything).Return(nil)
+			cli.On("ContainerRemove", context.Background(), "id", mock.Anything).Return(nil)
 			m.StopContainer(context.Background(), "id")
 		})
 
-		Convey("ProcessReader with valid stream", func() {
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
-			reader := bufio.NewReader(bytes.NewReader([]byte{
-				0x01, 0, 0, 0, 0, 0, 0, 0x02, 0x0A, 0x0B,
-				0x02, 0, 0, 0, 0, 0, 0, 0x01, 0x0B,
-			}))
-			resp := types.HijackedResponse{Reader: reader}
-
-			Convey("respects context", func() {
-				cancel()
-				_, _, e := m.ProcessResponse(ctx, resp, string(0x0B), 0)
-				So(e, ShouldEqual, context.Canceled)
-			})
-			Convey("reads stream properly", func() {
-				stdout, stderr, e := m.ProcessResponse(ctx, resp, string(0x0B), 0)
-				So(stdout, ShouldResemble, []byte{0x0A})
-				So(stderr, ShouldBeEmpty)
-				So(e, ShouldBeNil)
-			})
+		Convey("ContainerErrorLog calls ContainerLogs", func() {
+			cli.On("ContainerLogs", context.Background(), "id", mock.Anything).Return(nil, nil)
+			m.ContainerErrorLog(context.Background(), "id")
 		})
 
 		cli.AssertExpectations(t)

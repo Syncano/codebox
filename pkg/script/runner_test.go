@@ -1,10 +1,12 @@
 package script
 
 import (
+	"bufio"
+	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net"
 	"testing"
@@ -16,7 +18,6 @@ import (
 	"github.com/stretchr/testify/mock"
 
 	"github.com/Syncano/codebox/pkg/cache"
-	"github.com/Syncano/codebox/pkg/docker"
 	dockermock "github.com/Syncano/codebox/pkg/docker/mocks"
 	"github.com/Syncano/codebox/pkg/filerepo"
 	repomock "github.com/Syncano/codebox/pkg/filerepo/mocks"
@@ -30,10 +31,32 @@ type MockConn struct {
 	net.TCPConn
 }
 
-func (m *MockConn) Write(b []byte) (int, error) {
+func (m *MockConn) Close() error {
+	return m.Called().Error(0)
+}
+
+type MockReadWriter struct {
+	mock.Mock
+	bytes.Buffer
+}
+
+func (m *MockReadWriter) Write(b []byte) (int, error) {
 	ret := m.Called(b)
 	return ret.Get(0).(int), ret.Error(1)
 }
+
+type mockReader struct{}
+
+func (mr *mockReader) Read(p []byte) (int, error) {
+	time.Sleep(30 * time.Second)
+	return 0, io.EOF
+}
+
+type mockReadCloser struct {
+	bytes.Buffer
+}
+
+func (mc *mockReadCloser) Close() error { return nil }
 
 func TestNewRunner(t *testing.T) {
 	logrus.SetOutput(ioutil.Discard)
@@ -53,6 +76,21 @@ func TestNewRunner(t *testing.T) {
 		volRelPath := "volrelpath"
 		envKey := "env"
 		cID := "cid"
+
+		mrw := new(MockReadWriter)
+		mrw.Buffer.Write([]byte{3, 1, 0, 0, 0, 0})
+		mc := new(MockConn)
+		mc.On("Close").Return(nil)
+
+		cont := &Container{ID: cID,
+			volumeKey: volKey,
+			resp: types.HijackedResponse{
+				Conn:   mc,
+				Reader: bufio.NewReader(bytes.NewBuffer([]byte(`127.0.0.1:1000\n`))),
+			},
+			conn:        mrw,
+			Environment: envKey,
+		}
 
 		Convey("sets up everything", func() {
 			checker.On("CheckFreeMemory", mock.Anything).Return(nil).Once()
@@ -74,25 +112,19 @@ func TestNewRunner(t *testing.T) {
 					r.setRunning(true)
 					r.taskPool = make(chan bool, opts.Concurrency)
 					r.taskPool <- true
-					r.containerPool = make(map[string]chan ContainerInfo)
-					r.containerPool[defaultRuntime] = make(chan ContainerInfo, opts.Concurrency)
-					mc := MockConn{}
-					cInfo := ContainerInfo{ID: cID,
-						volumeKey:   volKey,
-						resp:        types.HijackedResponse{Conn: &mc},
-						Environment: envKey,
-					}
+					r.containerPool = make(map[string]chan *Container)
+					r.containerPool[defaultRuntime] = make(chan *Container, opts.Concurrency)
+					mc.On("Close").Return(nil)
 
 					Convey("runs script in container", func() {
 						checker.On("CheckFreeMemory", uint64(0)).Return(nil).Once()
 
 						Convey("without files", func() {
 							// Expect 3 writes (total len, context len, context)
-							mc.On("Write", mock.Anything).Return(0, nil).Times(3)
-							dockerMgr.On("ProcessResponse", mock.Anything, mock.Anything, mock.Anything, uint32(0)).Return(nil, nil, nil).Once()
+							mrw.On("Write", mock.Anything).Return(0, nil).Times(3)
 
 							Convey("from pool", func() {
-								r.containerPool[defaultRuntime] <- cInfo
+								r.containerPool[defaultRuntime] <- cont
 								repo.On("Link", volKey, mock.Anything, mock.Anything).Return(nil)
 								repo.On("Mount", volKey, mock.Anything, environmentFileName, environmentMount).Return(nil)
 
@@ -103,28 +135,26 @@ func TestNewRunner(t *testing.T) {
 								dockerMgr.On("CreateContainer", mock.Anything, mock.Anything, mock.Anything, mock.Anything,
 									mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(cID2, nil).Once()
 								dockerMgr.On("StartContainer", mock.Anything, cID2).Return(nil).Once()
-								dockerMgr.On("AttachContainer", mock.Anything, cID2).Return(types.HijackedResponse{}, nil).Once()
-								dockerMgr.On("ProcessResponse", mock.Anything, mock.Anything, "ready", uint32(0)).Return(nil, nil, nil).Once()
+								dockerMgr.On("AttachContainer", mock.Anything, cID2).Return(cont.resp, nil).Once()
 
 								_, e := r.Run(logrus.StandardLogger(), defaultRuntime, "hash", envKey, "user", RunOptions{})
 								So(e, ShouldBeNil)
-								cInfo2 := <-r.containerPool[defaultRuntime]
-								So(cInfo2.ID, ShouldEqual, cID2)
+								cont2 := <-r.containerPool[defaultRuntime]
+								So(cont2.ID, ShouldEqual, cID2)
 							})
 							Convey("from cache", func() {
-								r.containerCache.Push(fmt.Sprintf("hash/user//%x", util.Hash("main.js")), cInfo)
+								r.containerCache.Push(fmt.Sprintf("hash/user//%x", util.Hash("main.js")), cont)
 								_, e := r.Run(logrus.StandardLogger(), defaultRuntime, "hash", "", "user", RunOptions{})
 								So(e, ShouldBeNil)
 							})
 						})
 						Convey("with files", func() {
-							files := map[string]FileData{"file": {Data: []byte("content")}}
+							files := map[string]File{"file": {Data: []byte("content")}}
 							// Expect 3 writes (total len, context len, context)
-							mc.On("Write", mock.Anything).Return(0, nil).Times(3)
-							r.containerCache.Push(fmt.Sprintf("hash/user//%x", util.Hash("main.js")), cInfo)
+							mrw.On("Write", mock.Anything).Return(0, nil).Times(3)
+							r.containerCache.Push(fmt.Sprintf("hash/user//%x", util.Hash("main.js")), cont)
 							// And then expect a file content.
-							mc.On("Write", files["file"].Data).Return(0, nil).Once()
-							dockerMgr.On("ProcessResponse", mock.Anything, mock.Anything, mock.Anything, uint32(0)).Return(nil, nil, nil).Once()
+							mrw.On("Write", files["file"].Data).Return(0, nil).Once()
 							_, e := r.Run(logrus.StandardLogger(), defaultRuntime, "hash", "", "user", RunOptions{Files: files})
 							So(e, ShouldBeNil)
 						})
@@ -132,8 +162,8 @@ func TestNewRunner(t *testing.T) {
 						r.taskWaitGroup.Wait()
 					})
 					Convey("propagates and cleans up errors", func() {
-						files := map[string]FileData{"file": {Data: []byte("content")}}
-						r.containerPool[defaultRuntime] <- cInfo
+						files := map[string]File{"file": {Data: []byte("content")}}
+						r.containerPool[defaultRuntime] <- cont
 						expectedErr := err
 						env := ""
 
@@ -147,29 +177,25 @@ func TestNewRunner(t *testing.T) {
 						})
 
 						Convey("for conn Write", func() {
-							mc.On("Write", mock.Anything).Return(0, err).Once()
+							mrw.On("Write", mock.Anything).Return(0, err).Once()
 						})
 						Convey("for files conn Write", func() {
-							mc.On("Write", mock.Anything).Return(0, nil).Times(3)
-							mc.On("Write", mock.Anything).Return(0, err).Once()
+							mrw.On("Write", mock.Anything).Return(0, nil).Times(3)
+							mrw.On("Write", mock.Anything).Return(0, err).Once()
 						})
-						Convey("for ProcessResponse", func() {
-							mc.On("Write", mock.Anything).Return(0, nil)
-							expectedErr = docker.ErrLimitReached
-							dockerMgr.On("ProcessResponse", mock.Anything, mock.Anything, mock.Anything, uint32(0)).Return(nil, nil, expectedErr).Once()
+						Convey("for container conn dial", func() {
+							cont.conn = nil
+							cont.addr = "invalid"
+							expectedErr = &net.OpError{Net: "tcp", Op: "dial",
+								Err: &net.AddrError{Err: "missing port in address", Addr: cont.addr}}
 						})
-						Convey("for container critical error", func() {
-							mc.On("Write", mock.Anything).Return(0, nil).Times(2)
-							mc.On("Write", mock.Anything).Return(0, nil).Once().Run(func(args mock.Arguments) {
-								var ctx map[string]string
-								arg := args.Get(0).([]byte)
-								json.Unmarshal(arg, &ctx)
-								dockerMgr.On("ProcessResponse", mock.Anything, mock.Anything, mock.Anything, uint32(0)).Return(
-									nil, []byte(ctx["_outputSeparator"]), nil).Once()
-							})
-							mc.On("Write", mock.Anything).Return(0, nil)
-
-							expectedErr = ErrCriticalContainerError
+						Convey("gets error log from container on crash", func() {
+							mrw.On("Write", mock.Anything).Return(0, nil)
+							mrw.Buffer.Reset()
+							mrw.Buffer.Write([]byte{3, 1, 0, 0, 0})
+							mrc := new(mockReadCloser)
+							dockerMgr.On("ContainerErrorLog", mock.Anything, cID).Return(mrc, nil).Once()
+							expectedErr = io.EOF
 						})
 
 						// mocks for afterRun's cleanupContainer.
@@ -185,8 +211,7 @@ func TestNewRunner(t *testing.T) {
 						dockerMgr.On("CreateContainer", mock.Anything, mock.Anything, mock.Anything, mock.Anything,
 							mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(cID2, nil).Once()
 						dockerMgr.On("StartContainer", mock.Anything, cID2).Return(nil).Once()
-						dockerMgr.On("AttachContainer", mock.Anything, cID2).Return(types.HijackedResponse{}, nil).Once()
-						dockerMgr.On("ProcessResponse", mock.Anything, mock.Anything, "ready", uint32(0)).Return(nil, nil, nil).Once()
+						dockerMgr.On("AttachContainer", mock.Anything, cID2).Return(cont.resp, nil).Once()
 
 						slotCh := make(chan bool)
 						r.OnSlotReady(func() {
@@ -194,9 +219,9 @@ func TestNewRunner(t *testing.T) {
 						})
 
 						_, e := r.Run(logrus.StandardLogger(), defaultRuntime, "hash", env, "run", RunOptions{Files: files})
-						So(e, ShouldEqual, expectedErr)
-						cInfo2 := <-r.containerPool[defaultRuntime]
-						So(cInfo2.ID, ShouldEqual, cID2)
+						So(e, ShouldResemble, expectedErr)
+						cont2 := <-r.containerPool[defaultRuntime]
+						So(cont2.ID, ShouldEqual, cID2)
 						So(<-slotCh, ShouldBeTrue)
 					})
 				})
@@ -242,8 +267,7 @@ func TestNewRunner(t *testing.T) {
 						dockerMgr.On("CreateContainer", mock.Anything, mock.Anything, mock.Anything, mock.Anything,
 							mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(cID, nil)
 						dockerMgr.On("StartContainer", mock.Anything, cID).Return(nil)
-						dockerMgr.On("AttachContainer", mock.Anything, cID).Return(types.HijackedResponse{}, nil)
-						dockerMgr.On("ProcessResponse", mock.Anything, mock.Anything, "ready", uint32(0)).Return(nil, nil, nil)
+						dockerMgr.On("AttachContainer", mock.Anything, cID).Return(cont.resp, nil)
 
 						id, e := r.CreatePool()
 						So(e, ShouldBeNil)
@@ -267,22 +291,22 @@ func TestNewRunner(t *testing.T) {
 
 			Convey("onEvictedHandler gets called on container removal from cache", func() {
 				r.containerCache.Push("hash",
-					ContainerInfo{ID: "someId", volumeKey: "someKey", SourceHash: "sourceHash", UserID: "userID"})
+					&Container{ID: "someId", volumeKey: "someKey", SourceHash: "sourceHash", UserID: "userID"})
 				dockerMgr.On("StopContainer", mock.Anything, "someId").Return(nil).Once()
 				repo.On("DeleteVolume", "someKey").Return(nil).Once()
 
 				// Calls OnContainerRemoved handler.
-				cinfoCh := make(chan ContainerInfo)
-				r.OnContainerRemoved(func(cInfo ContainerInfo) {
-					cinfoCh <- cInfo
+				contCh := make(chan *Container)
+				r.OnContainerRemoved(func(cont *Container) {
+					contCh <- cont
 				})
 
 				r.containerCache.Flush()
-				cInfo := <-cinfoCh
+				cont := <-contCh
 				time.Sleep(5 * time.Millisecond)
-				So(cInfo.SourceHash, ShouldEqual, "sourceHash")
-				So(cInfo.UserID, ShouldEqual, "userID")
-				So(cInfo.Environment, ShouldEqual, "")
+				So(cont.SourceHash, ShouldEqual, "sourceHash")
+				So(cont.UserID, ShouldEqual, "userID")
+				So(cont.Environment, ShouldEqual, "")
 			})
 
 			Convey("createFreshContainer given mocked dependencies", func() {
@@ -327,14 +351,14 @@ func TestNewRunner(t *testing.T) {
 									_, e := r.createFreshContainer(context.Background(), defaultRuntime)
 									So(e, ShouldEqual, err)
 								})
-								Convey("proceeds after AttachContainer", func() {
-									dockerMgr.On("AttachContainer", mock.Anything, cID).Return(types.HijackedResponse{}, nil)
-
-									Convey("propagates ProcessResponse error", func() {
-										dockerMgr.On("ProcessResponse", mock.Anything, mock.Anything, "ready", uint32(0)).Return(nil, nil, err)
-										_, e := r.createFreshContainer(context.Background(), defaultRuntime)
-										So(e, ShouldEqual, err)
-									})
+								Convey("propagates context deadline error", func() {
+									dockerMgr.On("AttachContainer", mock.Anything, cID).Return(types.HijackedResponse{
+										Reader: bufio.NewReader(new(mockReader)),
+									}, nil)
+									ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+									_, e := r.createFreshContainer(ctx, defaultRuntime)
+									cancel()
+									So(e, ShouldResemble, context.DeadlineExceeded)
 								})
 							})
 						})
@@ -428,49 +452,65 @@ func TestRunnerMethods(t *testing.T) {
 			t := time.Now()
 			repo.On("CreateVolume").Return("", "", err).Times(r.options.CreateRetryCount)
 
-			So(func() { r.afterRun("runtime", ContainerInfo{}, false, err) }, ShouldPanicWith, err)
+			So(func() { r.afterRun("runtime", &Container{}, false, err) }, ShouldPanicWith, err)
 			So(time.Since(t), ShouldBeGreaterThan, time.Duration(r.options.CreateRetryCount-1)*r.options.CreateRetrySleep)
 		})
 		Convey("afterRun returns container to cache if resource was missing", func() {
-			cInfo := ContainerInfo{ID: "someid", volumeKey: "volKey"}
+			cont := &Container{ID: "someid", volumeKey: "volKey"}
 			repo.On("CleanupVolume", "volKey").Return(nil).Once()
 			checker.On("CheckFreeMemory", mock.Anything).Return(nil)
-			r.containerPool = make(map[string]chan ContainerInfo)
+			r.containerPool = make(map[string]chan *Container)
 			r.taskPool = make(chan bool, 1)
-			r.containerPool["runtime"] = make(chan ContainerInfo, 1)
+			r.containerPool["runtime"] = make(chan *Container, 1)
 			r.taskWaitGroup.Add(1)
-			r.afterRun("runtime", cInfo, false, filerepo.ErrResourceNotFound)
-			So((<-r.containerPool["runtime"]).ID, ShouldEqual, cInfo.ID)
+			r.afterRun("runtime", cont, false, filerepo.ErrResourceNotFound)
+			So((<-r.containerPool["runtime"]).ID, ShouldEqual, cont.ID)
 		})
 		Convey("afterRun panics on full memory when delete lru fails", func() {
-			cInfo := ContainerInfo{ID: "someid", volumeKey: "volKey"}
+			cont := &Container{ID: "someid", volumeKey: "volKey"}
 			checker.On("CheckFreeMemory", mock.Anything).Return(sys.ErrNotEnoughMemory{}).Once()
 			repo.On("CleanupVolume", "volKey").Return(nil).Once()
-			r.containerPool = make(map[string]chan ContainerInfo)
-			r.containerPool["runtime"] = make(chan ContainerInfo, 1)
-			So(func() { r.afterRun("runtime", cInfo, false, filerepo.ErrResourceNotFound) }, ShouldPanic)
+			r.containerPool = make(map[string]chan *Container)
+			r.containerPool["runtime"] = make(chan *Container, 1)
+			So(func() { r.afterRun("runtime", cont, false, filerepo.ErrResourceNotFound) }, ShouldPanic)
 		})
 		Convey("afterRun tries to delete containers on full memory", func() {
-			r.containerCache.Push("hash", ContainerInfo{ID: "otherid", volumeKey: "volKey"})
-			cInfo := ContainerInfo{ID: "someid", volumeKey: "volKey"}
+			r.containerCache.Push("hash", &Container{ID: "otherid", volumeKey: "volKey"})
+			cont := &Container{ID: "someid", volumeKey: "volKey"}
 			repo.On("CleanupVolume", "volKey").Return(nil).Once()
 			checker.On("CheckFreeMemory", mock.Anything).Return(sys.ErrNotEnoughMemory{}).Once()
 			checker.On("CheckFreeMemory", mock.Anything).Return(nil)
-			r.containerPool = make(map[string]chan ContainerInfo)
+			r.containerPool = make(map[string]chan *Container)
 			r.taskPool = make(chan bool, 1)
-			r.containerPool["runtime"] = make(chan ContainerInfo, 1)
+			r.containerPool["runtime"] = make(chan *Container, 1)
 			r.taskWaitGroup.Add(1)
-			r.afterRun("runtime", cInfo, false, filerepo.ErrResourceNotFound)
-			So((<-r.containerPool["runtime"]).ID, ShouldEqual, cInfo.ID)
+			r.afterRun("runtime", cont, false, filerepo.ErrResourceNotFound)
+			So((<-r.containerPool["runtime"]).ID, ShouldEqual, cont.ID)
 		})
 
 		Convey("cleanupContainer silently proceeds on errors", func() {
 			dockerMgr.On("StopContainer", mock.Anything, "someId").Return(err).Once()
 			repo.On("DeleteVolume", "volKey").Return(err).Once()
-			r.cleanupContainer(ContainerInfo{ID: "someId", volumeKey: "volKey"})
+			r.cleanupContainer(&Container{ID: "someId", volumeKey: "volKey"})
 		})
 
 		r.Shutdown()
 		mock.AssertExpectationsForObjects(t, dockerMgr, checker, repo)
+	})
+}
+
+func TestContainerMethods(t *testing.T) {
+	Convey("Given net server,", t, func() {
+		l, _ := net.Listen("tcp", "127.0.0.1:3000")
+		defer l.Close()
+		c := &Container{addr: "127.0.0.1:3000"}
+
+		Convey("Conn() connects and returns conn", func() {
+			go c.Conn()
+			l.Accept()
+			c, err := c.Conn()
+			So(c, ShouldNotBeNil)
+			So(err, ShouldBeNil)
+		})
 	})
 }
