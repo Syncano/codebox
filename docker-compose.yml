@@ -12,11 +12,10 @@ services:
       - /go/src/github.com/Syncano/codebox/vendor
     depends_on:
       - dind
-    environment:
-      - WRAPPERPATH=/go/src/github.com/Syncano/codebox/build/codewrapper-static
 
   dind:
     privileged: true
+    network_mode: host
     image: docker:17-dind
     command:
       - /scripts/dind-run.sh

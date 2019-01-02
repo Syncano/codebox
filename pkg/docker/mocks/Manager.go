@@ -4,6 +4,7 @@ package mocks
 
 import context "context"
 import docker "github.com/Syncano/codebox/pkg/docker"
+import io "io"
 import mock "github.com/stretchr/testify/mock"
 import types "github.com/docker/docker/api/types"
 
@@ -21,6 +22,29 @@ func (_m *Manager) AttachContainer(ctx context.Context, containerID string) (typ
 		r0 = rf(ctx, containerID)
 	} else {
 		r0 = ret.Get(0).(types.HijackedResponse)
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = rf(ctx, containerID)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// ContainerErrorLog provides a mock function with given fields: ctx, containerID
+func (_m *Manager) ContainerErrorLog(ctx context.Context, containerID string) (io.ReadCloser, error) {
+	ret := _m.Called(ctx, containerID)
+
+	var r0 io.ReadCloser
+	if rf, ok := ret.Get(0).(func(context.Context, string) io.ReadCloser); ok {
+		r0 = rf(ctx, containerID)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(io.ReadCloser)
+		}
 	}
 
 	var r1 error
@@ -103,38 +127,6 @@ func (_m *Manager) Options() docker.Options {
 	}
 
 	return r0
-}
-
-// ProcessResponse provides a mock function with given fields: ctx, resp, magicString, limit
-func (_m *Manager) ProcessResponse(ctx context.Context, resp types.HijackedResponse, magicString string, limit uint32) ([]byte, []byte, error) {
-	ret := _m.Called(ctx, resp, magicString, limit)
-
-	var r0 []byte
-	if rf, ok := ret.Get(0).(func(context.Context, types.HijackedResponse, string, uint32) []byte); ok {
-		r0 = rf(ctx, resp, magicString, limit)
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]byte)
-		}
-	}
-
-	var r1 []byte
-	if rf, ok := ret.Get(1).(func(context.Context, types.HijackedResponse, string, uint32) []byte); ok {
-		r1 = rf(ctx, resp, magicString, limit)
-	} else {
-		if ret.Get(1) != nil {
-			r1 = ret.Get(1).([]byte)
-		}
-	}
-
-	var r2 error
-	if rf, ok := ret.Get(2).(func(context.Context, types.HijackedResponse, string, uint32) error); ok {
-		r2 = rf(ctx, resp, magicString, limit)
-	} else {
-		r2 = ret.Error(2)
-	}
-
-	return r0, r1, r2
 }
 
 // PruneImages provides a mock function with given fields: ctx

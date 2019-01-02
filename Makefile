@@ -4,10 +4,9 @@ endif
 
 CURRENTPACKAGE := github.com/Syncano/codebox
 EXECNAME := codebox
-WRAPPERNAME := codewrapper
 
 PATH := $(PATH):$(GOBIN):$(GOPATH)/bin
-GOFILES = $(shell find . -mindepth 2 -type f -name '*.go' ! -path "./.*" ! -path "./assets/*" ! -path "./codewrapper/*" ! -path "./cmd/*" ! -path "./dev/*" ! -path "./vendor/*" ! -path "*/mocks/*" ! -path "*/proto/*")
+GOFILES = $(shell find . -mindepth 2 -type f -name '*.go' ! -path "./.*" ! -path "./assets/*" ! -path "./cmd/*" ! -path "./dev/*" ! -path "./vendor/*" ! -path "*/mocks/*" ! -path "*/proto/*")
 GOPACKAGES = $(shell echo $(GOFILES) | xargs -n1 dirname | sort | uniq)
 
 BUILDTIME = $(shell date +%Y-%m-%dT%H:%M)
@@ -17,7 +16,7 @@ LDFLAGS = -X github.com/Syncano/codebox/pkg/version.GitSHA=$(GITSHA) \
 	-X github.com/Syncano/codebox/pkg/version.buildtimeStr=$(BUILDTIME)
 
 
-.PHONY: help deps testdeps devdeps download-images clean lint flint fmt test stest itest atest cov goconvey lint-in-docker test-in-docker generate-assets generate proto build build-static build-wrapper build-wrapper-static build-in-docker docker deploy-staging deploy-production encrypt decrypt start
+.PHONY: help deps testdeps devdeps download-images clean lint flint fmt test stest itest atest cov goconvey lint-in-docker test-in-docker generate-assets generate proto build build-static build-in-docker docker deploy-staging deploy-production encrypt decrypt start
 .DEFAULT_GOAL := help
 $(VERBOSE).SILENT:
 
@@ -107,7 +106,7 @@ lint-in-docker: require-docker-compose ## Run full lint in docker environment
 	docker-compose run --no-deps --rm app make flint
 
 test-in-docker: require-docker-compose ## Run full test suite in docker environment
-	docker-compose run --rm app make build build-wrapper test itest atest
+	docker-compose run --rm app make build test itest atest
 
 generate-assets: ## Generate assets with go-bindata
 	go-bindata -nocompress -nometadata -nomemcopy -prefix assets -o assets/assets.go -pkg assets -ignore assets\.go assets/*
@@ -135,14 +134,8 @@ build: ## Build for current platform
 build-static: ## Build static version
 	CGO_ENABLED=0 go build -ldflags "-s $(LDFLAGS)" -a -installsuffix cgo -o ./build/$(EXECNAME)-static
 
-build-wrapper: ## Build codewrapper for current platform
-	cd codewrapper; go build -ldflags "$(LDFLAGS)" -o ../build/$(WRAPPERNAME)
-
-build-wrapper-static: ## Build static version
-	cd codewrapper; CGO_ENABLED=0 go build -ldflags "-s $(LDFLAGS)" -a -installsuffix cgo -o ../build/$(WRAPPERNAME)-static
-
 build-in-docker: require-docker-compose ## Build static version in docker environment
-	docker-compose run --no-deps --rm app make build-static build-wrapper-static
+	docker-compose run --no-deps --rm app make build-static
 
 docker: require-docker ## Builds docker image for application (requires static version to be built first)
 	docker build -t $(DOCKERIMAGE) build

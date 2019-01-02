@@ -31,14 +31,12 @@ type contextFile struct {
 }
 
 type wrapperContext struct {
-	EntryPoint      string           `json:"_entryPoint"`
-	MagicString     string           `json:"_magicString"`
-	OutputSeparator string           `json:"_outputSeparator"`
-	Timeout         time.Duration    `json:"_timeout"`
-	Files           []contextFile    `json:"_files"`
-	Args            *json.RawMessage `json:"ARGS"`
-	Config          *json.RawMessage `json:"CONFIG"`
-	Meta            *json.RawMessage `json:"META"`
+	EntryPoint string           `json:"_entryPoint"`
+	Timeout    time.Duration    `json:"_timeout"`
+	Files      []contextFile    `json:"_files"`
+	Args       *json.RawMessage `json:"ARGS"`
+	Config     *json.RawMessage `json:"CONFIG"`
+	Meta       *json.RawMessage `json:"META"`
 }
 
 var defaultConstraints = docker.Constraints{
