@@ -15,17 +15,17 @@ rules:
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: cluster-lb
+  name: codebox-lb
 ---
 apiVersion: rbac.authorization.k8s.io/v1beta1
 kind: ClusterRoleBinding
 metadata:
-  name: cluster-lb
+  name: codebox-lb
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: cluster-lb
+  name: codebox-lb
 subjects:
   - kind: ServiceAccount
-    name: cluster-lb
+    name: codebox-lb
     namespace: default
