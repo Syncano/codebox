@@ -127,13 +127,13 @@ type Container struct {
 
 	mu        sync.Mutex
 	resp      types.HijackedResponse
-	conn      io.ReadWriter
+	conn      io.ReadWriteCloser
 	addr      string
 	volumeKey string
 }
 
 // Conn returns container conn.
-func (c *Container) Conn() (io.ReadWriter, error) {
+func (c *Container) Conn() (io.ReadWriteCloser, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 

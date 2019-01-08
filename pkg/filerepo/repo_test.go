@@ -407,6 +407,7 @@ func TestRepoWithMocks(t *testing.T) {
 		})
 
 		Convey("given Open returning error", func() {
+			fs.On("OpenFile", "/proc/mounts", os.O_RDONLY, os.ModePerm).Return(nil, err)
 			fs.On("Open", mock.Anything).Return(nil, err)
 
 			Convey("CleanupUnused panics", func() {
@@ -421,6 +422,7 @@ func TestRepoWithMocks(t *testing.T) {
 				dir, _ := ioutil.TempDir("", "test")
 				dirHandle, _ := os.Open(dir)
 
+				fs.On("OpenFile", "/proc/mounts", os.O_RDONLY, os.ModePerm).Return(nil, err)
 				fs.On("Open", mock.Anything).Return(dirHandle, nil)
 				os.Mkdir(filepath.Join(dir, "randomdir"), os.ModePerm)
 				So(repo.CleanupUnused, ShouldPanicWith, err)

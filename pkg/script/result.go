@@ -25,6 +25,8 @@ var (
 	ResponseValidationErrorText = []byte("HTTP response validation failed.")
 	// ErrLimitReached signals limit being reached while reading a stream.
 	ErrLimitReached = errors.New("limit reached")
+	// ErrMalformedHeader signals that mux from container has been malformed.
+	ErrMalformedHeader = errors.New("malformed header")
 )
 
 // Mux enum.
@@ -98,7 +100,7 @@ func internalReadMux(r io.Reader, ch chan<- muxBuf, limit uint32, waitForMux byt
 }
 
 // readMux processes stream mux.
-func readMux(ctx context.Context, r io.Reader, limit uint32) (map[byte]*bytes.Buffer, error) {
+func readMux(ctx context.Context, conn io.ReadCloser, limit uint32) (map[byte]*bytes.Buffer, error) {
 	ret := map[byte]*bytes.Buffer{
 		MuxStdout:   new(bytes.Buffer),
 		MuxStderr:   new(bytes.Buffer),
@@ -108,12 +110,16 @@ func readMux(ctx context.Context, r io.Reader, limit uint32) (map[byte]*bytes.Bu
 	errCh := make(chan error)
 
 	go func() {
-		errCh <- internalReadMux(r, ch, limit, MuxResponse)
+		errCh <- internalReadMux(conn, ch, limit, MuxResponse)
 	}()
 
 	for {
 		select {
 		case buf := <-ch:
+			if _, ok := ret[buf.mux]; !ok {
+				conn.Close()
+				return ret, ErrMalformedHeader
+			}
 			ret[buf.mux].Write(buf.buf)
 		case err := <-errCh:
 			return ret, err

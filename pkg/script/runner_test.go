@@ -35,14 +35,18 @@ func (m *MockConn) Close() error {
 	return m.Called().Error(0)
 }
 
-type MockReadWriter struct {
+type MockReadWriteCloser struct {
 	mock.Mock
 	bytes.Buffer
 }
 
-func (m *MockReadWriter) Write(b []byte) (int, error) {
+func (m *MockReadWriteCloser) Write(b []byte) (int, error) {
 	ret := m.Called(b)
 	return ret.Get(0).(int), ret.Error(1)
+}
+
+func (m *MockReadWriteCloser) Close() error {
+	return m.Called().Error(0)
 }
 
 type mockReader struct{}
@@ -77,8 +81,8 @@ func TestNewRunner(t *testing.T) {
 		envKey := "env"
 		cID := "cid"
 
-		mrw := new(MockReadWriter)
-		mrw.Buffer.Write([]byte{3, 1, 0, 0, 0, 0})
+		mrwc := new(MockReadWriteCloser)
+		mrwc.Buffer.Write([]byte{3, 1, 0, 0, 0, 0})
 		mc := new(MockConn)
 		mc.On("Close").Return(nil)
 
@@ -88,7 +92,7 @@ func TestNewRunner(t *testing.T) {
 				Conn:   mc,
 				Reader: bufio.NewReader(bytes.NewBuffer([]byte(`127.0.0.1:1000\n`))),
 			},
-			conn:        mrw,
+			conn:        mrwc,
 			Environment: envKey,
 		}
 
@@ -121,7 +125,7 @@ func TestNewRunner(t *testing.T) {
 
 						Convey("without files", func() {
 							// Expect 3 writes (total len, context len, context)
-							mrw.On("Write", mock.Anything).Return(0, nil).Times(3)
+							mrwc.On("Write", mock.Anything).Return(0, nil).Times(3)
 
 							Convey("from pool", func() {
 								r.containerPool[defaultRuntime] <- cont
@@ -151,10 +155,10 @@ func TestNewRunner(t *testing.T) {
 						Convey("with files", func() {
 							files := map[string]File{"file": {Data: []byte("content")}}
 							// Expect 3 writes (total len, context len, context)
-							mrw.On("Write", mock.Anything).Return(0, nil).Times(3)
+							mrwc.On("Write", mock.Anything).Return(0, nil).Times(3)
 							r.containerCache.Push(fmt.Sprintf("hash/user//%x", util.Hash("main.js")), cont)
 							// And then expect a file content.
-							mrw.On("Write", files["file"].Data).Return(0, nil).Once()
+							mrwc.On("Write", files["file"].Data).Return(0, nil).Once()
 							_, e := r.Run(logrus.StandardLogger(), defaultRuntime, "hash", "", "user", RunOptions{Files: files})
 							So(e, ShouldBeNil)
 						})
@@ -177,11 +181,11 @@ func TestNewRunner(t *testing.T) {
 						})
 
 						Convey("for conn Write", func() {
-							mrw.On("Write", mock.Anything).Return(0, err).Once()
+							mrwc.On("Write", mock.Anything).Return(0, err).Once()
 						})
 						Convey("for files conn Write", func() {
-							mrw.On("Write", mock.Anything).Return(0, nil).Times(3)
-							mrw.On("Write", mock.Anything).Return(0, err).Once()
+							mrwc.On("Write", mock.Anything).Return(0, nil).Times(3)
+							mrwc.On("Write", mock.Anything).Return(0, err).Once()
 						})
 						Convey("for container conn dial", func() {
 							cont.conn = nil
@@ -190,12 +194,19 @@ func TestNewRunner(t *testing.T) {
 								Err: &net.AddrError{Err: "missing port in address", Addr: cont.addr}}
 						})
 						Convey("gets error log from container on crash", func() {
-							mrw.On("Write", mock.Anything).Return(0, nil)
-							mrw.Buffer.Reset()
-							mrw.Buffer.Write([]byte{3, 1, 0, 0, 0})
+							mrwc.On("Write", mock.Anything).Return(0, nil)
+							mrwc.Buffer.Reset()
+							mrwc.Buffer.Write([]byte{3, 1, 0, 0, 0})
 							mrc := new(mockReadCloser)
 							dockerMgr.On("ContainerErrorLog", mock.Anything, cID).Return(mrc, nil).Once()
 							expectedErr = io.EOF
+						})
+						Convey("returns malformed header on non existing mux", func() {
+							mrwc.On("Write", mock.Anything).Return(0, nil)
+							mrwc.Buffer.Reset()
+							mrwc.Buffer.Write([]byte{4, 1, 0, 0, 0, 0})
+							mrwc.On("Close", mock.Anything).Return(nil)
+							expectedErr = ErrMalformedHeader
 						})
 
 						// mocks for afterRun's cleanupContainer.

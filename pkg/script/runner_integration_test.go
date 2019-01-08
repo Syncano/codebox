@@ -86,10 +86,10 @@ func TestRunnerIntegration(t *testing.T) {
 
 		Convey("runs simple scripts", func() {
 			var tests = []scriptTest{
-				{"nodejs_v6", `console.log(ARGS['arg'] + META['meta'] + CONFIG['cfg'] + '!')`},
-				{"nodejs_v6", `exports.default = (ctx) => { console.log(ctx.args['arg'] + ctx.meta['meta'] + ctx.config['cfg'] + '!') }`},
-				{"nodejs_v6", `module.exports=function(n){function r(t){if(e[t])return e[t].exports;var o=e[t]={i:t,l:!1,exports:{}};return n[t].call(o.exports,o,o.exports,r),o.l=!0,o.exports}var e={};return r.m=n,r.c=e,r.i=function(n){return n},r.d=function(n,e,t){r.o(n,e)||Object.defineProperty(n,e,{configurable:!1,enumerable:!0,get:t})},r.n=function(n){var e=n&&n.__esModule?function(){return n.default}:function(){return n};return r.d(e,"a",e),e},r.o=function(n,r){return Object.prototype.hasOwnProperty.call(n,r)},r.p="",r(r.s=239)}({239:function(n,r){console.log(ARGS['arg']+META['meta']+CONFIG['cfg']+'!')}});`},
-				{"nodejs_v8", `console.log(ARGS['arg'] + META['meta'] + CONFIG['cfg'] + '!')`},
+				{"nodejs_v6", `console.log(ARGS['arg'] + META['meta'] + CONFIG['cfg'] + '¿¡!')`},
+				{"nodejs_v6", `exports.default = (ctx) => { console.log(ctx.args['arg'] + ctx.meta['meta'] + ctx.config['cfg'] + '¿¡!') }`},
+				{"nodejs_v6", `module.exports=function(n){function r(t){if(e[t])return e[t].exports;var o=e[t]={i:t,l:!1,exports:{}};return n[t].call(o.exports,o,o.exports,r),o.l=!0,o.exports}var e={};return r.m=n,r.c=e,r.i=function(n){return n},r.d=function(n,e,t){r.o(n,e)||Object.defineProperty(n,e,{configurable:!1,enumerable:!0,get:t})},r.n=function(n){var e=n&&n.__esModule?function(){return n.default}:function(){return n};return r.d(e,"a",e),e},r.o=function(n,r){return Object.prototype.hasOwnProperty.call(n,r)},r.p="",r(r.s=239)}({239:function(n,r){console.log(ARGS['arg']+META['meta']+CONFIG['cfg']+'¿¡!')}});`},
+				{"nodejs_v8", `console.log(ARGS['arg'] + META['meta'] + CONFIG['cfg'] + '¿¡!')`},
 			}
 			for _, data := range tests {
 				hash := util.GenerateKey()
@@ -106,7 +106,7 @@ func TestRunnerIntegration(t *testing.T) {
 
 					So(res.Code, ShouldEqual, 0)
 					So(res.Took, ShouldBeGreaterThan, 0)
-					So(string(res.Stdout), ShouldEqual, "codebox!\n")
+					So(string(res.Stdout), ShouldEqual, "codebox¿¡!\n")
 					So(res.Stderr, ShouldBeEmpty)
 					So(res.Response, ShouldBeNil)
 				}

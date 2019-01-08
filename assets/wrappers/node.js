@@ -199,7 +199,7 @@ function socketWrite (sock, mux, ...chunks) {
 
   let totalLength = 0
   for (let i = 0; i < chunks.length; i++) {
-    totalLength += chunks[i].length
+    totalLength += Buffer.byteLength(chunks[i])
   }
 
   if (totalLength === 0) {
@@ -251,7 +251,7 @@ process.on('beforeExit', (code) => {
   if (outputResponse !== null && outputResponse instanceof HttpResponse) {
     let json = outputResponse.json()
     let jsonLen = Buffer.allocUnsafe(4)
-    jsonLen.writeUInt32LE(json.length)
+    jsonLen.writeUInt32LE(Buffer.byteLength(json))
     socketWrite(socket, MUX_RESPONSE, String.fromCharCode(code), jsonLen, json, outputResponse.content)
   } else {
     socketWrite(socket, MUX_RESPONSE, String.fromCharCode(code))
