@@ -367,6 +367,8 @@ func (r *FsRepo) Mount(volKey, resKey, fileName, destName string) error {
 
 // CleanupUnused removes all directories from storage path that do not match our StorageID.
 func (r *FsRepo) CleanupUnused() {
+	r.cleanupMounts()
+
 	files, err := afero.ReadDir(r.fs, r.options.BasePath)
 	if err != nil {
 		panic(err)
@@ -382,8 +384,6 @@ func (r *FsRepo) CleanupUnused() {
 			panic(err)
 		}
 	}
-
-	r.cleanupMounts()
 }
 
 // Remove unused mounts.
