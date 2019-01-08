@@ -94,7 +94,10 @@ func internalReadMux(r io.Reader, ch chan<- muxBuf, limit uint32, waitForMux byt
 		}
 
 		if waitForMux == mux {
-			return nil
+			if limit > 0 {
+				return nil
+			}
+			return ErrLimitReached
 		}
 	}
 }

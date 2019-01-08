@@ -163,6 +163,14 @@ func TestMuxParsing(t *testing.T) {
 			ret := <-retCh
 			So(len(ret[MuxStdout].Bytes()), ShouldEqual, 1)
 		})
+		Convey("readMux respects limit and trims the output for expected mux as well", func() {
+			go readMuxConn(context.Background(), 1)
+			conn, _ := l.Accept()
+			conn.Write([]byte{MuxResponse, 2, 0, 0, 0, 0, 0})
+			So(<-errCh, ShouldResemble, ErrLimitReached)
+			ret := <-retCh
+			So(len(ret[MuxResponse].Bytes()), ShouldEqual, 1)
+		})
 		Convey("readMux propagates unexpected eof error", func() {
 			go readMuxConn(context.Background(), 0)
 			conn, _ := l.Accept()
