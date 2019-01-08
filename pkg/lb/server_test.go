@@ -262,7 +262,7 @@ func TestServerMethods(t *testing.T) {
 			So(s.Options(), ShouldResemble, s.options)
 		})
 
-		Convey("given some ContainerInfo, grabWorker", func() {
+		Convey("given some Container, grabWorker", func() {
 			ci := ScriptInfo{SourceHash: "hash", UserID: "user"}
 
 			Convey("returns worker with max free slots", func() {

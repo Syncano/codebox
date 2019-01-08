@@ -178,7 +178,7 @@ var workerCmd = cli.Command{
 
 		// Initialize file repo.
 		logrus.WithField("options", repoOptions).Debug("Initializing file repo")
-		repo := filerepo.New(repoOptions, syschecker, new(filerepo.LinkFs))
+		repo := filerepo.New(repoOptions, syschecker, new(filerepo.LinkFs), new(filerepo.Command))
 
 		// Initialize script runner.
 		logrus.WithField("options", scriptOptions).Debug("Initializing script runner")
@@ -300,14 +300,14 @@ func startServer(
 	defer conn.Close()
 
 	// Setup script runner event handlers.
-	runner.OnContainerRemoved(func(cInfo script.ContainerInfo) {
+	runner.OnContainerRemoved(func(cont *script.Container) {
 		ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 		if _, e := client.ContainerRemoved(ctx,
 			&lbpb.ContainerRemovedRequest{
 				Id:          poolID,
-				SourceHash:  cInfo.SourceHash,
-				Environment: cInfo.Environment,
-				UserID:      cInfo.UserID,
+				SourceHash:  cont.SourceHash,
+				Environment: cont.Environment,
+				UserID:      cont.UserID,
 			}); err != nil {
 			errCh <- e
 		}

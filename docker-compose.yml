@@ -6,9 +6,28 @@ services:
     build: .
     image: codebox_app
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
       - .:/go/src/github.com/Syncano/codebox
+      - varrun:/var/run
+      - /tmp/storage:/home/codebox/storage:rshared
       - /go/src/github.com/Syncano/codebox/vendor
-      - /tmp/storage:/home/codebox/storage
+    depends_on:
+      - dind
+
+  dind:
+    privileged: true
+    network_mode: host
+    image: docker:17-dind
+    command:
+      - /scripts/dind-run.sh
+    volumes:
+      - varrun:/var/run
+      - /tmp/storage:/home/codebox/storage:rslave
+      - ./deploy/dind-run.sh:/scripts/dind-run.sh
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
     environment:
-      - HOST_STORAGE_PATH=/tmp/storage
+      - IPTABLES=1
+      - SETUP_FILTERING=0
+      # - RUNSC_RELEASE=2018-11-22
+
+volumes:
+  varrun:

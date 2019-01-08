@@ -127,6 +127,20 @@ func (_m *Repo) Link(volKey string, resKey string, destName string) error {
 	return r0
 }
 
+// Mount provides a mock function with given fields: volKey, resKey, fileName, destName
+func (_m *Repo) Mount(volKey string, resKey string, fileName string, destName string) error {
+	ret := _m.Called(volKey, resKey, fileName, destName)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(string, string, string, string) error); ok {
+		r0 = rf(volKey, resKey, fileName, destName)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // Options provides a mock function with given fields:
 func (_m *Repo) Options() filerepo.Options {
 	ret := _m.Called()

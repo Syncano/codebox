@@ -30,9 +30,8 @@ deps: ## Install dep and sync vendored dependencies
 	fi
 	dep ensure -v -vendor-only
 
-
 testdeps: deps ## Install testing dependencies
-	curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | bash -s -- -b $(GOPATH)/bin v1.12
+	curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | bash -s -- -b $(GOPATH)/bin v1.12.2
 
 devdeps: testdeps ## Install compile, testing and development dependencies
 	if ! which protoc > /dev/null; then \
@@ -56,8 +55,8 @@ require-%:
 	fi
 
 download-images: require-docker ## Download wrapper docker images
-	docker pull syncano/nodejs-codebox:6
-	docker pull syncano/nodejs-codebox:8
+	docker pull node:6-stretch
+	docker pull node:8-stretch
 
 clean: ## Cleanup repository
 	go clean ./...
@@ -90,7 +89,7 @@ stest: ## Run only short tests (unit tests) without race check
 
 itest: ## Run only integration tests (with race checks)
 	echo "=== integration test ==="
-	go test -timeout 60s -race -run Integration $(ARGS) $(shell echo $(GOFILES) | xargs -n1 echo | grep "_integration_test.go" | xargs -n1 dirname | sort | uniq)
+	go test -timeout 180s -race -run Integration $(ARGS) $(shell echo $(GOFILES) | xargs -n1 echo | grep "_integration_test.go" | xargs -n1 dirname | sort | uniq)
 
 atest: ## Run only acceptance tests
 	echo "=== acceptance test ==="

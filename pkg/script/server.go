@@ -68,7 +68,7 @@ func NewServer(runner Runner) *Server {
 // Run runs script in secure environment of worker.
 func (s *Server) Run(stream pb.ScriptRunner_RunServer) error {
 	var meta *pb.RunRequest_MetaMessage
-	chunkData := make(map[string]FileData)
+	chunkData := make(map[string]File)
 
 	for {
 		in, err := stream.Recv()
@@ -82,7 +82,7 @@ func (s *Server) Run(stream pb.ScriptRunner_RunServer) error {
 		case *pb.RunRequest_Meta:
 			meta = v.Meta
 		case *pb.RunRequest_Chunk:
-			chunkData[v.Chunk.Name] = FileData{
+			chunkData[v.Chunk.Name] = File{
 				Filename:    v.Chunk.Filename,
 				ContentType: v.Chunk.ContentType,
 				Data:        v.Chunk.Data,
@@ -206,8 +206,6 @@ func (s *Server) ParseError(err error) error {
 	switch err {
 	case ErrPoolNotRunning:
 		code = codes.ResourceExhausted
-	case ErrCriticalContainerError:
-		code = codes.Aborted
 	case filerepo.ErrResourceNotFound:
 		code = codes.FailedPrecondition
 	}

@@ -6,6 +6,11 @@ jobs:
       - checkout
 
       - run:
+          name: Setup system
+          command: |
+            sudo mount --make-rshared /
+
+      - run:
           name: Build application Docker image
           command: docker-compose build
 
@@ -17,6 +22,7 @@ jobs:
       - run: 
           name: Lint
           command: |
+            sudo mount --make-rshared /
             make lint-in-docker
 
       - run: 
@@ -33,6 +39,7 @@ jobs:
           name: Setup system
           command: |
               docker login -u="$DOCKER_LOGIN" -p="$DOCKER_PASS" quay.io
+              sudo mount --make-rshared /
 
       - run:
           name: Build application Docker image
@@ -43,6 +50,10 @@ jobs:
           command: |
             make build-in-docker docker
 
+      - run:
+          name: Install jinja2-cli
+          command: |
+            pip install jinja2-cli[yaml]
       - run:
           name: Install kops
           command: |

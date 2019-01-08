@@ -308,12 +308,14 @@ func (s *Server) processWorkerRun(ctx context.Context, logger logrus.FieldLogger
 // Fallback to any worker with highest amount of free slots.
 func (s *Server) grabWorker(ci ScriptInfo) (*Worker, bool) {
 	var (
-		worker    *Worker
-		fromCache bool
+		worker, workerMax       *Worker
+		fromCache               bool
+		freeSlots, freeSlotsMax int
 	)
+
 	s.mu.Lock()
 	for {
-		var freeSlots int
+		freeSlots = 0
 		if set, ok := s.workerContainerCache[ci]; ok {
 
 			for _, v := range set.Values() {
@@ -327,9 +329,13 @@ func (s *Server) grabWorker(ci ScriptInfo) (*Worker, bool) {
 				}
 			}
 		}
-		if worker == nil {
+
+		// If no worker with cached container found or if there is a big discrepancy between worker with max free slots
+		// and worker with cached container - use that instead to balance the load.
+		workerMax, freeSlotsMax = s.findWorkerWithMaxFreeSlots()
+		if worker == nil || freeSlotsMax > 2*freeSlots {
 			fromCache = false
-			worker, freeSlots = s.findWorkerWithMaxFreeSlots()
+			worker, freeSlots = workerMax, freeSlotsMax
 		}
 
 		// If still cannot find a worker - abandon all hope.

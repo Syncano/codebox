@@ -34,6 +34,10 @@ type scriptTimeoutTest struct {
 	deadlineExceeded bool
 }
 
+const (
+	environmentFilename = "squashfs.img"
+)
+
 func uploadFile(repo filerepo.Repo, key string, data []byte, filename string) error {
 	lockCh, storeKey := repo.StoreLock(key)
 	_, err := repo.Store(key, storeKey, bytes.NewReader(data), filename)
@@ -64,7 +68,7 @@ func TestRunnerIntegration(t *testing.T) {
 		syschecker := new(sys.SigarChecker)
 
 		// Initialize file repo.
-		repo := filerepo.New(filerepo.Options{}, syschecker, new(filerepo.LinkFs))
+		repo := filerepo.New(filerepo.Options{}, syschecker, new(filerepo.LinkFs), new(filerepo.Command))
 
 		// Initialize script runner.
 		runner, err := script.NewRunner(script.Options{
@@ -119,7 +123,7 @@ func TestRunnerIntegration(t *testing.T) {
 				err := uploadFile(repo, hash, []byte(data.script), script.SupportedRuntimes[data.runtime].DefaultEntryPoint)
 				So(err, ShouldBeNil)
 				res, err := runner.Run(logrus.StandardLogger(), data.runtime, hash, "", "user", script.RunOptions{
-					Files: map[string]script.FileData{"file": {Filename: "fname", ContentType: "ctype", Data: []byte("content123")}},
+					Files: map[string]script.File{"file": {Filename: "fname", ContentType: "ctype", Data: []byte("content123")}},
 				})
 				So(err, ShouldBeNil)
 
@@ -165,7 +169,7 @@ func TestRunnerIntegration(t *testing.T) {
 			ioutil.WriteFile(filepath.Join(node_modules_dir, "testfile"), []byte("abc"), 0644)
 			defer os.RemoveAll(tempDir)
 
-			squashfs := filepath.Join(os.TempDir(), "squashfs.img")
+			squashfs := filepath.Join(os.TempDir(), environmentFilename)
 			cmd := exec.Command("mksquashfs", tempDir, squashfs, "-comp", "xz", "-noappend")
 			e := cmd.Run()
 			So(e, ShouldBeNil)
@@ -173,12 +177,12 @@ func TestRunnerIntegration(t *testing.T) {
 			os.Remove(squashfs)
 
 			var tests = []scriptTest{
-				{"nodejs_v6", `require('fs').readdirSync('/env/node_modules').forEach(file => { console.log(file) })`},
-				{"nodejs_v8", `require('fs').readdirSync('/env/node_modules').forEach(file => { console.log(file) })`},
+				{"nodejs_v6", `require('fs').readdirSync('/app/env/node_modules').forEach(file => { console.log(file) })`},
+				{"nodejs_v8", `require('fs').readdirSync('/app/env/node_modules').forEach(file => { console.log(file) })`},
 			}
 			for _, data := range tests {
 				env := util.GenerateKey()
-				err := uploadFile(repo, env, squashBytes, "squashfs.img")
+				err := uploadFile(repo, env, squashBytes, environmentFilename)
 				So(err, ShouldBeNil)
 
 				hash := util.GenerateKey()
@@ -200,7 +204,7 @@ func TestRunnerIntegration(t *testing.T) {
 			}
 			for _, data := range tests {
 				env := util.GenerateKey()
-				err := uploadFile(repo, env, []byte("abc"), "squashfs.img")
+				err := uploadFile(repo, env, []byte("abc"), environmentFilename)
 				So(err, ShouldBeNil)
 
 				hash := util.GenerateKey()
@@ -209,7 +213,7 @@ func TestRunnerIntegration(t *testing.T) {
 
 				res, err := runner.Run(logrus.StandardLogger(), data.runtime, hash, env, "user", script.RunOptions{EntryPoint: "test/entry.js"})
 				So(res, ShouldBeNil)
-				So(err, ShouldEqual, script.ErrCriticalContainerError)
+				So(err, ShouldNotBeNil)
 			}
 		})
 

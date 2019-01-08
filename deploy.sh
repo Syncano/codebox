@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-set -euo pipefail
-
 export APP=codebox
 export VERSION="$2"
 
@@ -12,6 +10,8 @@ usage() { echo "* Usage: $0 <environment> <version> [--skip-push]" >&2; exit 1; 
 [[ ! -z $TARGET ]] || usage
 [[ ! -z $VERSION ]] || usage
 
+set -euo pipefail
+
 if ! which kubectl > /dev/null; then 
     echo "! kubectl not installed" >&2; exit 1
 fi
@@ -19,7 +19,6 @@ fi
 if [[ ! -f "deploy/env/${TARGET}.env" ]]; then
     echo "! environment ${TARGET} does not exist in deploy/env/"; exit 1
 fi
-
 
 # Parse arguments.
 PUSH=true
@@ -34,6 +33,11 @@ for PARAM in ${@:3}; do
     esac
 done
 
+envsubst() {
+    for var in $(compgen -e); do
+        echo "$var: \"${!var//\"/\\\"}\""
+    done | jinja2 $1
+}
 
 deploy_broker() {
     # Deploy broker.
@@ -41,20 +45,22 @@ deploy_broker() {
     export LB_ADDRS=${LB_ADDRS%,}
     export REPLICAS=$(kubectl get deployment/codebox-broker -o jsonpath='{.spec.replicas}' 2>/dev/null || echo ${BROKER_MIN})
     echo "* Deploying Broker for LB=${LB_ADDRS}, replicas=${REPLICAS}."
-    envsubst < deploy/yaml/broker-deployment.yml | kubectl apply -f -
-    envsubst < deploy/yaml/broker-hpa.yml | kubectl apply -f -
+    envsubst deploy/yaml/broker-deployment.yml.j2 | kubectl apply -f -
+    envsubst deploy/yaml/broker-hpa.yml.j2 | kubectl apply -f -
 
     echo "* Deploying Service for Broker."
-    envsubst < deploy/yaml/broker-service.yml | kubectl apply -f -
+    envsubst deploy/yaml/broker-service.yml.j2 | kubectl apply -f -
 
     kubectl rollout status deployment/codebox-broker
 }
+
+
+echo "* Starting deployment for $TARGET at $VERSION."
 
 # Setup environment variables.
 export $(cat deploy/env/${TARGET}.env | xargs)
 export BUILDTIME=$(date +%Y-%m-%dt%H%M)
 
-echo "* Starting deployment for $TARGET at $VERSION."
 
 # Push docker image.
 if $PUSH; then
@@ -64,6 +70,7 @@ if $PUSH; then
 	echo "* Pushing $DOCKERIMAGE:$VERSION."
 	docker push $DOCKERIMAGE:$VERSION
 fi
+
 
 # Create configmap.
 echo "* Updating ConfigMap."
@@ -89,30 +96,34 @@ echo -e $SECRETS | kubectl apply -f -
 OLD_LB_TOTAL_NUM=$(( $(kubectl get deploy -l app=codebox,type=lb | wc -l) - 1 ))
 [ $LB_TOTAL_NUM -lt $OLD_LB_TOTAL_NUM ] && deploy_broker
 
+
 # Prepare Docker Extra Hosts settings.
 export INTERNAL_WEB_IP=$(kubectl get svc platform-ingress-internal -o jsonpath='{.spec.clusterIP}')
 export DOCKER_EXTRA_HOSTS="${INTERNAL_WEB_HOST}:${INTERNAL_WEB_IP}"
 
+
 # Deploy worker startup daemonset.
 kubectl create configmap codebox-dind --from-file=deploy/dind-run.sh -o yaml --dry-run | kubectl apply -f -
 kubectl create configmap codebox-startup --from-file=deploy/worker-setup.sh -o yaml --dry-run | kubectl apply -f -
-envsubst < deploy/yaml/worker-daemonset.yml | kubectl apply -f -
+envsubst deploy/yaml/worker-daemonset.yml.j2 | kubectl apply -f -
 echo ". Waiting for Worker Docker Daemonset deployment to finish..."
 kubectl rollout status daemonset/codebox-docker
 
+# Deploy LB RBAC.
+envsubst deploy/yaml/lb-rbac.yml.j2 | kubectl apply -f -
 
 # Start with deployment of LB-workers pairs.
 for (( LB_NUM=1; LB_NUM <= $LB_TOTAL_NUM; LB_NUM++ )); do
     export LB_NUM=$(printf "%02d" $LB_NUM)
 
     echo "* Deploying LB-${LB_NUM}."
-    envsubst < deploy/yaml/lb-deployment.yml | kubectl apply -f -
+    envsubst deploy/yaml/lb-deployment.yml.j2 | kubectl apply -f -
 
     echo "* Deploying Internal Service for LB-${LB_NUM}."
-    envsubst < deploy/yaml/lb-internal-service.yml | kubectl apply -f -
+    envsubst deploy/yaml/lb-internal-service.yml.j2 | kubectl apply -f -
 
     echo "* Deploying Service for LB-${LB_NUM}."
-    envsubst < deploy/yaml/lb-service.yml | kubectl apply -f -
+    envsubst deploy/yaml/lb-service.yml.j2 | kubectl apply -f -
 
 
     # Wait for new LB IP address
@@ -135,7 +146,7 @@ for (( LB_NUM=1; LB_NUM <= $LB_TOTAL_NUM; LB_NUM++ )); do
     export LB_ADDR=codebox-lb-internal-${LB_NUM}.default:9000
     export REPLICAS=$(kubectl get deployment/codebox-worker-${LB_NUM} -o jsonpath='{.spec.replicas}' 2>/dev/null || echo ${SCALING_MIN})
     echo "* Deploying Worker for LB-${LB_NUM} with IP=${LB_ADDR}, replicas=${REPLICAS}."
-    envsubst < deploy/yaml/worker-deployment.yml | kubectl apply -f -
+    envsubst deploy/yaml/worker-deployment.yml.j2 | kubectl apply -f -
 
 
     # Wait for deployment to finish.
@@ -148,9 +159,10 @@ for (( LB_NUM=1; LB_NUM <= $LB_TOTAL_NUM; LB_NUM++ )); do
     echo
 done
 
-envsubst < deploy/yaml/worker-service.yml | kubectl apply -f -
-envsubst < deploy/yaml/lb-pdb.yml | kubectl apply -f -
-envsubst < deploy/yaml/lb-discovery-service.yml | kubectl apply -f -
+envsubst deploy/yaml/worker-service.yml.j2 | kubectl apply -f -
+envsubst deploy/yaml/lb-pdb.yml.j2 | kubectl apply -f -
+envsubst deploy/yaml/lb-discovery-service.yml.j2 | kubectl apply -f -
+
 
 # Deploy broker last if we will upscale amount of LBs.
 [ $LB_TOTAL_NUM -ge $OLD_LB_TOTAL_NUM ] && deploy_broker

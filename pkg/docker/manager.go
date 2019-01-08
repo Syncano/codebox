@@ -1,7 +1,6 @@
 package docker
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -26,6 +25,7 @@ type StdManager struct {
 	iopsLimit             uint64
 	options               Options
 	info                  types.Info
+	runtime               string
 }
 
 // Options holds information about manager controlled docker limits to enforce.
@@ -60,7 +60,7 @@ type Constraints struct {
 const (
 	containerWorkdir = "/tmp"
 	defaultTimeout   = 30 * time.Second
-	devFuseMount     = "/dev/fuse"
+	gvisorRuntime    = "runsc"
 
 	// DockerVersion specifies client API version to use.
 	DockerVersion = "1.26"
@@ -82,6 +82,7 @@ func NewManager(options Options, cli Client) (*StdManager, error) {
 		client:  cli,
 		options: options,
 		info:    info,
+		runtime: gvisorRuntime,
 	}
 
 	// Check capabilities and overall compatibility of the system.
@@ -94,6 +95,11 @@ func NewManager(options Options, cli Client) (*StdManager, error) {
 				"driver": info.Driver,
 				"fs":     info.DriverStatus[0][1],
 			}).Warn("Docker storage does not support limiting quota (requires overlay2 on xfs), disabling")
+	}
+
+	if _, ok := info.Runtimes[gvisorRuntime]; !ok {
+		logrus.Warn("Docker does not support gVisor runtime, disabling")
+		m.runtime = ""
 	}
 
 	// Check reserved cpu option.
@@ -175,12 +181,9 @@ func (m *StdManager) CreateContainer(ctx context.Context, image, user string, cm
 
 	stopTimeout := 0
 	containerConfig := container.Config{
+		AttachStdout: true,
 		Image:        image,
 		User:         user,
-		AttachStdout: true,
-		AttachStderr: true,
-		AttachStdin:  true,
-		OpenStdin:    true,
 		Labels:       labels,
 		Cmd:          cmd,
 		Env:          env,
@@ -202,21 +205,12 @@ func (m *StdManager) CreateContainer(ctx context.Context, image, user string, cm
 			Rate: m.iopsLimit,
 		},
 	}
-	init := true
 	hostConfig := container.HostConfig{
-		Init:        &init,
-		AutoRemove:  true,
 		Binds:       binds,
 		DNS:         []string{"208.67.222.222", "208.67.220.220"},
-		CapAdd:      []string{"SYS_ADMIN"},
-		SecurityOpt: []string{"apparmor=unconfined"},
 		ExtraHosts:  m.options.ExtraHosts,
 		NetworkMode: container.NetworkMode(m.options.Network),
 		Resources: container.Resources{
-			Devices: []container.DeviceMapping{{
-				PathOnHost:        devFuseMount,
-				PathInContainer:   devFuseMount,
-				CgroupPermissions: "rw"}},
 			Memory:               constraints.MemoryLimit,
 			MemorySwap:           constraints.MemorySwapLimit,
 			Ulimits:              ulimits,
@@ -225,6 +219,7 @@ func (m *StdManager) CreateContainer(ctx context.Context, image, user string, cm
 			BlkioDeviceReadIOps:  blkioThrottle,
 			BlkioDeviceWriteIOps: blkioThrottle,
 		},
+		Runtime: m.runtime,
 	}
 
 	if m.storageLimitSupported && constraints.StorageLimit != "" {
@@ -243,9 +238,12 @@ func (m *StdManager) AttachContainer(ctx context.Context, containerID string) (t
 	return m.client.ContainerAttach(ctx, containerID, types.ContainerAttachOptions{
 		Stream: true,
 		Stdout: true,
-		Stderr: true,
-		Stdin:  true,
 	})
+}
+
+// ContainerErrorLog returns container error log.
+func (m *StdManager) ContainerErrorLog(ctx context.Context, containerID string) (io.ReadCloser, error) {
+	return m.client.ContainerLogs(ctx, containerID, types.ContainerLogsOptions{ShowStderr: true, Tail: "50", Follow: true})
 }
 
 // StartContainer starts given containerID.
@@ -255,34 +253,6 @@ func (m *StdManager) StartContainer(ctx context.Context, containerID string) err
 
 // StopContainer stops given containerID.
 func (m *StdManager) StopContainer(ctx context.Context, containerID string) error {
-	return m.client.ContainerStop(ctx, containerID, nil)
-}
-
-// ProcessResponse processes response stream from docker container and returns stdout+stderr.
-func (m *StdManager) ProcessResponse(ctx context.Context, resp types.HijackedResponse, magicString string, limit uint32) ([]byte, []byte, error) {
-	stdoutCh := make(chan []byte)
-	stderrCh := make(chan []byte)
-	stdout := new(bytes.Buffer)
-	stderr := new(bytes.Buffer)
-	errCh := make(chan error)
-
-	go func() {
-		errCh <- readStreamUntil(resp.Reader, stdoutCh, stderrCh, magicString, limit)
-	}()
-	for {
-		select {
-		case b := <-stdoutCh:
-			stdout.Write(b)
-		case b := <-stderrCh:
-			stderr.Write(b)
-		case <-ctx.Done():
-			return stdout.Bytes(), stderr.Bytes(), ctx.Err()
-		case err := <-errCh:
-			if err == nil {
-				stdout.Truncate(stdout.Len() - len(magicString))
-				stderr.Truncate(stderr.Len() - len(magicString))
-			}
-			return stdout.Bytes(), stderr.Bytes(), err
-		}
-	}
+	m.client.ContainerStop(ctx, containerID, nil) // nolint: errcheck
+	return m.client.ContainerRemove(ctx, containerID, types.ContainerRemoveOptions{Force: true})
 }

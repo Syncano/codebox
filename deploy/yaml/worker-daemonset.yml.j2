@@ -21,6 +21,7 @@ spec:
       nodeSelector:
         type: codebox
       hostPID: true
+      hostNetwork: true
       volumes:
         - name: startup-scripts
           configMap:
@@ -33,12 +34,15 @@ spec:
         - name: dind-data
           hostPath:
             path: /mnt/codebox/dind
-        - name: varrun
+        - name: docker-run
           hostPath:
             path: /mnt/codebox/run
         - name: script-storage
           hostPath:
             path: /mnt/codebox/storage
+        - name: cgroup
+          hostPath:
+            path: /sys/fs/cgroup
 
       initContainers:
         - name: startup
@@ -49,7 +53,7 @@ spec:
             - "/scripts/worker-setup.sh"
           env:
             - name: DOCKER_DEVICE
-              value: ${DOCKER_DEVICE}
+              value: {{ DOCKER_DEVICE }}
           volumeMounts:
             - name: startup-scripts
               mountPath: /scripts
@@ -63,13 +67,17 @@ spec:
             privileged: true
           env:
             - name: INTERNAL_WEB_IP
-              value: "${INTERNAL_WEB_IP}"
+              value: "{{ INTERNAL_WEB_IP }}"
           volumeMounts:
             - name: dind-scripts
               mountPath: /scripts
             - name: dind-data
               mountPath: /var/lib/docker
             - name: script-storage
-              mountPath: "${HOST_STORAGE_PATH}"
-            - name: varrun
+              mountPath: "{{ HOST_STORAGE_PATH }}"
+              mountPropagation: HostToContainer
+            - name: docker-run
               mountPath: /var/run
+            - name: cgroup
+              mountPath: /sys/fs/cgroup
+              readOnly: true

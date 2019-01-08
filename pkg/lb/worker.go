@@ -53,7 +53,7 @@ func (ci *ScriptInfo) String() string {
 	return fmt.Sprintf("{SourceHash:%s, Environment:%s, UserID:%s}", ci.SourceHash, ci.Environment, ci.UserID)
 }
 
-// ContainerWorkerCache defines a map - ContainerInfo->set of *Worker.
+// ContainerWorkerCache defines a map - ScriptInfo->set of *Worker.
 type ContainerWorkerCache map[ScriptInfo]*hashset.Set
 
 const (

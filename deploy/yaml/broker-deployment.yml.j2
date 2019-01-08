@@ -6,7 +6,7 @@ metadata:
     app: codebox
     type: broker
 spec:
-  replicas: ${REPLICAS}
+  replicas: {{ REPLICAS }}
   selector:
     matchLabels:
       app: codebox
@@ -15,7 +15,7 @@ spec:
   template:
     metadata:
       labels:
-        buildtime: ${BUILDTIME}
+        buildtime: {{ BUILDTIME }}
         app: codebox
         type: broker
     spec:
@@ -24,7 +24,7 @@ spec:
         - name: syncano-k8s-pull-secret
       containers:
         - name: codebox-broker
-          image: ${DOCKERIMAGE}:${VERSION}
+          image: {{ DOCKERIMAGE }}:{{ VERSION }}
           command:
             - "codebox"
             - "broker"
@@ -43,7 +43,7 @@ spec:
             - name: SERVICE_NAME
               value: codebox-broker
             - name: LB_ADDRS
-              value: ${LB_ADDRS}
+              value: {{ LB_ADDRS }}
           envFrom:
             - configMapRef:
                 name: codebox

@@ -31,14 +31,12 @@ type contextFile struct {
 }
 
 type wrapperContext struct {
-	EntryPoint      string           `json:"_entryPoint"`
-	MagicString     string           `json:"_magicString"`
-	OutputSeparator string           `json:"_outputSeparator"`
-	Timeout         time.Duration    `json:"_timeout"`
-	Files           []contextFile    `json:"_files"`
-	Args            *json.RawMessage `json:"ARGS"`
-	Config          *json.RawMessage `json:"CONFIG"`
-	Meta            *json.RawMessage `json:"META"`
+	EntryPoint string           `json:"_entryPoint"`
+	Timeout    time.Duration    `json:"_timeout"`
+	Files      []contextFile    `json:"_files"`
+	Args       *json.RawMessage `json:"ARGS"`
+	Config     *json.RawMessage `json:"CONFIG"`
+	Meta       *json.RawMessage `json:"META"`
 }
 
 var defaultConstraints = docker.Constraints{
@@ -59,8 +57,8 @@ var SupportedRuntimes = map[string]*RuntimeInfo{
 			fmt.Sprintf("--max_old_space_size=%d", defaultConstraints.MemoryLimit/1024/1024),
 			"/app/wrapper/node.js",
 		},
-		Environment:       []string{"NODE_PATH=/env/node_modules:/app/code"},
-		Image:             "syncano/nodejs-codebox:6",
+		Environment:       []string{"NODE_PATH=/app/env/node_modules:/app/code"},
+		Image:             "node:6-stretch",
 		User:              "node",
 		DefaultEntryPoint: "main.js",
 		Constraints:       defaultConstraints,
@@ -74,8 +72,8 @@ var SupportedRuntimes = map[string]*RuntimeInfo{
 			fmt.Sprintf("--max_old_space_size=%d", defaultConstraints.MemoryLimit/1024/1024),
 			"/app/wrapper/node.js",
 		},
-		Environment:       []string{"NODE_PATH=/env/node_modules:/app/code"},
-		Image:             "syncano/nodejs-codebox:8",
+		Environment:       []string{"NODE_PATH=/app/env/node_modules:/app/code"},
+		Image:             "node:8-stretch",
 		User:              "node",
 		DefaultEntryPoint: "main.js",
 		Constraints:       defaultConstraints,

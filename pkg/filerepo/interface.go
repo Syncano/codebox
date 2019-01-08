@@ -22,6 +22,7 @@ type Repo interface {
 	DeleteVolume(volKey string) error
 	RelativePath(path string) (string, error)
 	Link(volKey, resKey, destName string) error
+	Mount(volKey, resKey, fileName, destName string) error
 	GetFS() afero.Fs
 	CleanupUnused()
 	Flush()
@@ -40,3 +41,12 @@ type Fs interface {
 
 // Assert that LinkFs is compatible with our interface.
 var _ Fs = (*LinkFs)(nil)
+
+// Commander provides methods for running subprocesses.
+//go:generate mockery -inpkg -testonly -name Commander
+type Commander interface {
+	Run(string, ...string) error
+}
+
+// Assert that Command is compatible with our interface.
+var _ Commander = (*Command)(nil)

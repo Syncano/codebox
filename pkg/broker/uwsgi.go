@@ -39,6 +39,7 @@ const (
 	headerPayloadKey    = "PAYLOAD_KEY"
 	headerPayloadParsed = "PAYLOAD_PARSED"
 	getSkipCache        = "__skip_cache"
+	jsonContentType     = "application/json; charset=utf-8"
 )
 
 type uwsgiPayload struct {
@@ -70,7 +71,7 @@ func createCacheKey(schema, endpointName, hash string) string {
 func httpError(w http.ResponseWriter, status int, error string) {
 	w.WriteHeader(status)
 	if status != 0 {
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.Header().Set("Content-Type", jsonContentType)
 		fmt.Fprintf(w, `{"detail":"%s"}`, error)
 	}
 }
@@ -93,6 +94,7 @@ func writeTraceResponse(w http.ResponseWriter, trace *ScriptTrace) {
 	if ok {
 		w.WriteHeader(httpCode)
 	}
+	w.Header().Set("Content-Type", jsonContentType)
 	w.Write(ret) // nolint - ignore error
 }
 

@@ -1,7 +1,7 @@
 kind: Deployment
 apiVersion: apps/v1beta1
 metadata:
-  name: codebox-lb-${LB_NUM}
+  name: codebox-lb-{{ LB_NUM }}
   labels:
     app: codebox
     type: lb
@@ -9,18 +9,19 @@ spec:
   replicas: 1
   selector:
     matchLabels:
-      name: codebox-lb-${LB_NUM}
+      name: codebox-lb-{{ LB_NUM }}
       app: codebox
       type: lb
 
   template:
     metadata:
       labels:
-        buildtime: ${BUILDTIME}
-        name: codebox-lb-${LB_NUM}
+        buildtime: {{ BUILDTIME }}
+        name: codebox-lb-{{ LB_NUM }}
         app: codebox
         type: lb
     spec:
+      serviceAccountName: codebox-lb
       terminationGracePeriodSeconds: 360
       imagePullSecrets:
         - name: syncano-k8s-pull-secret
@@ -29,8 +30,8 @@ spec:
           hostPath:
             path: /tmp/codebox
       containers:
-        - name: codebox-lb-${LB_NUM}
-          image: ${DOCKERIMAGE}:${VERSION}
+        - name: codebox-lb-{{ LB_NUM }}
+          image: {{ DOCKERIMAGE }}:{{ VERSION }}
           command:
             - "codebox"
             - "lb"
@@ -49,7 +50,7 @@ spec:
             - name: SERVICE_NAME
               value: codebox-lb
             - name: SCALING_DEPLOYMENT
-              value: codebox-worker-${LB_NUM}
+              value: codebox-worker-{{ LB_NUM }}
           envFrom:
             - configMapRef:
                 name: codebox

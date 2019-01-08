@@ -1,10 +1,12 @@
 package filerepo
 
 import (
+	"bufio"
 	"errors"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -24,12 +26,13 @@ type FsRepo struct {
 	options   Options
 	sys       sys.SystemChecker
 	fs        Fs
+	command   Commander
 
 	muStore   sync.RWMutex
 	permStore map[string]string
 
 	muVol   sync.RWMutex
-	volumes map[string]Volume
+	volumes map[string]*Volume
 
 	muStoreLocks sync.Mutex
 	storeLocks   map[string]chan struct{}
@@ -57,7 +60,8 @@ var DefaultOptions = Options{
 
 // Volume defines info about volume.
 type Volume struct {
-	Path string
+	Path   string
+	mounts []string
 }
 
 // Resource defines info about cached script.
@@ -77,10 +81,13 @@ var (
 const (
 	fileStorageName   = "files"
 	volumeStorageName = "volumes"
+	fusermountCmd     = "fusermount"
+	squashfuseCmd     = "squashfuse"
+	squashfuseMount   = "squashfuse"
 )
 
 // New initializes a new file repo.
-func New(options Options, checker sys.SystemChecker, fs Fs) *FsRepo {
+func New(options Options, checker sys.SystemChecker, fs Fs, command Commander) *FsRepo {
 	mergo.Merge(&options, DefaultOptions) // nolint - error not possible
 	util.Must(fs.MkdirAll(options.BasePath, os.ModePerm))
 	r := FsRepo{
@@ -88,8 +95,9 @@ func New(options Options, checker sys.SystemChecker, fs Fs) *FsRepo {
 		options:    options,
 		sys:        checker,
 		fs:         fs,
+		command:    command,
 		permStore:  make(map[string]string),
-		volumes:    make(map[string]Volume),
+		volumes:    make(map[string]*Volume),
 		storeLocks: make(map[string]chan struct{}),
 	}
 	r.fileCache = cache.NewLRUCache(cache.Options{
@@ -254,7 +262,7 @@ func (r *FsRepo) CreateVolume() (volKey string, path string, err error) {
 	if err = r.fs.MkdirAll(path, os.ModePerm); err != nil {
 		return
 	}
-	r.volumes[volKey] = Volume{Path: path}
+	r.volumes[volKey] = &Volume{Path: path}
 	return
 }
 
@@ -271,11 +279,25 @@ func (r *FsRepo) DeleteVolume(volKey string) error {
 	return r.deleteVolume(vol)
 }
 
-func (r *FsRepo) deleteVolume(vol Volume) error {
-	return r.fs.RemoveAll(vol.Path)
+// deleteVolume cleans up mounts and files but tries to finish cleanup even if error occurs. Returns first error.
+func (r *FsRepo) deleteVolume(vol *Volume) error {
+	var err error
+	for _, m := range vol.mounts {
+		if e := r.umount(filepath.Join(vol.Path, m)); e != nil && err == nil {
+			err = e
+		}
+	}
+	if e := r.fs.RemoveAll(vol.Path); e != nil && err == nil {
+		return e
+	}
+	return err
 }
 
-// CleanupVolume deletes all files/links from a volume.
+func (r *FsRepo) umount(path string) error {
+	return r.command.Run(fusermountCmd, "-u", path)
+}
+
+// CleanupVolume deletes all files/links and mounts from a volume.
 func (r *FsRepo) CleanupVolume(volKey string) error {
 	r.muVol.Lock()
 	defer r.muVol.Unlock()
@@ -287,6 +309,7 @@ func (r *FsRepo) CleanupVolume(volKey string) error {
 	if err := r.deleteVolume(vol); err != nil {
 		return err
 	}
+	vol.mounts = []string{}
 	return r.fs.MkdirAll(vol.Path, os.ModePerm)
 }
 
@@ -315,6 +338,33 @@ func (r *FsRepo) Link(volKey, resKey, destName string) error {
 	})
 }
 
+// Mount mounts fileName to a volume dir through squashfuse.
+func (r *FsRepo) Mount(volKey, resKey, fileName, destName string) error {
+	resPath := r.Get(resKey)
+	if resPath == "" {
+		return ErrResourceNotFound
+	}
+
+	r.muVol.RLock()
+	defer r.muVol.RUnlock()
+
+	vol, ok := r.volumes[volKey]
+	if !ok {
+		return ErrVolumeNotFound
+	}
+
+	destPath := filepath.Join(vol.Path, destName)
+	if err := r.fs.Mkdir(destPath, os.ModePerm); err != nil {
+		return err
+	}
+
+	err := r.command.Run(squashfuseCmd, filepath.Join(resPath, fileName), destPath, "-o", "allow_other")
+	if err == nil {
+		vol.mounts = append(vol.mounts, destName)
+	}
+	return err
+}
+
 // CleanupUnused removes all directories from storage path that do not match our StorageID.
 func (r *FsRepo) CleanupUnused() {
 	files, err := afero.ReadDir(r.fs, r.options.BasePath)
@@ -332,6 +382,31 @@ func (r *FsRepo) CleanupUnused() {
 			panic(err)
 		}
 	}
+
+	r.cleanupMounts()
+}
+
+// Remove unused mounts.
+func (r *FsRepo) cleanupMounts() {
+	if f, err := r.fs.OpenFile("/proc/mounts", os.O_RDONLY, os.ModePerm); err != nil {
+		logrus.WithError(err).Warn("/proc/mounts missing, skipping mounts cleanup")
+	} else {
+		defer f.Close()
+
+		rd := bufio.NewReader(f)
+		for {
+			line, e := rd.ReadString('\n')
+			if e == io.EOF {
+				break
+			}
+			util.Must(e)
+
+			p := strings.SplitN(line, " ", 3)
+			if p[0] == squashfuseMount {
+				util.Must(r.umount(p[1]))
+			}
+		}
+	}
 }
 
 // Flush removes all volumes and permanent/cached resources.
@@ -344,7 +419,7 @@ func (r *FsRepo) Flush() {
 	for _, vol := range r.volumes {
 		r.deleteVolume(vol) // nolint - ignore error
 	}
-	r.volumes = make(map[string]Volume)
+	r.volumes = make(map[string]*Volume)
 	r.muVol.Unlock()
 
 	r.fileCache.Flush()
