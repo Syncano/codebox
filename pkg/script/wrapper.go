@@ -3,12 +3,10 @@ package script
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"io"
 	"time"
 
 	"github.com/Syncano/codebox/assets"
-	"github.com/Syncano/codebox/pkg/docker"
 )
 
 // RuntimeInfo describes a supported runtime.
@@ -20,7 +18,6 @@ type RuntimeInfo struct {
 	Image             string
 	User              string
 	DefaultEntryPoint string
-	Constraints       docker.Constraints
 }
 
 type contextFile struct {
@@ -39,14 +36,6 @@ type wrapperContext struct {
 	Meta       *json.RawMessage `json:"META"`
 }
 
-var defaultConstraints = docker.Constraints{
-	MemoryLimit:     256 * 1024 * 1024,
-	MemorySwapLimit: 0,
-	PidLimit:        32,
-	NofileUlimit:    1024,
-	StorageLimit:    "500M",
-}
-
 // SupportedRuntimes defines info and constraints of all runtimes.
 var SupportedRuntimes = map[string]*RuntimeInfo{
 	"nodejs_v6": {
@@ -54,14 +43,13 @@ var SupportedRuntimes = map[string]*RuntimeInfo{
 		AssetName: "wrappers/node.js",
 		Command: []string{
 			"node",
-			fmt.Sprintf("--max_old_space_size=%d", defaultConstraints.MemoryLimit/1024/1024),
+			"--max_old_space_size=256",
 			"/app/wrapper/node.js",
 		},
 		Environment:       []string{"NODE_PATH=/app/env/node_modules:/app/code"},
 		Image:             "node:6-stretch",
 		User:              "node",
 		DefaultEntryPoint: "main.js",
-		Constraints:       defaultConstraints,
 	},
 
 	"nodejs_v8": {
@@ -69,14 +57,13 @@ var SupportedRuntimes = map[string]*RuntimeInfo{
 		AssetName: "wrappers/node.js",
 		Command: []string{
 			"node",
-			fmt.Sprintf("--max_old_space_size=%d", defaultConstraints.MemoryLimit/1024/1024),
+			"--max_old_space_size=256",
 			"/app/wrapper/node.js",
 		},
 		Environment:       []string{"NODE_PATH=/app/env/node_modules:/app/code"},
 		Image:             "node:8-stretch",
 		User:              "node",
 		DefaultEntryPoint: "main.js",
-		Constraints:       defaultConstraints,
 	},
 }
 

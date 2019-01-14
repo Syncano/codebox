@@ -7,6 +7,7 @@ import (
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
+	containertypes "github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
@@ -15,17 +16,18 @@ import (
 // Manager provides methods to use docker more easily.
 //go:generate mockery -name Manager
 type Manager interface {
-	SetLimits(concurrency uint, nodeIOPS uint64)
 	Options() Options
+	Info() types.Info
 	DownloadImage(ctx context.Context, image string, check bool) error
 	PruneImages(ctx context.Context) (types.ImagesPruneReport, error)
 
 	ListContainersByLabel(ctx context.Context, label string) ([]types.Container, error)
-	CreateContainer(ctx context.Context, image, user string, cmd []string, env []string, labels map[string]string, constraints Constraints, binds []string) (string, error)
-	AttachContainer(ctx context.Context, containerID string) (types.HijackedResponse, error)
+	ContainerCreate(ctx context.Context, image, user string, cmd []string, env []string, labels map[string]string, constraints Constraints, binds []string) (string, error)
+	ContainerAttach(ctx context.Context, containerID string) (types.HijackedResponse, error)
 	ContainerErrorLog(ctx context.Context, containerID string) (io.ReadCloser, error)
-	StartContainer(ctx context.Context, containerID string) error
-	StopContainer(ctx context.Context, containerID string) error
+	ContainerStart(ctx context.Context, containerID string) error
+	ContainerStop(ctx context.Context, containerID string) error
+	ContainerUpdate(ctx context.Context, containerID string, constraints Constraints) error
 }
 
 // Assert that StdManager is compatible with our interface.
@@ -48,6 +50,7 @@ type Client interface {
 	ContainerList(ctx context.Context, options types.ContainerListOptions) ([]types.Container, error)
 	ContainerInspect(ctx context.Context, containerID string) (types.ContainerJSON, error)
 	ContainerLogs(ctx context.Context, container string, options types.ContainerLogsOptions) (io.ReadCloser, error)
+	ContainerUpdate(ctx context.Context, container string, updateConfig containertypes.UpdateConfig) (containertypes.ContainerUpdateOKBody, error)
 
 	ImagePull(ctx context.Context, ref string, options types.ImagePullOptions) (io.ReadCloser, error)
 	ImageInspectWithRaw(ctx context.Context, image string) (types.ImageInspect, []byte, error)

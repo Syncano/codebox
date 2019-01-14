@@ -97,13 +97,13 @@ func TestServerMethods(t *testing.T) {
 					scriptCli := new(scriptmocks.ScriptRunnerClient)
 					conn, _ := grpc.Dial("localhost", grpc.WithInsecure())
 					worker := Worker{
-						ID:         "id",
-						freeSlots:  1,
-						alive:      true,
-						repoCli:    repoCli,
-						scriptCli:  scriptCli,
-						containers: make(map[ScriptInfo]int),
-						conn:       conn,
+						ID:        "id",
+						mCPU:      1,
+						alive:     true,
+						repoCli:   repoCli,
+						scriptCli: scriptCli,
+						scripts:   make(map[ScriptInfo]int),
+						conn:      conn,
 					}
 					stdout := []byte("stdout")
 					s.workers.Set("id", &worker)
@@ -157,7 +157,6 @@ func TestServerMethods(t *testing.T) {
 
 								e := s.Run(stream)
 								So(e, ShouldEqual, err)
-								So(worker.FreeSlots(), ShouldEqual, 1)
 							})
 							Convey("given source that exists on worker", func() {
 								repoCli.On("Exists", mock.Anything, mock.Anything).Return(&repopb.ExistsResponse{Ok: true}, nil)
@@ -201,8 +200,8 @@ func TestServerMethods(t *testing.T) {
 										})
 										e := s.Run(stream)
 										So(e, ShouldBeNil)
-										So(worker.FreeSlots(), ShouldEqual, 0)
-										So(len(worker.containers), ShouldEqual, 1) // Cached was true.
+										So(worker.FreeCPU(), ShouldEqual, 0)
+										So(len(worker.scripts), ShouldEqual, 1) // Cached was true.
 									})
 								})
 							})
@@ -216,7 +215,6 @@ func TestServerMethods(t *testing.T) {
 									repoCli.On("Upload", mock.Anything).Return(nil, err)
 									e := s.Run(stream)
 									So(e, ShouldEqual, err)
-									So(worker.FreeSlots(), ShouldEqual, 1)
 								})
 								Convey("proceeds on successful upload source", func() {
 									uploadStream := new(repomocks.Repo_UploadClient)
@@ -236,8 +234,8 @@ func TestServerMethods(t *testing.T) {
 
 									e := s.Run(stream)
 									So(e, ShouldBeNil)
-									So(worker.FreeSlots(), ShouldEqual, 0)
-									So(len(worker.containers), ShouldEqual, 0) // Cached was false.
+									So(worker.FreeCPU(), ShouldEqual, 0)
+									So(len(worker.scripts), ShouldEqual, 0) // Cached was false.
 								})
 							})
 
@@ -279,7 +277,7 @@ func TestServerMethods(t *testing.T) {
 				s.workers.Set("id1", NewWorker("id1", net.TCPAddr{}, 2, 128))
 				s.workers.Set("id2", w2)
 
-				w2.AddContainer(ci, s.workerContainerCache)
+				w2.AddCache(ci, s.workerContainerCache)
 				w, fromCache := s.grabWorker(ci)
 				So(w.ID, ShouldEqual, "id2")
 				So(fromCache, ShouldBeTrue)
@@ -293,7 +291,7 @@ func TestServerMethods(t *testing.T) {
 				w2 := NewWorker("id2", net.TCPAddr{}, 1, 128)
 				s.workers.Set("id1", NewWorker("id1", net.TCPAddr{}, 2, 128))
 
-				w2.AddContainer(ci, s.workerContainerCache)
+				w2.AddCache(ci, s.workerContainerCache)
 				w, fromCache := s.grabWorker(ci)
 				So(w.ID, ShouldEqual, "id1")
 				So(fromCache, ShouldBeFalse)
@@ -304,29 +302,29 @@ func TestServerMethods(t *testing.T) {
 			})
 		})
 
-		Convey("findWorkerWithMaxFreeSlots returns nil if there are no workers", func() {
-			wi, _ := s.findWorkerWithMaxFreeSlots()
+		Convey("findWorkerWithMaxFreeCPU returns nil if there are no workers", func() {
+			wi, _ := s.findWorkerWithMaxFreeCPU()
 			So(wi, ShouldBeNil)
 		})
-		Convey("findWorkerWithMaxFreeSlots returns worker even if free slots is negative", func() {
+		Convey("findWorkerWithMaxFreeCPU returns worker even if free CPU is negative", func() {
 			wi := NewWorker("id1", net.TCPAddr{}, 1, 128)
-			wi.freeSlots = -10
+			wi.freeCPU = -10
 			s.workers.Set("id1", wi)
 
-			wi, _ = s.findWorkerWithMaxFreeSlots()
+			wi, _ = s.findWorkerWithMaxFreeCPU()
 			So(wi.ID, ShouldEqual, "id1")
 		})
-		Convey("findWorkerWithMaxFreeSlots finds a worker with highest free slots", func() {
+		Convey("findWorkerWithMaxFreeCPU finds a worker with highest free CPU", func() {
 			s.workers.Set("id1", NewWorker("id1", net.TCPAddr{}, 1, 128))
 			s.workers.Set("id2", NewWorker("id2", net.TCPAddr{}, 2, 128))
 			s.workers.Set("id3", NewWorker("id3", net.TCPAddr{}, 1, 128))
 
-			wi, _ := s.findWorkerWithMaxFreeSlots()
+			wi, _ := s.findWorkerWithMaxFreeCPU()
 			So(wi.ID, ShouldEqual, "id2")
 		})
 
-		Convey("SlotReady returns unregistered error on unknown id", func() {
-			_, e := s.SlotReady(context.Background(), &pb.SlotReadyRequest{Id: "id1"})
+		Convey("ResourceRelease returns unregistered error on unknown id", func() {
+			_, e := s.ResourceRelease(context.Background(), &pb.ResourceReleaseRequest{Id: "id1"})
 			So(e, ShouldEqual, ErrUnknownWorkerID)
 		})
 		Convey("ContainerRemoved returns unregistered error on unknown id", func() {
@@ -343,7 +341,7 @@ func TestServerMethods(t *testing.T) {
 		})
 
 		Convey("Register adds a new worker", func() {
-			_, e := s.Register(context.Background(), &pb.RegisterRequest{Id: "id1", Concurrency: 8, Port: 123})
+			_, e := s.Register(context.Background(), &pb.RegisterRequest{Id: "id1", Port: 123, MCPU: 2000, Memory: 1000})
 			So(e, ShouldBeNil)
 
 			wi := s.workers.Get("id1").(*Worker)
@@ -354,35 +352,35 @@ func TestServerMethods(t *testing.T) {
 				_, e := s.Heartbeat(context.Background(), &pb.HeartbeatRequest{Id: "id1"})
 				So(e, ShouldBeNil)
 			})
-			Convey("SlotReady increases free slots", func() {
-				freeSlots := wi.freeSlots
-				_, e := s.SlotReady(context.Background(), &pb.SlotReadyRequest{Id: "id1"})
+			Convey("ResourceRelease increases free cpu", func() {
+				freeCPU := wi.freeCPU
+				_, e := s.ResourceRelease(context.Background(), &pb.ResourceReleaseRequest{Id: "id1", MCPU: 150})
 				So(e, ShouldBeNil)
 
-				So(s.workers.Get("id1").(*Worker).freeSlots, ShouldEqual, freeSlots+1)
+				So(s.workers.Get("id1").(*Worker).freeCPU, ShouldEqual, freeCPU+150)
 			})
 			Convey("given container in cache", func() {
 				ci := ScriptInfo{SourceHash: "hash", UserID: "user"}
-				wi.AddContainer(ci, s.workerContainerCache)
-				So(wi.containers, ShouldNotBeEmpty)
+				wi.AddCache(ci, s.workerContainerCache)
+				So(wi.scripts, ShouldNotBeEmpty)
 				So(s.workerContainerCache, ShouldNotBeEmpty)
 
 				Convey("ContainerRemoved removes container from cache if refcount gets to 0", func() {
 					_, e := s.ContainerRemoved(context.Background(),
 						&pb.ContainerRemovedRequest{Id: "id1", SourceHash: ci.SourceHash, UserID: ci.UserID})
 					So(e, ShouldBeNil)
-					So(wi.containers, ShouldBeEmpty)
+					So(wi.scripts, ShouldBeEmpty)
 					So(s.workerContainerCache, ShouldBeEmpty)
 				})
 				Convey("ContainerRemoved keeps container in cache if refcount > 1", func() {
-					wi.AddContainer(ci, s.workerContainerCache)
-					So(len(wi.containers), ShouldEqual, 1)
+					wi.AddCache(ci, s.workerContainerCache)
+					So(len(wi.scripts), ShouldEqual, 1)
 
 					_, e := s.ContainerRemoved(context.Background(),
 						&pb.ContainerRemovedRequest{Id: "id1", SourceHash: ci.SourceHash, UserID: ci.UserID})
 					So(e, ShouldBeNil)
 
-					So(len(wi.containers), ShouldEqual, 1)
+					So(len(wi.scripts), ShouldEqual, 1)
 					So(s.workerContainerCache, ShouldNotBeEmpty)
 					So(s.workerContainerCache[ci].Contains(wi), ShouldBeTrue)
 				})

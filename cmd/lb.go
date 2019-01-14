@@ -90,13 +90,13 @@ As there is no authentication, always run it in a private network.`,
 			Name: "scaling-max", Usage: "maximum number of worker replicas",
 			EnvVar: "SCALING_MAX", Value: autoscaler.DefaultOptions.MaxScale, Destination: &autoscalerOptions.MaxScale,
 		},
-		cli.IntFlag{
-			Name: "scaling-freeslots-min", Usage: "minimum number of freeslots to maintain",
-			EnvVar: "SCALING_FREESLOTS_MIN", Value: autoscaler.DefaultOptions.MinFreeSlots, Destination: &autoscalerOptions.MinFreeSlots,
+		cli.UintFlag{
+			Name: "scaling-freecpu-min", Usage: "minimum number of freecpu to maintain",
+			EnvVar: "SCALING_FREECPU_MIN", Value: autoscaler.DefaultOptions.MinFreeCPU, Destination: &autoscalerOptions.MinFreeCPU,
 		},
-		cli.IntFlag{
-			Name: "scaling-freeslots-max", Usage: "maximum number of freeslots to maintain",
-			EnvVar: "SCALING_FREESLOTS_MAX", Value: autoscaler.DefaultOptions.MaxFreeSlots, Destination: &autoscalerOptions.MaxFreeSlots,
+		cli.UintFlag{
+			Name: "scaling-freecpu-max", Usage: "maximum number of freecpu to maintain",
+			EnvVar: "SCALING_FREECPU_MAX", Value: autoscaler.DefaultOptions.MaxFreeCPU, Destination: &autoscalerOptions.MaxFreeCPU,
 		},
 	},
 	Action: func(c *cli.Context) error {

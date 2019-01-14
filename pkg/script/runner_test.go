@@ -12,10 +12,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Syncano/codebox/pkg/docker"
+
 	"github.com/docker/docker/api/types"
 	"github.com/sirupsen/logrus"
 	. "github.com/smartystreets/goconvey/convey"
 	"github.com/stretchr/testify/mock"
+	"golang.org/x/sync/semaphore"
 
 	"github.com/Syncano/codebox/pkg/cache"
 	dockermock "github.com/Syncano/codebox/pkg/docker/mocks"
@@ -70,8 +73,7 @@ func TestNewRunner(t *testing.T) {
 		dockerMgr := new(dockermock.Manager)
 		checker := new(sysmock.SystemChecker)
 		repo := new(repomock.Repo)
-		opts := Options{Concurrency: 1, CreateRetrySleep: 1 * time.Millisecond}
-		dockerMgr.On("SetLimits", opts.Concurrency, DefaultOptions.NodeIOPS).Once()
+		opts := Options{Concurrency: 1, CreateRetrySleep: 1 * time.Millisecond, MCPU: 1000}
 
 		err := errors.New("some error")
 		defaultRuntime := "nodejs_v6"
@@ -95,6 +97,17 @@ func TestNewRunner(t *testing.T) {
 			conn:        mrwc,
 			Environment: envKey,
 		}
+		dockerMgr.On("Info").Return(types.Info{NCPU: 1})
+		dockerMgr.On("Options").Return(docker.Options{})
+
+		Convey("sets MCPU based on docker Info", func() {
+			checker.On("CheckFreeMemory", mock.Anything).Return(nil).Once()
+
+			opts.MCPU = 2000
+			r, e := NewRunner(opts, dockerMgr, checker, repo)
+			So(e, ShouldBeNil)
+			So(r.Options().MCPU, ShouldEqual, 1000)
+		})
 
 		Convey("sets up everything", func() {
 			checker.On("CheckFreeMemory", mock.Anything).Return(nil).Once()
@@ -105,17 +118,16 @@ func TestNewRunner(t *testing.T) {
 
 			Convey("Run runs script in container", func() {
 				Convey("fails when pool is not running", func() {
-					_, e := r.Run(logrus.StandardLogger(), defaultRuntime, "hash", "", "user", RunOptions{})
+					_, e := r.Run(context.Background(), logrus.StandardLogger(), defaultRuntime, "hash", "", "user", &RunOptions{})
 					So(e, ShouldEqual, ErrPoolNotRunning)
 				})
 				Convey("fails on unsupported runtime", func() {
-					_, e := r.Run(logrus.StandardLogger(), "runtime", "hash", "", "user", RunOptions{})
+					_, e := r.Run(context.Background(), logrus.StandardLogger(), "runtime", "hash", "", "user", &RunOptions{})
 					So(e, ShouldEqual, ErrUnsupportedRuntime)
 				})
 				Convey("given fake running pool", func() {
 					r.setRunning(true)
-					r.taskPool = make(chan bool, opts.Concurrency)
-					r.taskPool <- true
+					r.poolSemaphore = semaphore.NewWeighted(int64(opts.Concurrency + 1))
 					r.containerPool = make(map[string]chan *Container)
 					r.containerPool[defaultRuntime] = make(chan *Container, opts.Concurrency)
 					mc.On("Close").Return(nil)
@@ -136,19 +148,19 @@ func TestNewRunner(t *testing.T) {
 								cID2 := "cID2"
 								repo.On("CreateVolume").Return(volKey, volPath, nil).Once()
 								repo.On("RelativePath", volPath).Return(volRelPath, nil).Once()
-								dockerMgr.On("CreateContainer", mock.Anything, mock.Anything, mock.Anything, mock.Anything,
+								dockerMgr.On("ContainerCreate", mock.Anything, mock.Anything, mock.Anything, mock.Anything,
 									mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(cID2, nil).Once()
-								dockerMgr.On("StartContainer", mock.Anything, cID2).Return(nil).Once()
-								dockerMgr.On("AttachContainer", mock.Anything, cID2).Return(cont.resp, nil).Once()
+								dockerMgr.On("ContainerStart", mock.Anything, cID2).Return(nil).Once()
+								dockerMgr.On("ContainerAttach", mock.Anything, cID2).Return(cont.resp, nil).Once()
 
-								_, e := r.Run(logrus.StandardLogger(), defaultRuntime, "hash", envKey, "user", RunOptions{})
+								_, e := r.Run(context.Background(), logrus.StandardLogger(), defaultRuntime, "hash", envKey, "user", &RunOptions{})
 								So(e, ShouldBeNil)
 								cont2 := <-r.containerPool[defaultRuntime]
 								So(cont2.ID, ShouldEqual, cID2)
 							})
 							Convey("from cache", func() {
 								r.containerCache.Push(fmt.Sprintf("hash/user//%x", util.Hash("main.js")), cont)
-								_, e := r.Run(logrus.StandardLogger(), defaultRuntime, "hash", "", "user", RunOptions{})
+								_, e := r.Run(context.Background(), logrus.StandardLogger(), defaultRuntime, "hash", "", "user", &RunOptions{})
 								So(e, ShouldBeNil)
 							})
 						})
@@ -159,7 +171,7 @@ func TestNewRunner(t *testing.T) {
 							r.containerCache.Push(fmt.Sprintf("hash/user//%x", util.Hash("main.js")), cont)
 							// And then expect a file content.
 							mrwc.On("Write", files["file"].Data).Return(0, nil).Once()
-							_, e := r.Run(logrus.StandardLogger(), defaultRuntime, "hash", "", "user", RunOptions{Files: files})
+							_, e := r.Run(context.Background(), logrus.StandardLogger(), defaultRuntime, "hash", "", "user", &RunOptions{Files: files})
 							So(e, ShouldBeNil)
 						})
 
@@ -170,6 +182,12 @@ func TestNewRunner(t *testing.T) {
 						r.containerPool[defaultRuntime] <- cont
 						expectedErr := err
 						env := ""
+						opts := &RunOptions{Files: files}
+
+						Convey("ContainerUpdate error", func() {
+							opts.MCPU = 2000
+							dockerMgr.On("ContainerUpdate", mock.Anything, cID, mock.Anything).Return(err).Once()
+						})
 
 						Convey("Link source error", func() {
 							repo.On("Link", volKey, mock.Anything, mock.Anything).Return(err).Once()
@@ -210,7 +228,7 @@ func TestNewRunner(t *testing.T) {
 						})
 
 						// mocks for afterRun's cleanupContainer.
-						dockerMgr.On("StopContainer", mock.Anything, cID).Return(nil).Once()
+						dockerMgr.On("ContainerStop", mock.Anything, cID).Return(nil).Once()
 						repo.On("DeleteVolume", volKey).Return(nil).Once()
 
 						// mocks for afterRun's createFreshContainer.
@@ -219,21 +237,28 @@ func TestNewRunner(t *testing.T) {
 						repo.On("CreateVolume").Return(volKey, volPath, nil).Once()
 						repo.On("Link", volKey, mock.Anything, mock.Anything).Return(nil)
 						repo.On("RelativePath", volPath).Return(volRelPath, nil).Once()
-						dockerMgr.On("CreateContainer", mock.Anything, mock.Anything, mock.Anything, mock.Anything,
+						dockerMgr.On("ContainerCreate", mock.Anything, mock.Anything, mock.Anything, mock.Anything,
 							mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(cID2, nil).Once()
-						dockerMgr.On("StartContainer", mock.Anything, cID2).Return(nil).Once()
-						dockerMgr.On("AttachContainer", mock.Anything, cID2).Return(cont.resp, nil).Once()
+						dockerMgr.On("ContainerStart", mock.Anything, cID2).Return(nil).Once()
+						dockerMgr.On("ContainerAttach", mock.Anything, cID2).Return(cont.resp, nil).Once()
 
-						slotCh := make(chan bool)
-						r.OnSlotReady(func() {
-							slotCh <- true
+						doneCh := make(chan bool)
+						r.OnRunDone(func(*Container, *RunOptions) {
+							doneCh <- true
 						})
 
-						_, e := r.Run(logrus.StandardLogger(), defaultRuntime, "hash", env, "run", RunOptions{Files: files})
+						_, e := r.Run(context.Background(), logrus.StandardLogger(), defaultRuntime, "hash", env, "run", opts)
 						So(e, ShouldResemble, expectedErr)
 						cont2 := <-r.containerPool[defaultRuntime]
 						So(cont2.ID, ShouldEqual, cID2)
-						So(<-slotCh, ShouldBeTrue)
+						So(<-doneCh, ShouldBeTrue)
+					})
+
+					Convey("propagates semaphore Acquire error", func() {
+						ctx, cancel := context.WithCancel(context.Background())
+						cancel()
+						_, e := r.Run(ctx, logrus.StandardLogger(), defaultRuntime, "hash", "", "run", &RunOptions{MCPU: 10000})
+						So(e, ShouldEqual, context.Canceled)
 					})
 				})
 			})
@@ -251,34 +276,34 @@ func TestNewRunner(t *testing.T) {
 
 					Convey("propagates PermStore error", func() {
 						repo.On("PermStore", mock.Anything, mock.Anything, mock.Anything).Return("", err)
-						checker.On("ReserveMemory", r.options.MemoryLimit).Return(nil)
+						checker.On("ReserveMemory", uint64(r.options.Constraints.MemoryLimit)).Return(nil)
 						_, e := r.CreatePool()
 						So(e, ShouldEqual, err)
 					})
 					Convey("propagates ReserveMemory error", func() {
-						checker.On("ReserveMemory", r.options.MemoryLimit).Return(sys.ErrNotEnoughMemory{})
+						checker.On("ReserveMemory", uint64(r.options.Constraints.MemoryLimit)).Return(sys.ErrNotEnoughMemory{})
 						_, e := r.CreatePool()
 						_, ok := e.(sys.ErrNotEnoughMemory)
 						So(ok, ShouldBeTrue)
 					})
 					Convey("propagates createFreshContainer error", func() {
 						repo.On("PermStore", mock.Anything, mock.Anything, mock.Anything).Return("", nil)
-						checker.On("ReserveMemory", r.options.MemoryLimit).Return(nil)
+						checker.On("ReserveMemory", uint64(r.options.Constraints.MemoryLimit)).Return(nil)
 						repo.On("CreateVolume").Return(volKey, volPath, err)
 						_, e := r.CreatePool()
 						So(e, ShouldEqual, err)
 					})
 					Convey("proceeds with no error", func() {
 						repo.On("PermStore", mock.Anything, mock.Anything, mock.Anything).Return("", nil)
-						checker.On("ReserveMemory", r.options.MemoryLimit).Return(nil)
+						checker.On("ReserveMemory", uint64(r.options.Constraints.MemoryLimit)).Return(nil)
 						repo.On("CreateVolume").Return(volKey, volPath, nil)
 						repo.On("Link", volKey, mock.Anything, wrapperMount).Return(nil)
 						repo.On("RelativePath", volPath).Return(volRelPath, nil)
 
-						dockerMgr.On("CreateContainer", mock.Anything, mock.Anything, mock.Anything, mock.Anything,
+						dockerMgr.On("ContainerCreate", mock.Anything, mock.Anything, mock.Anything, mock.Anything,
 							mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(cID, nil)
-						dockerMgr.On("StartContainer", mock.Anything, cID).Return(nil)
-						dockerMgr.On("AttachContainer", mock.Anything, cID).Return(cont.resp, nil)
+						dockerMgr.On("ContainerStart", mock.Anything, cID).Return(nil)
+						dockerMgr.On("ContainerAttach", mock.Anything, cID).Return(cont.resp, nil)
 
 						id, e := r.CreatePool()
 						So(e, ShouldBeNil)
@@ -291,8 +316,8 @@ func TestNewRunner(t *testing.T) {
 						So(e, ShouldEqual, ErrPoolAlreadyCreated)
 
 						// StopPool stops everything.
-						expectedCount := len(r.containerPool)
-						dockerMgr.On("StopContainer", mock.Anything, cID).Return(nil).Times(expectedCount)
+						expectedCount := len(r.containerPool) * int(opts.Concurrency)
+						dockerMgr.On("ContainerStop", mock.Anything, cID).Return(nil).Times(expectedCount)
 						repo.On("DeleteVolume", volKey).Return(nil).Times(expectedCount)
 						r.StopPool()
 						So(r.IsRunning(), ShouldBeFalse)
@@ -303,7 +328,7 @@ func TestNewRunner(t *testing.T) {
 			Convey("onEvictedHandler gets called on container removal from cache", func() {
 				r.containerCache.Push("hash",
 					&Container{ID: "someId", volumeKey: "someKey", SourceHash: "sourceHash", UserID: "userID"})
-				dockerMgr.On("StopContainer", mock.Anything, "someId").Return(nil).Once()
+				dockerMgr.On("ContainerStop", mock.Anything, "someId").Return(nil).Once()
 				repo.On("DeleteVolume", "someKey").Return(nil).Once()
 
 				// Calls OnContainerRemoved handler.
@@ -339,31 +364,31 @@ func TestNewRunner(t *testing.T) {
 						repo.On("Link", volKey, mock.Anything, wrapperMount).Return(nil)
 						repo.On("RelativePath", volPath).Return(volRelPath, nil)
 
-						Convey("propagates CreateContainer error", func() {
-							dockerMgr.On("CreateContainer", mock.Anything, mock.Anything, mock.Anything, mock.Anything,
+						Convey("propagates ContainerCreate error", func() {
+							dockerMgr.On("ContainerCreate", mock.Anything, mock.Anything, mock.Anything, mock.Anything,
 								mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("", err)
 							_, e := r.createFreshContainer(context.Background(), defaultRuntime)
 							So(e, ShouldEqual, err)
 						})
-						Convey("proceeeds after CreateContainer", func() {
-							dockerMgr.On("CreateContainer", mock.Anything, mock.Anything, mock.Anything, mock.Anything,
+						Convey("proceeeds after ContainerCreate", func() {
+							dockerMgr.On("ContainerCreate", mock.Anything, mock.Anything, mock.Anything, mock.Anything,
 								mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(cID, nil)
 
-							Convey("propagates StartContainer error", func() {
-								dockerMgr.On("StartContainer", mock.Anything, cID).Return(err)
+							Convey("propagates ContainerStart error", func() {
+								dockerMgr.On("ContainerStart", mock.Anything, cID).Return(err)
 								_, e := r.createFreshContainer(context.Background(), defaultRuntime)
 								So(e, ShouldEqual, err)
 							})
-							Convey("proceeds after StartContainer", func() {
-								dockerMgr.On("StartContainer", mock.Anything, cID).Return(nil)
+							Convey("proceeds after ContainerStart", func() {
+								dockerMgr.On("ContainerStart", mock.Anything, cID).Return(nil)
 
-								Convey("propagates AttachContainer error", func() {
-									dockerMgr.On("AttachContainer", mock.Anything, cID).Return(types.HijackedResponse{}, err)
+								Convey("propagates ContainerAttach error", func() {
+									dockerMgr.On("ContainerAttach", mock.Anything, cID).Return(types.HijackedResponse{}, err)
 									_, e := r.createFreshContainer(context.Background(), defaultRuntime)
 									So(e, ShouldEqual, err)
 								})
 								Convey("propagates context deadline error", func() {
-									dockerMgr.On("AttachContainer", mock.Anything, cID).Return(types.HijackedResponse{
+									dockerMgr.On("ContainerAttach", mock.Anything, cID).Return(types.HijackedResponse{
 										Reader: bufio.NewReader(new(mockReader)),
 									}, nil)
 									ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
@@ -422,7 +447,7 @@ func TestRunnerMethods(t *testing.T) {
 					[]types.Container{{ID: "someid", Labels: map[string]string{containerLabel: "abc"}}}, nil)
 
 				// Proceeds on stop error.
-				dockerMgr.On("StopContainer", mock.Anything, "someid").Return(err).Once()
+				dockerMgr.On("ContainerStop", mock.Anything, "someid").Return(err).Once()
 				repo.On("CleanupUnused").Once()
 
 				Convey("respects prune config", func() {
@@ -463,7 +488,7 @@ func TestRunnerMethods(t *testing.T) {
 			t := time.Now()
 			repo.On("CreateVolume").Return("", "", err).Times(r.options.CreateRetryCount)
 
-			So(func() { r.afterRun("runtime", &Container{}, false, err) }, ShouldPanicWith, err)
+			So(func() { r.afterRun("runtime", &Container{}, &RunOptions{}, false, err) }, ShouldPanicWith, err)
 			So(time.Since(t), ShouldBeGreaterThan, time.Duration(r.options.CreateRetryCount-1)*r.options.CreateRetrySleep)
 		})
 		Convey("afterRun returns container to cache if resource was missing", func() {
@@ -471,10 +496,11 @@ func TestRunnerMethods(t *testing.T) {
 			repo.On("CleanupVolume", "volKey").Return(nil).Once()
 			checker.On("CheckFreeMemory", mock.Anything).Return(nil)
 			r.containerPool = make(map[string]chan *Container)
-			r.taskPool = make(chan bool, 1)
+			r.poolSemaphore = semaphore.NewWeighted(int64(opts.Concurrency))
+			r.poolSemaphore.Acquire(context.Background(), 1)
 			r.containerPool["runtime"] = make(chan *Container, 1)
 			r.taskWaitGroup.Add(1)
-			r.afterRun("runtime", cont, false, filerepo.ErrResourceNotFound)
+			r.afterRun("runtime", cont, &RunOptions{}, false, filerepo.ErrResourceNotFound)
 			So((<-r.containerPool["runtime"]).ID, ShouldEqual, cont.ID)
 		})
 		Convey("afterRun panics on full memory when delete lru fails", func() {
@@ -483,7 +509,7 @@ func TestRunnerMethods(t *testing.T) {
 			repo.On("CleanupVolume", "volKey").Return(nil).Once()
 			r.containerPool = make(map[string]chan *Container)
 			r.containerPool["runtime"] = make(chan *Container, 1)
-			So(func() { r.afterRun("runtime", cont, false, filerepo.ErrResourceNotFound) }, ShouldPanic)
+			So(func() { r.afterRun("runtime", cont, &RunOptions{}, false, filerepo.ErrResourceNotFound) }, ShouldPanic)
 		})
 		Convey("afterRun tries to delete containers on full memory", func() {
 			r.containerCache.Push("hash", &Container{ID: "otherid", volumeKey: "volKey"})
@@ -492,15 +518,16 @@ func TestRunnerMethods(t *testing.T) {
 			checker.On("CheckFreeMemory", mock.Anything).Return(sys.ErrNotEnoughMemory{}).Once()
 			checker.On("CheckFreeMemory", mock.Anything).Return(nil)
 			r.containerPool = make(map[string]chan *Container)
-			r.taskPool = make(chan bool, 1)
+			r.poolSemaphore = semaphore.NewWeighted(int64(opts.Concurrency))
+			r.poolSemaphore.Acquire(context.Background(), 1)
 			r.containerPool["runtime"] = make(chan *Container, 1)
 			r.taskWaitGroup.Add(1)
-			r.afterRun("runtime", cont, false, filerepo.ErrResourceNotFound)
+			r.afterRun("runtime", cont, &RunOptions{}, false, filerepo.ErrResourceNotFound)
 			So((<-r.containerPool["runtime"]).ID, ShouldEqual, cont.ID)
 		})
 
 		Convey("cleanupContainer silently proceeds on errors", func() {
-			dockerMgr.On("StopContainer", mock.Anything, "someId").Return(err).Once()
+			dockerMgr.On("ContainerStop", mock.Anything, "someId").Return(err).Once()
 			repo.On("DeleteVolume", "volKey").Return(err).Once()
 			r.cleanupContainer(&Container{ID: "someId", volumeKey: "volKey"})
 		})

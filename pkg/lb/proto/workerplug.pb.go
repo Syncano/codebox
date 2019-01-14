@@ -17,29 +17,47 @@ var _ = proto1.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
 
-type SlotReadyRequest struct {
-	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+type ResourceReleaseRequest struct {
+	Id     string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	MCPU   uint32 `protobuf:"varint,2,opt,name=mCPU,proto3" json:"mCPU,omitempty"`
+	Memory uint64 `protobuf:"varint,3,opt,name=memory,proto3" json:"memory,omitempty"`
 }
 
-func (m *SlotReadyRequest) Reset()                    { *m = SlotReadyRequest{} }
-func (m *SlotReadyRequest) String() string            { return proto1.CompactTextString(m) }
-func (*SlotReadyRequest) ProtoMessage()               {}
-func (*SlotReadyRequest) Descriptor() ([]byte, []int) { return fileDescriptorWorkerplug, []int{0} }
+func (m *ResourceReleaseRequest) Reset()                    { *m = ResourceReleaseRequest{} }
+func (m *ResourceReleaseRequest) String() string            { return proto1.CompactTextString(m) }
+func (*ResourceReleaseRequest) ProtoMessage()               {}
+func (*ResourceReleaseRequest) Descriptor() ([]byte, []int) { return fileDescriptorWorkerplug, []int{0} }
 
-func (m *SlotReadyRequest) GetId() string {
+func (m *ResourceReleaseRequest) GetId() string {
 	if m != nil {
 		return m.Id
 	}
 	return ""
 }
 
-type SlotReadyResponse struct {
+func (m *ResourceReleaseRequest) GetMCPU() uint32 {
+	if m != nil {
+		return m.MCPU
+	}
+	return 0
 }
 
-func (m *SlotReadyResponse) Reset()                    { *m = SlotReadyResponse{} }
-func (m *SlotReadyResponse) String() string            { return proto1.CompactTextString(m) }
-func (*SlotReadyResponse) ProtoMessage()               {}
-func (*SlotReadyResponse) Descriptor() ([]byte, []int) { return fileDescriptorWorkerplug, []int{1} }
+func (m *ResourceReleaseRequest) GetMemory() uint64 {
+	if m != nil {
+		return m.Memory
+	}
+	return 0
+}
+
+type ResourceReleaseResponse struct {
+}
+
+func (m *ResourceReleaseResponse) Reset()         { *m = ResourceReleaseResponse{} }
+func (m *ResourceReleaseResponse) String() string { return proto1.CompactTextString(m) }
+func (*ResourceReleaseResponse) ProtoMessage()    {}
+func (*ResourceReleaseResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptorWorkerplug, []int{1}
+}
 
 type ContainerRemovedRequest struct {
 	Id          string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -94,10 +112,10 @@ func (*ContainerRemovedResponse) Descriptor() ([]byte, []int) {
 }
 
 type RegisterRequest struct {
-	Id          string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Concurrency uint32 `protobuf:"varint,2,opt,name=concurrency,proto3" json:"concurrency,omitempty"`
-	Port        uint32 `protobuf:"varint,3,opt,name=port,proto3" json:"port,omitempty"`
-	Memory      uint64 `protobuf:"varint,4,opt,name=memory,proto3" json:"memory,omitempty"`
+	Id     string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Port   uint32 `protobuf:"varint,2,opt,name=port,proto3" json:"port,omitempty"`
+	MCPU   uint32 `protobuf:"varint,3,opt,name=mCPU,proto3" json:"mCPU,omitempty"`
+	Memory uint64 `protobuf:"varint,4,opt,name=memory,proto3" json:"memory,omitempty"`
 }
 
 func (m *RegisterRequest) Reset()                    { *m = RegisterRequest{} }
@@ -112,16 +130,16 @@ func (m *RegisterRequest) GetId() string {
 	return ""
 }
 
-func (m *RegisterRequest) GetConcurrency() uint32 {
+func (m *RegisterRequest) GetPort() uint32 {
 	if m != nil {
-		return m.Concurrency
+		return m.Port
 	}
 	return 0
 }
 
-func (m *RegisterRequest) GetPort() uint32 {
+func (m *RegisterRequest) GetMCPU() uint32 {
 	if m != nil {
-		return m.Port
+		return m.MCPU
 	}
 	return 0
 }
@@ -198,8 +216,8 @@ func (*DisconnectResponse) ProtoMessage()               {}
 func (*DisconnectResponse) Descriptor() ([]byte, []int) { return fileDescriptorWorkerplug, []int{9} }
 
 func init() {
-	proto1.RegisterType((*SlotReadyRequest)(nil), "lb.SlotReadyRequest")
-	proto1.RegisterType((*SlotReadyResponse)(nil), "lb.SlotReadyResponse")
+	proto1.RegisterType((*ResourceReleaseRequest)(nil), "lb.ResourceReleaseRequest")
+	proto1.RegisterType((*ResourceReleaseResponse)(nil), "lb.ResourceReleaseResponse")
 	proto1.RegisterType((*ContainerRemovedRequest)(nil), "lb.ContainerRemovedRequest")
 	proto1.RegisterType((*ContainerRemovedResponse)(nil), "lb.ContainerRemovedResponse")
 	proto1.RegisterType((*RegisterRequest)(nil), "lb.RegisterRequest")
@@ -221,8 +239,8 @@ const _ = grpc.SupportPackageIsVersion4
 // Client API for WorkerPlug service
 
 type WorkerPlugClient interface {
-	// SlotReady handles notifications sent by client whenever a slot is ready to accept connections.
-	SlotReady(ctx context.Context, in *SlotReadyRequest, opts ...grpc.CallOption) (*SlotReadyResponse, error)
+	// ResourceRelease handles notifications sent by client whenever a run has finished.
+	ResourceRelease(ctx context.Context, in *ResourceReleaseRequest, opts ...grpc.CallOption) (*ResourceReleaseResponse, error)
 	// ContainerRemoved handles notifications sent by client whenever a container gets removed from cache.
 	ContainerRemoved(ctx context.Context, in *ContainerRemovedRequest, opts ...grpc.CallOption) (*ContainerRemovedResponse, error)
 	// Register is sent at the beginning by the worker.
@@ -241,9 +259,9 @@ func NewWorkerPlugClient(cc *grpc.ClientConn) WorkerPlugClient {
 	return &workerPlugClient{cc}
 }
 
-func (c *workerPlugClient) SlotReady(ctx context.Context, in *SlotReadyRequest, opts ...grpc.CallOption) (*SlotReadyResponse, error) {
-	out := new(SlotReadyResponse)
-	err := grpc.Invoke(ctx, "/lb.WorkerPlug/SlotReady", in, out, c.cc, opts...)
+func (c *workerPlugClient) ResourceRelease(ctx context.Context, in *ResourceReleaseRequest, opts ...grpc.CallOption) (*ResourceReleaseResponse, error) {
+	out := new(ResourceReleaseResponse)
+	err := grpc.Invoke(ctx, "/lb.WorkerPlug/ResourceRelease", in, out, c.cc, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -289,8 +307,8 @@ func (c *workerPlugClient) Disconnect(ctx context.Context, in *DisconnectRequest
 // Server API for WorkerPlug service
 
 type WorkerPlugServer interface {
-	// SlotReady handles notifications sent by client whenever a slot is ready to accept connections.
-	SlotReady(context.Context, *SlotReadyRequest) (*SlotReadyResponse, error)
+	// ResourceRelease handles notifications sent by client whenever a run has finished.
+	ResourceRelease(context.Context, *ResourceReleaseRequest) (*ResourceReleaseResponse, error)
 	// ContainerRemoved handles notifications sent by client whenever a container gets removed from cache.
 	ContainerRemoved(context.Context, *ContainerRemovedRequest) (*ContainerRemovedResponse, error)
 	// Register is sent at the beginning by the worker.
@@ -305,20 +323,20 @@ func RegisterWorkerPlugServer(s *grpc.Server, srv WorkerPlugServer) {
 	s.RegisterService(&_WorkerPlug_serviceDesc, srv)
 }
 
-func _WorkerPlug_SlotReady_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(SlotReadyRequest)
+func _WorkerPlug_ResourceRelease_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ResourceReleaseRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(WorkerPlugServer).SlotReady(ctx, in)
+		return srv.(WorkerPlugServer).ResourceRelease(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/lb.WorkerPlug/SlotReady",
+		FullMethod: "/lb.WorkerPlug/ResourceRelease",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(WorkerPlugServer).SlotReady(ctx, req.(*SlotReadyRequest))
+		return srv.(WorkerPlugServer).ResourceRelease(ctx, req.(*ResourceReleaseRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -400,8 +418,8 @@ var _WorkerPlug_serviceDesc = grpc.ServiceDesc{
 	HandlerType: (*WorkerPlugServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
-			MethodName: "SlotReady",
-			Handler:    _WorkerPlug_SlotReady_Handler,
+			MethodName: "ResourceRelease",
+			Handler:    _WorkerPlug_ResourceRelease_Handler,
 		},
 		{
 			MethodName: "ContainerRemoved",
@@ -424,7 +442,7 @@ var _WorkerPlug_serviceDesc = grpc.ServiceDesc{
 	Metadata: "pkg/lb/proto/workerplug.proto",
 }
 
-func (m *SlotReadyRequest) Marshal() (dAtA []byte, err error) {
+func (m *ResourceReleaseRequest) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalTo(dAtA)
@@ -434,7 +452,7 @@ func (m *SlotReadyRequest) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *SlotReadyRequest) MarshalTo(dAtA []byte) (int, error) {
+func (m *ResourceReleaseRequest) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -445,10 +463,20 @@ func (m *SlotReadyRequest) MarshalTo(dAtA []byte) (int, error) {
 		i = encodeVarintWorkerplug(dAtA, i, uint64(len(m.Id)))
 		i += copy(dAtA[i:], m.Id)
 	}
+	if m.MCPU != 0 {
+		dAtA[i] = 0x10
+		i++
+		i = encodeVarintWorkerplug(dAtA, i, uint64(m.MCPU))
+	}
+	if m.Memory != 0 {
+		dAtA[i] = 0x18
+		i++
+		i = encodeVarintWorkerplug(dAtA, i, uint64(m.Memory))
+	}
 	return i, nil
 }
 
-func (m *SlotReadyResponse) Marshal() (dAtA []byte, err error) {
+func (m *ResourceReleaseResponse) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalTo(dAtA)
@@ -458,7 +486,7 @@ func (m *SlotReadyResponse) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *SlotReadyResponse) MarshalTo(dAtA []byte) (int, error) {
+func (m *ResourceReleaseResponse) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -547,15 +575,15 @@ func (m *RegisterRequest) MarshalTo(dAtA []byte) (int, error) {
 		i = encodeVarintWorkerplug(dAtA, i, uint64(len(m.Id)))
 		i += copy(dAtA[i:], m.Id)
 	}
-	if m.Concurrency != 0 {
+	if m.Port != 0 {
 		dAtA[i] = 0x10
 		i++
-		i = encodeVarintWorkerplug(dAtA, i, uint64(m.Concurrency))
+		i = encodeVarintWorkerplug(dAtA, i, uint64(m.Port))
 	}
-	if m.Port != 0 {
+	if m.MCPU != 0 {
 		dAtA[i] = 0x18
 		i++
-		i = encodeVarintWorkerplug(dAtA, i, uint64(m.Port))
+		i = encodeVarintWorkerplug(dAtA, i, uint64(m.MCPU))
 	}
 	if m.Memory != 0 {
 		dAtA[i] = 0x20
@@ -681,17 +709,23 @@ func encodeVarintWorkerplug(dAtA []byte, offset int, v uint64) int {
 	dAtA[offset] = uint8(v)
 	return offset + 1
 }
-func (m *SlotReadyRequest) Size() (n int) {
+func (m *ResourceReleaseRequest) Size() (n int) {
 	var l int
 	_ = l
 	l = len(m.Id)
 	if l > 0 {
 		n += 1 + l + sovWorkerplug(uint64(l))
 	}
+	if m.MCPU != 0 {
+		n += 1 + sovWorkerplug(uint64(m.MCPU))
+	}
+	if m.Memory != 0 {
+		n += 1 + sovWorkerplug(uint64(m.Memory))
+	}
 	return n
 }
 
-func (m *SlotReadyResponse) Size() (n int) {
+func (m *ResourceReleaseResponse) Size() (n int) {
 	var l int
 	_ = l
 	return n
@@ -732,11 +766,11 @@ func (m *RegisterRequest) Size() (n int) {
 	if l > 0 {
 		n += 1 + l + sovWorkerplug(uint64(l))
 	}
-	if m.Concurrency != 0 {
-		n += 1 + sovWorkerplug(uint64(m.Concurrency))
-	}
 	if m.Port != 0 {
 		n += 1 + sovWorkerplug(uint64(m.Port))
+	}
+	if m.MCPU != 0 {
+		n += 1 + sovWorkerplug(uint64(m.MCPU))
 	}
 	if m.Memory != 0 {
 		n += 1 + sovWorkerplug(uint64(m.Memory))
@@ -798,7 +832,7 @@ func sovWorkerplug(x uint64) (n int) {
 func sozWorkerplug(x uint64) (n int) {
 	return sovWorkerplug(uint64((x << 1) ^ uint64((int64(x) >> 63))))
 }
-func (m *SlotReadyRequest) Unmarshal(dAtA []byte) error {
+func (m *ResourceReleaseRequest) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -821,10 +855,10 @@ func (m *SlotReadyRequest) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: SlotReadyRequest: wiretype end group for non-group")
+			return fmt.Errorf("proto: ResourceReleaseRequest: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: SlotReadyRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: ResourceReleaseRequest: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
@@ -856,6 +890,44 @@ func (m *SlotReadyRequest) Unmarshal(dAtA []byte) error {
 			}
 			m.Id = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field MCPU", wireType)
+			}
+			m.MCPU = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowWorkerplug
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.MCPU |= (uint32(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Memory", wireType)
+			}
+			m.Memory = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowWorkerplug
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Memory |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
 		default:
 			iNdEx = preIndex
 			skippy, err := skipWorkerplug(dAtA[iNdEx:])
@@ -877,7 +949,7 @@ func (m *SlotReadyRequest) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *SlotReadyResponse) Unmarshal(dAtA []byte) error {
+func (m *ResourceReleaseResponse) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -900,10 +972,10 @@ func (m *SlotReadyResponse) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: SlotReadyResponse: wiretype end group for non-group")
+			return fmt.Errorf("proto: ResourceReleaseResponse: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: SlotReadyResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: ResourceReleaseResponse: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		default:
@@ -1203,25 +1275,6 @@ func (m *RegisterRequest) Unmarshal(dAtA []byte) error {
 			iNdEx = postIndex
 		case 2:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Concurrency", wireType)
-			}
-			m.Concurrency = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowWorkerplug
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.Concurrency |= (uint32(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 3:
-			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Port", wireType)
 			}
 			m.Port = 0
@@ -1235,6 +1288,25 @@ func (m *RegisterRequest) Unmarshal(dAtA []byte) error {
 				b := dAtA[iNdEx]
 				iNdEx++
 				m.Port |= (uint32(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field MCPU", wireType)
+			}
+			m.MCPU = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowWorkerplug
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.MCPU |= (uint32(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1714,33 +1786,34 @@ var (
 func init() { proto1.RegisterFile("pkg/lb/proto/workerplug.proto", fileDescriptorWorkerplug) }
 
 var fileDescriptorWorkerplug = []byte{
-	// 443 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x74, 0x93, 0x41, 0x8f, 0x93, 0x40,
-	0x14, 0xc7, 0x05, 0x9b, 0x8d, 0x7d, 0x9b, 0xd5, 0xf6, 0xb5, 0xae, 0x04, 0x95, 0x34, 0x78, 0xd0,
-	0x53, 0x49, 0x34, 0x26, 0xab, 0xde, 0x74, 0x0f, 0xeb, 0xc1, 0xc4, 0xb0, 0x07, 0x13, 0x6f, 0x30,
-	0xbc, 0xb0, 0x64, 0x61, 0x1e, 0x0e, 0xc3, 0x6a, 0xcf, 0x7e, 0x09, 0xbf, 0x8f, 0x17, 0x8f, 0x7e,
-	0x04, 0x53, 0xbf, 0x88, 0xe9, 0x80, 0x5b, 0x96, 0x96, 0x13, 0xcc, 0x7f, 0xfe, 0xef, 0xcf, 0x2f,
-	0xff, 0x19, 0xe0, 0x71, 0x79, 0x99, 0x06, 0x79, 0x1c, 0x94, 0x8a, 0x35, 0x07, 0x5f, 0x59, 0x5d,
-	0x92, 0x2a, 0xf3, 0x3a, 0x5d, 0x1a, 0x01, 0xed, 0x3c, 0xf6, 0x7d, 0x98, 0x9c, 0xe7, 0xac, 0x43,
-	0x8a, 0x92, 0x55, 0x48, 0x5f, 0x6a, 0xaa, 0x34, 0xde, 0x05, 0x3b, 0x4b, 0x1c, 0x6b, 0x61, 0x3d,
-	0x1b, 0x87, 0x76, 0x96, 0xf8, 0x33, 0x98, 0x76, 0x3c, 0x55, 0xc9, 0xb2, 0x22, 0xff, 0xbb, 0x05,
-	0x0f, 0xde, 0xb1, 0xd4, 0x51, 0x26, 0x49, 0x85, 0x54, 0xf0, 0x15, 0x25, 0x03, 0x01, 0xe8, 0x01,
-	0x54, 0x5c, 0x2b, 0x41, 0x67, 0x51, 0x75, 0xe1, 0xd8, 0x46, 0xef, 0x28, 0xb8, 0x80, 0x43, 0x92,
-	0x57, 0x99, 0x62, 0x59, 0x90, 0xd4, 0xce, 0x6d, 0x63, 0xe8, 0x4a, 0x78, 0x0c, 0x07, 0x75, 0x45,
-	0xea, 0xfd, 0xa9, 0x33, 0x32, 0x9b, 0xed, 0xca, 0x77, 0xc1, 0xd9, 0x85, 0x68, 0x09, 0x19, 0xee,
-	0x85, 0x94, 0x66, 0x95, 0xde, 0x6c, 0xed, 0x07, 0x5b, 0xc0, 0xa1, 0x60, 0x29, 0x6a, 0xa5, 0x48,
-	0x8a, 0x95, 0x21, 0x3b, 0x0a, 0xbb, 0x12, 0x22, 0x8c, 0x4a, 0x56, 0x0d, 0xd3, 0x51, 0x68, 0xde,
-	0x37, 0x30, 0x05, 0x15, 0xac, 0x56, 0x06, 0x66, 0x14, 0xb6, 0x2b, 0x1f, 0x61, 0xb2, 0xfd, 0x60,
-	0x0b, 0xf1, 0x1a, 0x26, 0x67, 0x14, 0x29, 0x1d, 0x53, 0xa4, 0x87, 0x28, 0xb6, 0x79, 0xf6, 0x8d,
-	0xbc, 0x19, 0x4c, 0x3b, 0xb3, 0x6d, 0xe0, 0x13, 0x98, 0x9e, 0x66, 0x95, 0x60, 0x29, 0x49, 0x0c,
-	0x25, 0xfa, 0x73, 0xc0, 0xae, 0xa9, 0x19, 0x7d, 0xfe, 0xd3, 0x06, 0xf8, 0x64, 0x2e, 0xc1, 0xc7,
-	0xbc, 0x4e, 0xf1, 0x04, 0xc6, 0xd7, 0xc7, 0x8a, 0xf3, 0x65, 0x1e, 0x2f, 0xfb, 0x37, 0xc1, 0xbd,
-	0xdf, 0x53, 0x9b, 0x20, 0xfc, 0x00, 0x93, 0x7e, 0xeb, 0xf8, 0x70, 0x63, 0x1d, 0xb8, 0x10, 0xee,
-	0xa3, 0xfd, 0x9b, 0x6d, 0xdc, 0x4b, 0xb8, 0xf3, 0xbf, 0x37, 0x9c, 0x6d, 0x9c, 0xbd, 0x63, 0x73,
-	0xe7, 0x37, 0xc5, 0x76, 0xec, 0x04, 0xc6, 0xd7, 0xf5, 0x34, 0xfc, 0xfd, 0xa6, 0x1b, 0xfe, 0x9d,
-	0x0e, 0xf1, 0x0d, 0xc0, 0xb6, 0x1e, 0x34, 0xa6, 0x9d, 0x4e, 0xdd, 0xe3, 0xbe, 0xdc, 0x0c, 0xbf,
-	0x7d, 0xf5, 0x6b, 0xed, 0x59, 0xbf, 0xd7, 0x9e, 0xf5, 0x67, 0xed, 0x59, 0x3f, 0xfe, 0x7a, 0xb7,
-	0x3e, 0x3f, 0x4d, 0x33, 0x7d, 0x51, 0xc7, 0x4b, 0xc1, 0x45, 0x70, 0xbe, 0x92, 0x22, 0x92, 0x1c,
-	0x08, 0x4e, 0x28, 0xe6, 0x6f, 0x41, 0xf7, 0x0f, 0x8c, 0x0f, 0xcc, 0xe3, 0xc5, 0xbf, 0x00, 0x00,
-	0x00, 0xff, 0xff, 0x78, 0x30, 0xdb, 0xd4, 0x98, 0x03, 0x00, 0x00,
+	// 452 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x74, 0x93, 0xcf, 0x6e, 0xd4, 0x30,
+	0x10, 0xc6, 0x71, 0xba, 0xaa, 0xd8, 0x41, 0xc0, 0xd6, 0x2d, 0xdb, 0x10, 0x20, 0x5a, 0x85, 0x03,
+	0x7b, 0xda, 0x48, 0x20, 0x24, 0xfe, 0xdc, 0x68, 0x0f, 0x05, 0x09, 0xa9, 0x32, 0x20, 0x24, 0x6e,
+	0x49, 0x76, 0x94, 0x46, 0x4d, 0xec, 0x60, 0x3b, 0x85, 0x9e, 0x79, 0x09, 0x1e, 0x89, 0x23, 0x17,
+	0xee, 0x68, 0x79, 0x11, 0xb4, 0x8e, 0xdb, 0x4d, 0xb2, 0xc9, 0x29, 0xf6, 0x8c, 0xbf, 0xef, 0x1b,
+	0xfd, 0xec, 0xc0, 0xa3, 0xf2, 0x3c, 0x0d, 0xf3, 0x38, 0x2c, 0xa5, 0xd0, 0x22, 0xfc, 0x26, 0xe4,
+	0x39, 0xca, 0x32, 0xaf, 0xd2, 0x85, 0x29, 0x50, 0x27, 0x8f, 0x83, 0x8f, 0x30, 0x65, 0xa8, 0x44,
+	0x25, 0x13, 0x64, 0x98, 0x63, 0xa4, 0x90, 0xe1, 0xd7, 0x0a, 0x95, 0xa6, 0x77, 0xc0, 0xc9, 0x96,
+	0x2e, 0x99, 0x91, 0xf9, 0x98, 0x39, 0xd9, 0x92, 0x52, 0x18, 0x15, 0x47, 0xa7, 0x9f, 0x5c, 0x67,
+	0x46, 0xe6, 0xb7, 0x99, 0x59, 0xd3, 0x29, 0xec, 0x16, 0x58, 0x08, 0x79, 0xe9, 0xee, 0xcc, 0xc8,
+	0x7c, 0xc4, 0xec, 0x2e, 0xb8, 0x0f, 0x87, 0x5b, 0xae, 0xaa, 0x14, 0x5c, 0x61, 0xf0, 0x83, 0xc0,
+	0xe1, 0x91, 0xe0, 0x3a, 0xca, 0x38, 0x4a, 0x86, 0x85, 0xb8, 0xc0, 0xe5, 0x50, 0xa4, 0x0f, 0x50,
+	0x9b, 0x9c, 0x44, 0xea, 0xcc, 0x04, 0x8f, 0x59, 0xa3, 0x42, 0x67, 0x70, 0x0b, 0xf9, 0x45, 0x26,
+	0x05, 0x2f, 0x90, 0x6b, 0x33, 0xc3, 0x98, 0x35, 0x4b, 0xeb, 0x01, 0x2b, 0x85, 0xf2, 0xed, 0xb1,
+	0x3b, 0x32, 0x4d, 0xbb, 0x0b, 0x3c, 0x70, 0xb7, 0x87, 0xb0, 0x13, 0x46, 0x70, 0x97, 0x61, 0x9a,
+	0x29, 0xbd, 0x6e, 0x0d, 0xb2, 0x28, 0x85, 0xd4, 0x57, 0x2c, 0xd6, 0xeb, 0x6b, 0x3e, 0x3b, 0xbd,
+	0x7c, 0x46, 0x2d, 0x3e, 0x14, 0x26, 0x9b, 0x08, 0x1b, 0xfb, 0x0a, 0x26, 0x27, 0x18, 0x49, 0x1d,
+	0x63, 0xa4, 0x87, 0x72, 0x37, 0x7e, 0x4e, 0xcb, 0x6f, 0x1f, 0xf6, 0x1a, 0x5a, 0x6b, 0xf8, 0x18,
+	0xf6, 0x8e, 0x33, 0x95, 0x08, 0xce, 0x31, 0x19, 0x72, 0x0c, 0x0e, 0x80, 0x36, 0x0f, 0xd5, 0xd2,
+	0xa7, 0x7f, 0x1c, 0x80, 0xcf, 0xe6, 0xb9, 0x9c, 0xe6, 0x55, 0x4a, 0xdf, 0xad, 0x89, 0xb4, 0xae,
+	0x93, 0x7a, 0x8b, 0x3c, 0x5e, 0xf4, 0xbf, 0x1c, 0xef, 0x41, 0x6f, 0xaf, 0xb6, 0xa6, 0xef, 0x61,
+	0xd2, 0x25, 0x4f, 0x8d, 0x60, 0xe0, 0x51, 0x78, 0x0f, 0xfb, 0x9b, 0xd6, 0xee, 0x39, 0xdc, 0xbc,
+	0x22, 0x49, 0xf7, 0xeb, 0xdc, 0xd6, 0xd5, 0x79, 0x07, 0xed, 0xa2, 0x95, 0xbd, 0x80, 0xf1, 0x35,
+	0x30, 0x6a, 0x8e, 0x74, 0xd9, 0x7b, 0xf7, 0x3a, 0x55, 0xab, 0x7c, 0x0d, 0xb0, 0x01, 0x46, 0xcd,
+	0xa1, 0x2d, 0xca, 0xde, 0xb4, 0x5b, 0xae, 0xc5, 0x6f, 0x5e, 0xfe, 0x5a, 0xf9, 0xe4, 0xf7, 0xca,
+	0x27, 0x7f, 0x57, 0x3e, 0xf9, 0xf9, 0xcf, 0xbf, 0xf1, 0xe5, 0x49, 0x9a, 0xe9, 0xb3, 0x2a, 0x5e,
+	0x24, 0xa2, 0x08, 0x3f, 0x5c, 0xf2, 0x24, 0xe2, 0x22, 0x4c, 0xc4, 0x12, 0x63, 0xf1, 0x3d, 0x6c,
+	0xfe, 0xbd, 0xf1, 0xae, 0xf9, 0x3c, 0xfb, 0x1f, 0x00, 0x00, 0xff, 0xff, 0xa1, 0x76, 0x59, 0xb0,
+	0xd4, 0x03, 0x00, 0x00,
 }

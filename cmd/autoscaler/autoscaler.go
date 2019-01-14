@@ -26,8 +26,8 @@ type Options struct {
 	Deployment           string
 	MinScale             int
 	MaxScale             int
-	MinFreeSlots         int
-	MaxFreeSlots         int
+	MinFreeCPU           uint
+	MaxFreeCPU           uint
 	Cooldown             time.Duration
 }
 
@@ -37,8 +37,8 @@ var DefaultOptions = Options{
 	DownscaleConsecutive: 5,
 	MinScale:             1,
 	MaxScale:             8,
-	MinFreeSlots:         6,
-	MaxFreeSlots:         16,
+	MinFreeCPU:           6,
+	MaxFreeCPU:           16,
 	Cooldown:             10 * time.Minute,
 }
 
@@ -164,8 +164,8 @@ func (a *Autoscaler) updateReplicas(updated int) error {
 func (a *Autoscaler) Start() chan struct{} { // nolint: gocyclo
 	stop := make(chan struct{})
 	ticker := time.NewTicker(checkPeriod)
-	freeSlotsCounter := expvar.Get("slots").(*expvar.Int)
-	workersCounter := expvar.Get("workers").(*expvar.Int)
+	freeCPUCounter := expvar.Get("cpu").(*expvar.Int)
+	workerCounter := expvar.Get("workers").(*expvar.Int)
 	upscaleConsecutive := 0
 	downscaleConsecutive := 0
 
@@ -175,13 +175,13 @@ func (a *Autoscaler) Start() chan struct{} { // nolint: gocyclo
 		for {
 			select {
 			case <-ticker.C:
-				workerCount := int(workersCounter.Value())
+				workerCount := int(workerCounter.Value())
 				// Do not scale if no workers are connected.
 				if workerCount <= 0 {
 					continue
 				}
 
-				freeSlots := int(freeSlotsCounter.Value())
+				freeCPU := uint(freeCPUCounter.Value())
 				replicaSpec, err := a.getReplicas()
 				if err != nil {
 					logrus.WithField("options", a.options).WithError(err).Warn("Autoscaling.GetScale failed")
@@ -190,7 +190,7 @@ func (a *Autoscaler) Start() chan struct{} { // nolint: gocyclo
 				changed := false
 				desiredReplicas, curReplicas := replicaSpec.Spec.Replicas, replicaSpec.Status.Replicas
 				switch {
-				case workerCount == curReplicas && freeSlots < a.options.MinFreeSlots && curReplicas == desiredReplicas:
+				case workerCount == curReplicas && freeCPU < a.options.MinFreeCPU && curReplicas == desiredReplicas:
 					if desiredReplicas < a.options.MaxScale {
 						if upscaleConsecutive+1 > a.options.UpscaleConsecutive {
 							desiredReplicas++
@@ -200,8 +200,7 @@ func (a *Autoscaler) Start() chan struct{} { // nolint: gocyclo
 						}
 					}
 
-				case freeSlots > a.options.MaxFreeSlots && time.Since(lastUpdate) > a.options.Cooldown:
-
+				case freeCPU > a.options.MaxFreeCPU && time.Since(lastUpdate) > a.options.Cooldown:
 					if desiredReplicas > a.options.MinScale {
 						if downscaleConsecutive+1 > a.options.DownscaleConsecutive {
 							desiredReplicas--

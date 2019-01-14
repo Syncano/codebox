@@ -3,8 +3,8 @@ package lb;
 option go_package = "github.com/Syncano/codebox/pkg/lb/proto";
 
 service WorkerPlug {
-  // SlotReady handles notifications sent by client whenever a slot is ready to accept connections.
-  rpc SlotReady (SlotReadyRequest) returns (SlotReadyResponse);
+  // ResourceRelease handles notifications sent by client whenever a run has finished.
+  rpc ResourceRelease (ResourceReleaseRequest) returns (ResourceReleaseResponse);
 
   // ContainerRemoved handles notifications sent by client whenever a container gets removed from cache.
   rpc ContainerRemoved (ContainerRemovedRequest) returns (ContainerRemovedResponse);
@@ -19,10 +19,12 @@ service WorkerPlug {
   rpc Disconnect (DisconnectRequest) returns (DisconnectResponse);
 }
 
-message SlotReadyRequest {
+message ResourceReleaseRequest {
   string id = 1;
+  uint32 mCPU = 2;
+  uint64 memory = 3;
 }
-message SlotReadyResponse {}
+message ResourceReleaseResponse {}
 
 message ContainerRemovedRequest {
   string id = 1;
@@ -34,8 +36,8 @@ message ContainerRemovedResponse {}
 
 message RegisterRequest {
   string id = 1;
-  uint32 concurrency = 2;
-  uint32 port = 3;
+  uint32 port = 2;
+  uint32 mCPU = 3;
   uint64 memory = 4;
 }
 message RegisterResponse {}

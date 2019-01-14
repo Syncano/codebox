@@ -20,11 +20,12 @@ message RunRequest {
       string entryPoint = 1; // If empty, uses default entrypoint for specified runtime.
       uint32 outputLimit = 2; // If 0, will not hijack any output.
       int64 timeout = 3; // Timeout is meant to be in milliseconds. If 0 takes a default 30s value.
+      uint32 mCPU = 4; // MCPU is CPU constaints in milliseconds. If 0 takes a default 250 value.
 
       // Empty args, config, meta are acceptable.
-      bytes args = 4;
-      bytes config = 5;
-      bytes meta = 6;
+      bytes args = 5;
+      bytes config = 6;
+      bytes meta = 7;
     }
     OptionsMessage options = 5;
     string environment = 6; // Optional unique string describing script environment file.
@@ -58,4 +59,5 @@ message RunResponse {
   int64 took = 5;
   bool cached = 6;
   int64 time = 7;
+  uint32 weight = 8;
 }

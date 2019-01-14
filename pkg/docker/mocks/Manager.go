@@ -13,8 +13,8 @@ type Manager struct {
 	mock.Mock
 }
 
-// AttachContainer provides a mock function with given fields: ctx, containerID
-func (_m *Manager) AttachContainer(ctx context.Context, containerID string) (types.HijackedResponse, error) {
+// ContainerAttach provides a mock function with given fields: ctx, containerID
+func (_m *Manager) ContainerAttach(ctx context.Context, containerID string) (types.HijackedResponse, error) {
 	ret := _m.Called(ctx, containerID)
 
 	var r0 types.HijackedResponse
@@ -27,6 +27,27 @@ func (_m *Manager) AttachContainer(ctx context.Context, containerID string) (typ
 	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context, string) error); ok {
 		r1 = rf(ctx, containerID)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// ContainerCreate provides a mock function with given fields: ctx, image, user, cmd, env, labels, constraints, binds
+func (_m *Manager) ContainerCreate(ctx context.Context, image string, user string, cmd []string, env []string, labels map[string]string, constraints docker.Constraints, binds []string) (string, error) {
+	ret := _m.Called(ctx, image, user, cmd, env, labels, constraints, binds)
+
+	var r0 string
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, []string, []string, map[string]string, docker.Constraints, []string) string); ok {
+		r0 = rf(ctx, image, user, cmd, env, labels, constraints, binds)
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(context.Context, string, string, []string, []string, map[string]string, docker.Constraints, []string) error); ok {
+		r1 = rf(ctx, image, user, cmd, env, labels, constraints, binds)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -57,25 +78,46 @@ func (_m *Manager) ContainerErrorLog(ctx context.Context, containerID string) (i
 	return r0, r1
 }
 
-// CreateContainer provides a mock function with given fields: ctx, image, user, cmd, env, labels, constraints, binds
-func (_m *Manager) CreateContainer(ctx context.Context, image string, user string, cmd []string, env []string, labels map[string]string, constraints docker.Constraints, binds []string) (string, error) {
-	ret := _m.Called(ctx, image, user, cmd, env, labels, constraints, binds)
+// ContainerStart provides a mock function with given fields: ctx, containerID
+func (_m *Manager) ContainerStart(ctx context.Context, containerID string) error {
+	ret := _m.Called(ctx, containerID)
 
-	var r0 string
-	if rf, ok := ret.Get(0).(func(context.Context, string, string, []string, []string, map[string]string, docker.Constraints, []string) string); ok {
-		r0 = rf(ctx, image, user, cmd, env, labels, constraints, binds)
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, string) error); ok {
+		r0 = rf(ctx, containerID)
 	} else {
-		r0 = ret.Get(0).(string)
+		r0 = ret.Error(0)
 	}
 
-	var r1 error
-	if rf, ok := ret.Get(1).(func(context.Context, string, string, []string, []string, map[string]string, docker.Constraints, []string) error); ok {
-		r1 = rf(ctx, image, user, cmd, env, labels, constraints, binds)
+	return r0
+}
+
+// ContainerStop provides a mock function with given fields: ctx, containerID
+func (_m *Manager) ContainerStop(ctx context.Context, containerID string) error {
+	ret := _m.Called(ctx, containerID)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, string) error); ok {
+		r0 = rf(ctx, containerID)
 	} else {
-		r1 = ret.Error(1)
+		r0 = ret.Error(0)
 	}
 
-	return r0, r1
+	return r0
+}
+
+// ContainerUpdate provides a mock function with given fields: ctx, containerID, constraints
+func (_m *Manager) ContainerUpdate(ctx context.Context, containerID string, constraints docker.Constraints) error {
+	ret := _m.Called(ctx, containerID, constraints)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, docker.Constraints) error); ok {
+		r0 = rf(ctx, containerID, constraints)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
 }
 
 // DownloadImage provides a mock function with given fields: ctx, image, check
@@ -87,6 +129,20 @@ func (_m *Manager) DownloadImage(ctx context.Context, image string, check bool) 
 		r0 = rf(ctx, image, check)
 	} else {
 		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// Info provides a mock function with given fields:
+func (_m *Manager) Info() types.Info {
+	ret := _m.Called()
+
+	var r0 types.Info
+	if rf, ok := ret.Get(0).(func() types.Info); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(types.Info)
 	}
 
 	return r0
@@ -148,37 +204,4 @@ func (_m *Manager) PruneImages(ctx context.Context) (types.ImagesPruneReport, er
 	}
 
 	return r0, r1
-}
-
-// SetLimits provides a mock function with given fields: concurrency, nodeIOPS
-func (_m *Manager) SetLimits(concurrency uint, nodeIOPS uint64) {
-	_m.Called(concurrency, nodeIOPS)
-}
-
-// StartContainer provides a mock function with given fields: ctx, containerID
-func (_m *Manager) StartContainer(ctx context.Context, containerID string) error {
-	ret := _m.Called(ctx, containerID)
-
-	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, string) error); ok {
-		r0 = rf(ctx, containerID)
-	} else {
-		r0 = ret.Error(0)
-	}
-
-	return r0
-}
-
-// StopContainer provides a mock function with given fields: ctx, containerID
-func (_m *Manager) StopContainer(ctx context.Context, containerID string) error {
-	ret := _m.Called(ctx, containerID)
-
-	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, string) error); ok {
-		r0 = rf(ctx, containerID)
-	} else {
-		r0 = ret.Error(0)
-	}
-
-	return r0
 }

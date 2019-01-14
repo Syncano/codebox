@@ -10,6 +10,7 @@ import (
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
+	containertypes "github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	units "github.com/docker/go-units"
 	"github.com/sirupsen/logrus"
@@ -144,23 +145,14 @@ func TestManagerMethods(t *testing.T) {
 		cli := new(MockClient)
 		m := StdManager{client: cli}
 
-		Convey("SetLimits calculates cpus and iops limit", func() {
-			m.info = types.Info{NCPU: 2}
-			m.SetLimits(2, 1000)
-			So(m.cpusLimit, ShouldEqual, 1*1e9)
-			So(m.iopsLimit, ShouldEqual, 500)
-		})
-		Convey("SetLimits for calculations takes into account reserved cpu", func() {
-			m.info = types.Info{NCPU: 2}
-			m.options.ReservedCPU = 1
-			m.SetLimits(2, 1000)
-			So(m.cpusLimit, ShouldEqual, 0.5*1e9)
-			So(m.iopsLimit, ShouldEqual, 500)
-		})
-
 		Convey("Options returns a copy of options struct", func() {
 			So(m.Options(), ShouldNotEqual, m.options)
 			So(m.Options(), ShouldResemble, m.options)
+		})
+
+		Convey("Info returns a copy of info struct", func() {
+			So(m.Info(), ShouldNotEqual, m.info)
+			So(m.Info(), ShouldResemble, m.info)
 		})
 
 		Convey("DownloadImage checks if image exists", func() {
@@ -206,13 +198,13 @@ func TestManagerMethods(t *testing.T) {
 			})
 		})
 
-		Convey("CreateContainer parses given Constraints and calls CreateContainer", func() {
+		Convey("ContainerCreate parses given Constraints and calls ContainerCreate", func() {
 			Convey("on successful creation", func() {
 				cli.On("ContainerCreate", context.Background(), mock.Anything, mock.Anything, mock.Anything, "").Return(
 					container.ContainerCreateCreatedBody{ID: "someid"}, nil)
 
 				create := func(constraints Constraints) (string, error, *container.HostConfig) {
-					id, e := m.CreateContainer(context.Background(), "image", "user", []string{"cmd"}, []string{"env"},
+					id, e := m.ContainerCreate(context.Background(), "image", "user", []string{"cmd"}, []string{"env"},
 						map[string]string{"label": "value"}, constraints, []string{"bind"})
 					return id, e, cli.Calls[0].Arguments.Get(2).(*container.HostConfig)
 				}
@@ -247,7 +239,7 @@ func TestManagerMethods(t *testing.T) {
 			Convey("propagates error", func() {
 				cli.On("ContainerCreate", context.Background(), mock.Anything, mock.Anything, mock.Anything, "").Return(
 					container.ContainerCreateCreatedBody{}, io.EOF)
-				_, e := m.CreateContainer(context.Background(), "image", "user", []string{"cmd"}, []string{"cmd"},
+				_, e := m.ContainerCreate(context.Background(), "image", "user", []string{"cmd"}, []string{"cmd"},
 					map[string]string{"label": "value"}, Constraints{}, []string{"bind"})
 				So(e, ShouldEqual, io.EOF)
 			})
@@ -269,25 +261,30 @@ func TestManagerMethods(t *testing.T) {
 			m.ListContainersByLabel(context.Background(), "label")
 		})
 
-		Convey("AttachContainer calls ContainerAttach", func() {
+		Convey("ContainerAttach calls ContainerAttach", func() {
 			cli.On("ContainerAttach", context.Background(), "id", mock.Anything).Return(types.HijackedResponse{}, nil)
-			m.AttachContainer(context.Background(), "id")
+			m.ContainerAttach(context.Background(), "id")
 		})
 
-		Convey("StartContainer calls ContainerStart", func() {
+		Convey("ContainerStart calls ContainerStart", func() {
 			cli.On("ContainerStart", context.Background(), "id", mock.Anything).Return(nil)
-			m.StartContainer(context.Background(), "id")
+			m.ContainerStart(context.Background(), "id")
 		})
 
-		Convey("StopContainer calls ContainerStop", func() {
+		Convey("ContainerStop calls ContainerStop", func() {
 			cli.On("ContainerStop", context.Background(), "id", mock.Anything).Return(nil)
 			cli.On("ContainerRemove", context.Background(), "id", mock.Anything).Return(nil)
-			m.StopContainer(context.Background(), "id")
+			m.ContainerStop(context.Background(), "id")
 		})
 
 		Convey("ContainerErrorLog calls ContainerLogs", func() {
 			cli.On("ContainerLogs", context.Background(), "id", mock.Anything).Return(nil, nil)
 			m.ContainerErrorLog(context.Background(), "id")
+		})
+
+		Convey("ContainerUpdate calls ContainerUpdate", func() {
+			cli.On("ContainerUpdate", context.Background(), "id", mock.Anything).Return(containertypes.ContainerUpdateOKBody{}, nil)
+			m.ContainerUpdate(context.Background(), "id", Constraints{})
 		})
 
 		cli.AssertExpectations(t)

@@ -10,6 +10,7 @@ import (
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/blkiodev"
 	"github.com/docker/docker/api/types/container"
+	containertypes "github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/network"
 	units "github.com/docker/go-units"
@@ -21,8 +22,6 @@ import (
 type StdManager struct {
 	client                Client
 	storageLimitSupported bool
-	cpusLimit             int64
-	iopsLimit             uint64
 	options               Options
 	info                  types.Info
 	runtime               string
@@ -50,6 +49,9 @@ var ErrReservedCPUTooHigh = errors.New("value of reserved cpu is higher than ava
 
 // Constraints defines limitations for docker container.
 type Constraints struct {
+	CPULimit  int64
+	IOPSLimit uint64
+
 	MemoryLimit     int64
 	MemorySwapLimit int64
 	PidLimit        int64
@@ -103,7 +105,7 @@ func NewManager(options Options, cli Client) (*StdManager, error) {
 	}
 
 	// Check reserved cpu option.
-	if float64(info.NCPU) < options.ReservedCPU {
+	if float64(info.NCPU) <= options.ReservedCPU {
 		return nil, ErrReservedCPUTooHigh
 	}
 
@@ -128,16 +130,14 @@ func NewManager(options Options, cli Client) (*StdManager, error) {
 	return &m, nil
 }
 
-// SetLimits sets per container CPU and IOPS limit based on available IOPS and desired concurrency.
-func (m *StdManager) SetLimits(concurrency uint, nodeIOPS uint64) {
-	// Calculate CPUs limit.
-	m.cpusLimit = int64((float64(m.info.NCPU)-m.options.ReservedCPU)*1e9) / int64(concurrency)
-	m.iopsLimit = nodeIOPS / uint64(concurrency)
-}
-
 // Options returns a copy of manager options struct.
 func (m *StdManager) Options() Options {
 	return m.options
+}
+
+// Info returns a copy of docker info struct.
+func (m *StdManager) Info() types.Info {
+	return m.info
 }
 
 // DownloadImage downloads docker image if it doesn't exist already.
@@ -175,8 +175,8 @@ func (m *StdManager) ListContainersByLabel(ctx context.Context, label string) ([
 	return m.client.ContainerList(ctx, types.ContainerListOptions{Filters: filterArgs})
 }
 
-// CreateContainer creates docker container for given image and command.
-func (m *StdManager) CreateContainer(ctx context.Context, image, user string, cmd []string, env []string,
+// ContainerCreate creates docker container for given image and command.
+func (m *StdManager) ContainerCreate(ctx context.Context, image, user string, cmd []string, env []string,
 	labels map[string]string, constraints Constraints, binds []string) (string, error) {
 
 	stopTimeout := 0
@@ -202,7 +202,7 @@ func (m *StdManager) CreateContainer(ctx context.Context, image, user string, cm
 	blkioThrottle := []*blkiodev.ThrottleDevice{
 		{
 			Path: m.options.BlkioDevice,
-			Rate: m.iopsLimit,
+			Rate: constraints.IOPSLimit,
 		},
 	}
 	hostConfig := container.HostConfig{
@@ -215,7 +215,7 @@ func (m *StdManager) CreateContainer(ctx context.Context, image, user string, cm
 			MemorySwap:           constraints.MemorySwapLimit,
 			Ulimits:              ulimits,
 			PidsLimit:            constraints.PidLimit,
-			NanoCPUs:             m.cpusLimit,
+			NanoCPUs:             constraints.CPULimit,
 			BlkioDeviceReadIOps:  blkioThrottle,
 			BlkioDeviceWriteIOps: blkioThrottle,
 		},
@@ -233,8 +233,8 @@ func (m *StdManager) CreateContainer(ctx context.Context, image, user string, cm
 	return resp.ID, nil
 }
 
-// AttachContainer attaches to container's stdout and stderr.
-func (m *StdManager) AttachContainer(ctx context.Context, containerID string) (types.HijackedResponse, error) {
+// ContainerAttach attaches to container's stdout and stderr.
+func (m *StdManager) ContainerAttach(ctx context.Context, containerID string) (types.HijackedResponse, error) {
 	return m.client.ContainerAttach(ctx, containerID, types.ContainerAttachOptions{
 		Stream: true,
 		Stdout: true,
@@ -246,13 +246,24 @@ func (m *StdManager) ContainerErrorLog(ctx context.Context, containerID string) 
 	return m.client.ContainerLogs(ctx, containerID, types.ContainerLogsOptions{ShowStderr: true, Tail: "50", Follow: true})
 }
 
-// StartContainer starts given containerID.
-func (m *StdManager) StartContainer(ctx context.Context, containerID string) error {
+// ContainerStart starts given containerID.
+func (m *StdManager) ContainerStart(ctx context.Context, containerID string) error {
 	return m.client.ContainerStart(ctx, containerID, types.ContainerStartOptions{})
 }
 
-// StopContainer stops given containerID.
-func (m *StdManager) StopContainer(ctx context.Context, containerID string) error {
+// ContainerStop stops given containerID.
+func (m *StdManager) ContainerStop(ctx context.Context, containerID string) error {
 	m.client.ContainerStop(ctx, containerID, nil) // nolint: errcheck
 	return m.client.ContainerRemove(ctx, containerID, types.ContainerRemoveOptions{Force: true})
+}
+
+// ContainerUpdate updates given containerID.
+func (m *StdManager) ContainerUpdate(ctx context.Context, containerID string, constraints Constraints) error {
+	_, err := m.client.ContainerUpdate(ctx, containerID, containertypes.UpdateConfig{
+		Resources: containertypes.Resources{
+			NanoCPUs: constraints.CPULimit,
+			Memory:   constraints.MemoryLimit,
+		},
+	})
+	return err
 }

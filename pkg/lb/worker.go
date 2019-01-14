@@ -23,23 +23,24 @@ import (
 
 // Worker holds basic info about the worker.
 type Worker struct {
-	ID          string
-	Addr        net.TCPAddr
-	Concurrency uint32
+	ID   string
+	Addr net.TCPAddr
 
 	conn      *grpc.ClientConn
 	waitGroup sync.WaitGroup
+	mCPU      uint32
+	memory    uint64
 
+	freeCPU    int32
+	freeMemory int64
 	mu         sync.RWMutex
 	alive      bool
 	repoCli    repopb.RepoClient
 	scriptCli  scriptpb.ScriptRunnerClient
-	freeSlots  int
-	containers map[ScriptInfo]int
+	scripts    map[ScriptInfo]int
 
 	// These are processed atomically.
 	errorCount uint32
-	memory     uint64
 }
 
 // ScriptInfo defines unique container information.
@@ -47,6 +48,8 @@ type ScriptInfo struct {
 	SourceHash  string
 	Environment string
 	UserID      string
+	MCPU        uint32
+	Memory      uint64
 }
 
 func (ci *ScriptInfo) String() string {
@@ -61,43 +64,43 @@ const (
 )
 
 // NewWorker initializes new worker info along with worker connection.
-func NewWorker(id string, addr net.TCPAddr, concurrency uint32, memory uint64) *Worker {
+func NewWorker(id string, addr net.TCPAddr, mCPU uint32, memory uint64) *Worker {
 	conn, err := grpc.Dial(addr.String(), sys.DefaultGRPCDialOptions...)
 	util.Must(err)
 
 	w := Worker{
-		ID:          id,
-		Addr:        addr,
-		Concurrency: concurrency,
+		ID:   id,
+		Addr: addr,
 
 		alive:      true,
-		freeSlots:  int(concurrency),
-		memory:     memory,
-		containers: make(map[ScriptInfo]int),
+		scripts:    make(map[ScriptInfo]int),
 		conn:       conn,
+		mCPU:       mCPU,
+		memory:     memory,
+		freeCPU:    int32(mCPU),
+		freeMemory: int64(memory),
 
 		repoCli:   repopb.NewRepoClient(conn),
 		scriptCli: scriptpb.NewScriptRunnerClient(conn),
 	}
+
+	freeCPUCounter.Add(int64(mCPU))
+	freeMemoryCounter.Add(int64(memory))
 	return &w
 }
 
 func (w *Worker) String() string {
-	return fmt.Sprintf("{ID:%s, Addr:%v, Slots:%d}", w.ID, w.Addr, w.Concurrency)
+	return fmt.Sprintf("{ID:%s, Addr:%v}", w.ID, w.Addr)
 }
 
-// FreeSlots returns free slots of worker.
-func (w *Worker) FreeSlots() int {
-	w.mu.RLock()
-	defer w.mu.RUnlock()
-	return w.freeSlots
+// FreeCPU returns free CPU of worker (in millicpus).
+func (w *Worker) FreeCPU() int32 {
+	return atomic.LoadInt32(&w.freeCPU)
 }
 
-// IncFreeSlots adds delta to current freeSlots number.
-func (w *Worker) IncFreeSlots() {
-	w.mu.Lock()
-	w.freeSlots++
-	w.mu.Unlock()
+// FreeMemory returns free worker memory.
+func (w *Worker) FreeMemory() int64 {
+	return atomic.LoadInt64(&w.freeMemory)
 }
 
 // Alive returns true if worker is alive.
@@ -107,31 +110,38 @@ func (w *Worker) Alive() bool {
 	return w.alive
 }
 
-// GrabSlot checks if worker is alive, decreases freeSlots counter and increases waitgroup.
-// If requireSlot is true, returns true only if freeSlots is greater than 0.
-func (w *Worker) GrabSlot(requireSlot bool) bool {
+// Reserve checks if worker is alive, decreases resources and increases waitgroup.
+// If require is true, returns true only if resources are available.
+func (w *Worker) Reserve(mCPU uint32, memory uint64, require bool) bool {
 	w.mu.Lock()
-	defer w.mu.Unlock()
 
-	if !w.alive {
+	if !w.alive || (require && w.freeCPU < int32(mCPU)) {
+		w.mu.Unlock()
 		return false
 	}
 
-	if requireSlot && w.freeSlots <= 0 {
-		return false
-	}
-
-	w.freeSlots--
+	w.freeCPU -= int32(mCPU)
+	w.freeMemory -= int64(memory)
 	w.waitGroup.Add(1)
+	w.mu.Unlock()
+
+	freeCPUCounter.Add(-int64(mCPU))
+	freeMemoryCounter.Add(-int64(memory))
 	return true
 }
 
-// ReleaseSlot adds freeSlots counter and marks waitgroup as done.
-func (w *Worker) ReleaseSlot() {
+// Release resources reserved and marks waitgroup as done if waitgroup param is true.
+func (w *Worker) Release(mCPU uint32, memory uint64, waitgroup bool) {
 	w.mu.Lock()
-	w.freeSlots++
-	w.waitGroup.Done()
+	w.freeCPU += int32(mCPU)
+	w.freeMemory += int64(memory)
+	if waitgroup {
+		w.waitGroup.Done()
+	}
 	w.mu.Unlock()
+
+	freeCPUCounter.Add(int64(mCPU))
+	freeMemoryCounter.Add(int64(memory))
 }
 
 // IncreaseErrorCount increases error count of worker.
@@ -142,11 +152,6 @@ func (w *Worker) IncreaseErrorCount() uint32 {
 // ResetErrorCount resets error count of worker.
 func (w *Worker) ResetErrorCount() {
 	atomic.StoreUint32(&w.errorCount, 0)
-}
-
-// AvailableMemory returns available worker memory.
-func (w *Worker) AvailableMemory() uint64 {
-	return atomic.LoadUint64(&w.memory)
 }
 
 // Heartbeat updates worker stats.
@@ -287,11 +292,11 @@ func (w *Worker) Run(ctx context.Context, meta *scriptpb.RunRequest_MetaMessage,
 	return ch, nil
 }
 
-// AddContainer increases ref count of Container in Worker and if needed adds it to ContainerWorkerCache.
-func (w *Worker) AddContainer(ci ScriptInfo, cache ContainerWorkerCache) {
+// AddCache increases ref count of Container in Worker and if needed adds it to ContainerWorkerCache.
+func (w *Worker) AddCache(ci ScriptInfo, cache ContainerWorkerCache) {
 	w.mu.Lock()
 
-	w.containers[ci]++
+	w.scripts[ci]++
 	if _, ok := cache[ci]; !ok {
 		cache[ci] = hashset.New()
 	}
@@ -300,15 +305,15 @@ func (w *Worker) AddContainer(ci ScriptInfo, cache ContainerWorkerCache) {
 	w.mu.Unlock()
 }
 
-// RemoveContainer decreases ref count of Container in Worker and if needed removes it from ContainerWorkerCache.
-func (w *Worker) RemoveContainer(ci ScriptInfo, cache ContainerWorkerCache) {
+// RemoveCache decreases ref count of Container in Worker and if needed removes it from ContainerWorkerCache.
+func (w *Worker) RemoveCache(ci ScriptInfo, cache ContainerWorkerCache) {
 	w.mu.Lock()
 
-	ref := w.containers[ci]
+	ref := w.scripts[ci]
 	if ref > 1 {
-		w.containers[ci]--
+		w.scripts[ci]--
 	} else {
-		delete(w.containers, ci)
+		delete(w.scripts, ci)
 		set, ok := cache[ci]
 		if ok {
 			set.Remove(w)
@@ -328,7 +333,7 @@ func (w *Worker) Shutdown(cache ContainerWorkerCache) {
 	w.mu.Lock()
 	w.alive = false
 
-	for ci := range w.containers {
+	for ci := range w.scripts {
 		set, ok := cache[ci]
 		if ok {
 			set.Remove(w)
@@ -345,6 +350,8 @@ func (w *Worker) Shutdown(cache ContainerWorkerCache) {
 	go func() {
 		w.waitGroup.Wait()
 		w.conn.Close() // nolint
-	}()
 
+		freeCPUCounter.Add(-int64(w.FreeCPU()))
+		freeMemoryCounter.Add(-w.FreeMemory())
+	}()
 }

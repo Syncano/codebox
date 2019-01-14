@@ -4,7 +4,8 @@ const vm = require('vm')
 const net = require('net')
 const os = require('os')
 
-const APP_DIR = '/app/code'
+const APP_PATH = '/app/code'
+const ENV_PATH = '/app/env'
 const APP_PORT = 8123
 const MUX_STDOUT = 1
 const MUX_STDERR = 2
@@ -34,6 +35,8 @@ let socket
 let script
 let scriptFunc
 let scriptContext = {
+  APP_PATH,
+  ENV_PATH,
   HttpResponse,
   setResponse,
   exports,
@@ -85,6 +88,7 @@ function setResponse (response) {
   outputResponse = response
 }
 
+// Main process script function.
 function processScript (context) {
   const timeout = context._timeout
   let ctx = {}
@@ -94,7 +98,7 @@ function processScript (context) {
   // Create script and context if it's the first run.
   if (script === undefined) {
     const entryPoint = context._entryPoint
-    const scriptFilename = path.join(APP_DIR, entryPoint)
+    const scriptFilename = path.join(APP_PATH, entryPoint)
     const source = fs.readFileSync(scriptFilename)
 
     scriptContext.module.filename = scriptFilename
