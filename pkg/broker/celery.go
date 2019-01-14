@@ -90,7 +90,7 @@ func NewScriptTrace(traceID uint64, result *scriptpb.RunResponse) *ScriptTrace {
 		Status:     status,
 		Duration:   result.GetTook(),
 		Result:     scriptResult,
-		Weight:     result.Weight,
+		Weight:     result.GetWeight(),
 	}
 }
 
