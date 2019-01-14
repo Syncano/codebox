@@ -195,6 +195,27 @@ func (_m *MockClient) ContainerUnpause(ctx context.Context, _a1 string) error {
 	return r0
 }
 
+// ContainerUpdate provides a mock function with given fields: ctx, _a1, updateConfig
+func (_m *MockClient) ContainerUpdate(ctx context.Context, _a1 string, updateConfig container.UpdateConfig) (container.ContainerUpdateOKBody, error) {
+	ret := _m.Called(ctx, _a1, updateConfig)
+
+	var r0 container.ContainerUpdateOKBody
+	if rf, ok := ret.Get(0).(func(context.Context, string, container.UpdateConfig) container.ContainerUpdateOKBody); ok {
+		r0 = rf(ctx, _a1, updateConfig)
+	} else {
+		r0 = ret.Get(0).(container.ContainerUpdateOKBody)
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(context.Context, string, container.UpdateConfig) error); ok {
+		r1 = rf(ctx, _a1, updateConfig)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // ImageInspectWithRaw provides a mock function with given fields: ctx, image
 func (_m *MockClient) ImageInspectWithRaw(ctx context.Context, image string) (types.ImageInspect, []byte, error) {
 	ret := _m.Called(ctx, image)

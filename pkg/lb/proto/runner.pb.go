@@ -10,8 +10,8 @@
 
 	It has these top-level messages:
 		RunRequest
-		SlotReadyRequest
-		SlotReadyResponse
+		ResourceReleaseRequest
+		ResourceReleaseResponse
 		ContainerRemovedRequest
 		ContainerRemovedResponse
 		RegisterRequest

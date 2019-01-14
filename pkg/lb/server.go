@@ -55,21 +55,33 @@ var DefaultOptions = ServerOptions{
 }
 
 var (
-	initOnce         sync.Once
-	workerCounter    *expvar.Int
-	freeSlotsCounter *expvar.Int
-	expvarCollector  = prometheus.NewExpvarCollector(map[string]*prometheus.Desc{
+	initOnce          sync.Once
+	workerCounter     *expvar.Int
+	freeCPUCounter    *expvar.Int
+	freeMemoryCounter *expvar.Int
+	expvarCollector   = prometheus.NewExpvarCollector(map[string]*prometheus.Desc{
 		"workers": prometheus.NewDesc(
 			"codebox_workers",
 			"Codebox workers connected.",
 			nil, nil,
 		),
-		"slots": prometheus.NewDesc(
-			"codebox_slots",
-			"Codebox free slots.",
+		"cpu": prometheus.NewDesc(
+			"codebox_cpu",
+			"Codebox free mcpu.",
+			nil, nil,
+		),
+		"memory": prometheus.NewDesc(
+			"codebox_memory",
+			"Codebox free memory.",
 			nil, nil,
 		),
 	})
+	workerCPU = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "worker_cpu",
+		Help: "Available mCPU of worker.",
+	},
+		[]string{"id"},
+	)
 	workerMemory = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "worker_memory",
 		Help: "Available memory of worker.",
@@ -94,9 +106,11 @@ func NewServer(fileRepo filerepo.Repo, options ServerOptions) *Server {
 	// Register expvar and prometheus exports.
 	initOnce.Do(func() {
 		workerCounter = expvar.NewInt("workers")
-		freeSlotsCounter = expvar.NewInt("slots")
+		freeCPUCounter = expvar.NewInt("cpu")
+		freeMemoryCounter = expvar.NewInt("memory")
 		prometheus.MustRegister(
 			expvarCollector,
+			workerCPU,
 			workerMemory,
 		)
 	})
@@ -132,26 +146,26 @@ func (s *Server) Shutdown() {
 	s.limiter.Shutdown()
 }
 
-func (s *Server) findWorkerWithMaxFreeSlots() (*Worker, int) {
-	var slots int
-	var memory uint64
+func (s *Server) findWorkerWithMaxFreeCPU() (*Worker, int32) {
+	var mCPU int32
+	var memory int64
 
 	chosen := s.workers.Reduce(func(key string, val, chosen interface{}) interface{} {
 		w := val.(*Worker)
-		freeSlots := w.FreeSlots()
-		availableMemory := w.AvailableMemory()
+		freeCPU := w.FreeCPU()
+		freeMemory := w.FreeMemory()
 
-		if chosen == nil || freeSlots > slots || (slots == freeSlots && availableMemory > memory) {
+		if chosen == nil || freeCPU > mCPU || (mCPU == freeCPU && freeMemory > memory) {
 			chosen = w
-			slots = freeSlots
-			memory = availableMemory
+			mCPU = freeCPU
+			memory = freeMemory
 		}
 		return chosen
 	})
 	if chosen == nil {
 		return nil, 0
 	}
-	return chosen.(*Worker), slots
+	return chosen.(*Worker), mCPU
 }
 
 // Run runs script in secure environment of worker.
@@ -212,16 +226,16 @@ func (s *Server) processRun(stream pb.ScriptRunner_RunServer, runMeta *pb.RunReq
 		defer s.limiter.Unlock(runMeta.ConcurrencyKey, int(runMeta.ConcurrencyLimit))
 	}
 
-	ci := ScriptInfo{SourceHash: scriptMeta.SourceHash, Environment: scriptMeta.Environment, UserID: scriptMeta.UserID}
+	script := ScriptInfo{SourceHash: scriptMeta.SourceHash, Environment: scriptMeta.Environment, UserID: scriptMeta.UserID}
 	retry := 0
 
 	if runErr := util.RetryWithCritical(s.options.WorkerRetry, workerRetrySleep, func() (bool, error) {
 		retry++
-		worker, fromCache := s.grabWorker(ci)
+		worker, fromCache := s.grabWorker(script)
 		if worker == nil {
 			return true, ErrNoWorkersAvailable
 		}
-		logger = logger.WithFields(logrus.Fields{"worker": worker, "container": &ci, "try": retry, "fromCache": fromCache})
+		logger = logger.WithFields(logrus.Fields{"worker": worker, "script": &script, "try": retry, "fromCache": fromCache})
 
 		// Check and refresh source and environment.
 		if s.fileRepo.Get(scriptMeta.SourceHash) == "" || (scriptMeta.Environment != "" && s.fileRepo.Get(scriptMeta.Environment) == "") {
@@ -231,9 +245,8 @@ func (s *Server) processRun(stream pb.ScriptRunner_RunServer, runMeta *pb.RunReq
 		resCh, err := s.processWorkerRun(ctx, logger, worker, scriptMeta, scriptChunk)
 		if err != nil {
 			logger.WithError(err).Warn("Worker processing Run failed")
-			// Release worker slot as it failed prematurely.
-			worker.ReleaseSlot()
-			freeSlotsCounter.Add(1)
+			// Release worker resources as it failed prematurely.
+			worker.Release(script.MCPU, script.Memory, true)
 			s.handleWorkerError(worker, err)
 			return err == context.Canceled, err
 		}
@@ -260,7 +273,7 @@ func (s *Server) processRun(stream pb.ScriptRunner_RunServer, runMeta *pb.RunReq
 		if cached {
 			// Add container to worker cache if we got any response.
 			s.mu.Lock()
-			worker.AddContainer(ci, s.workerContainerCache)
+			worker.AddCache(script, s.workerContainerCache)
 			s.mu.Unlock()
 		}
 
@@ -304,50 +317,49 @@ func (s *Server) processWorkerRun(ctx context.Context, logger logrus.FieldLogger
 	return worker.Run(ctx, meta, chunk)
 }
 
-// grabWorker finds worker with container in cache and highest amount of free slots.
-// Fallback to any worker with highest amount of free slots.
-func (s *Server) grabWorker(ci ScriptInfo) (*Worker, bool) {
+// grabWorker finds worker with container in cache and highest amount of free CPU.
+// Fallback to any worker with highest amount of free CPU.
+func (s *Server) grabWorker(script ScriptInfo) (*Worker, bool) {
 	var (
-		worker, workerMax       *Worker
-		fromCache               bool
-		freeSlots, freeSlotsMax int
+		worker, workerMax   *Worker
+		fromCache           bool
+		freeCPU, freeCPUMax int32
 	)
 
 	s.mu.Lock()
 	for {
-		freeSlots = 0
-		if set, ok := s.workerContainerCache[ci]; ok {
+		freeCPU = 0
+		if set, ok := s.workerContainerCache[script]; ok {
 
 			for _, v := range set.Values() {
 				w := v.(*Worker)
-				slots := w.FreeSlots()
+				cpu := w.FreeCPU()
 
-				if (worker == nil || slots > freeSlots) && s.workers.Contains(w.ID) && w.Alive() {
+				if (worker == nil || cpu > freeCPU) && s.workers.Contains(w.ID) && w.Alive() {
 					fromCache = true
 					worker = w
-					freeSlots = slots
+					freeCPU = cpu
 				}
 			}
 		}
 
-		// If no worker with cached container found or if there is a big discrepancy between worker with max free slots
+		// If no worker with cached container found or if there is a big discrepancy between worker with max free CPU
 		// and worker with cached container - use that instead to balance the load.
-		workerMax, freeSlotsMax = s.findWorkerWithMaxFreeSlots()
-		if worker == nil || freeSlotsMax > 2*freeSlots {
+		workerMax, freeCPUMax = s.findWorkerWithMaxFreeCPU()
+		if worker == nil || freeCPUMax > 2*freeCPU {
 			fromCache = false
-			worker, freeSlots = workerMax, freeSlotsMax
+			worker, freeCPU = workerMax, freeCPUMax
 		}
 
 		// If still cannot find a worker - abandon all hope.
 		if worker == nil {
 			break
 		}
-		// If free slots are greater than 0, only allow grabbing slot if there are still > 0 slots.
-		requireSlot := freeSlots > 0
-		if s.workers.Get(worker.ID) != nil && worker.GrabSlot(requireSlot) {
-			freeSlotsCounter.Add(-1)
+		// If CPU requirements are met, require reservation to be successful.
+		require := freeCPU > int32(script.MCPU)
+		if s.workers.Get(worker.ID) != nil && worker.Reserve(script.MCPU, script.Memory, require) {
 			if fromCache {
-				worker.RemoveContainer(ci, s.workerContainerCache)
+				worker.RemoveCache(script, s.workerContainerCache)
 			}
 			break
 		}
@@ -365,19 +377,18 @@ func (s *Server) handleWorkerError(worker *Worker, err error) {
 	}
 }
 
-// SlotReady handles notifications sent by client whenever a slot is ready to accept connections.
-func (s *Server) SlotReady(ctx context.Context, in *pb.SlotReadyRequest) (*pb.SlotReadyResponse, error) {
+// ResourceRelease handles notifications sent by client whenever a slot is ready to accept connections.
+func (s *Server) ResourceRelease(ctx context.Context, in *pb.ResourceReleaseRequest) (*pb.ResourceReleaseResponse, error) {
 	peerAddr := util.PeerAddr(ctx)
-	logrus.WithFields(logrus.Fields{"id": in.GetId(), "peer": peerAddr}).Debug("grpc:lb:SlotReady")
+	logrus.WithFields(logrus.Fields{"id": in.GetId(), "peer": peerAddr}).Debug("grpc:lb:ResourceUpdate")
 
 	cur := s.workers.Get(in.Id)
 	if cur == nil {
 		return nil, ErrUnknownWorkerID
 	}
 
-	cur.(*Worker).IncFreeSlots()
-	freeSlotsCounter.Add(1)
-	return &pb.SlotReadyResponse{}, nil
+	cur.(*Worker).Release(in.MCPU, in.Memory, false)
+	return &pb.ResourceReleaseResponse{}, nil
 }
 
 // ContainerRemoved handles notifications sent by client whenever a container gets removed from cache.
@@ -392,7 +403,7 @@ func (s *Server) ContainerRemoved(ctx context.Context, in *pb.ContainerRemovedRe
 	}
 
 	s.mu.Lock()
-	cur.(*Worker).RemoveContainer(ci, s.workerContainerCache)
+	cur.(*Worker).RemoveCache(ci, s.workerContainerCache)
 	s.mu.Unlock()
 	return &pb.ContainerRemovedResponse{}, nil
 }
@@ -403,8 +414,10 @@ func (s *Server) Register(ctx context.Context, in *pb.RegisterRequest) (*pb.Regi
 	peerAddr := util.PeerAddr(ctx)
 	addr := net.TCPAddr{IP: peerAddr.(*net.TCPAddr).IP, Port: int(in.Port)}
 
-	freeSlotsCounter.Add(int64(in.Concurrency))
-	w := NewWorker(in.Id, addr, in.Concurrency, in.Memory)
+	workerMemory.WithLabelValues(in.Id).Set(float64(in.Memory))
+	workerCPU.WithLabelValues(in.Id).Set(float64(in.MCPU))
+
+	w := NewWorker(in.Id, addr, in.MCPU, in.Memory)
 	logrus.WithField("worker", w).Info("grpc:lb:Register")
 	s.workers.Set(in.Id, w)
 	return &pb.RegisterResponse{}, nil
@@ -431,15 +444,16 @@ func (s *Server) Disconnect(ctx context.Context, in *pb.DisconnectRequest) (*pb.
 }
 
 func (s *Server) onEvictedWorkerHandler(key string, val interface{}) {
-	workerMemory.DeleteLabelValues(key)
 	workerCounter.Add(-1) // Decrease worker count.
 	w := val.(*Worker)
-	freeSlotsCounter.Add(-int64(w.FreeSlots()))
 
 	s.mu.Lock()
 	w.Shutdown(s.workerContainerCache)
 	logrus.WithField("worker", w).Info("Worker removed")
 	s.mu.Unlock()
+
+	workerCPU.DeleteLabelValues(key)
+	workerMemory.DeleteLabelValues(key)
 }
 
 // ReadyHandler returns 200 ok when worker number is satisfied.

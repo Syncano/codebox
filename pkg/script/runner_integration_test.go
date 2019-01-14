@@ -61,7 +61,7 @@ func TestRunnerIntegration(t *testing.T) {
 		So(err, ShouldBeNil)
 
 		// Initialize docker manager.
-		dockerMgr, err := docker.NewManager(docker.Options{ReservedCPU: 1}, cli)
+		dockerMgr, err := docker.NewManager(docker.Options{ReservedCPU: 0.25}, cli)
 		So(err, ShouldBeNil)
 
 		// Initialize system checker.
@@ -72,7 +72,7 @@ func TestRunnerIntegration(t *testing.T) {
 
 		// Initialize script runner.
 		runner, err := script.NewRunner(script.Options{
-			Concurrency:       1,
+			Concurrency:       2,
 			PruneImages:       false,
 			HostStoragePath:   os.Getenv("HOST_STORAGE_PATH"),
 			UseExistingImages: true,
@@ -97,7 +97,7 @@ func TestRunnerIntegration(t *testing.T) {
 				So(err, ShouldBeNil)
 
 				for i := 0; i < 2; i++ {
-					res, err := runner.Run(logrus.StandardLogger(), data.runtime, hash, "", "user", script.RunOptions{
+					res, err := runner.Run(context.Background(), logrus.StandardLogger(), data.runtime, hash, "", "user", &script.RunOptions{
 						Args:   []byte(`{"arg":"co"}`),
 						Meta:   []byte(`{"meta":"de"}`),
 						Config: []byte(`{"cfg":"box"}`),
@@ -122,7 +122,7 @@ func TestRunnerIntegration(t *testing.T) {
 				hash := util.GenerateKey()
 				err := uploadFile(repo, hash, []byte(data.script), script.SupportedRuntimes[data.runtime].DefaultEntryPoint)
 				So(err, ShouldBeNil)
-				res, err := runner.Run(logrus.StandardLogger(), data.runtime, hash, "", "user", script.RunOptions{
+				res, err := runner.Run(context.Background(), logrus.StandardLogger(), data.runtime, hash, "", "user", &script.RunOptions{
 					Files: map[string]script.File{"file": {Filename: "fname", ContentType: "ctype", Data: []byte("content123")}},
 				})
 				So(err, ShouldBeNil)
@@ -146,7 +146,7 @@ func TestRunnerIntegration(t *testing.T) {
 				hash := util.GenerateKey()
 				err := uploadFile(repo, hash, []byte(data.script), script.SupportedRuntimes[data.runtime].DefaultEntryPoint)
 				So(err, ShouldBeNil)
-				res, err := runner.Run(logrus.StandardLogger(), data.runtime, hash, "", "user", script.RunOptions{})
+				res, err := runner.Run(context.Background(), logrus.StandardLogger(), data.runtime, hash, "", "user", &script.RunOptions{})
 				So(err, ShouldBeNil)
 
 				So(res.Code, ShouldEqual, 0)
@@ -189,7 +189,7 @@ func TestRunnerIntegration(t *testing.T) {
 				err = uploadFile(repo, hash, []byte(data.script), "test/entry.js")
 				So(err, ShouldBeNil)
 
-				res, err := runner.Run(logrus.StandardLogger(), data.runtime, hash, env, "user", script.RunOptions{EntryPoint: "test/entry.js"})
+				res, err := runner.Run(context.Background(), logrus.StandardLogger(), data.runtime, hash, env, "user", &script.RunOptions{EntryPoint: "test/entry.js"})
 				So(err, ShouldBeNil)
 
 				So(res.Code, ShouldEqual, 0)
@@ -211,7 +211,7 @@ func TestRunnerIntegration(t *testing.T) {
 				err = uploadFile(repo, hash, []byte(data.script), "test/entry.js")
 				So(err, ShouldBeNil)
 
-				res, err := runner.Run(logrus.StandardLogger(), data.runtime, hash, env, "user", script.RunOptions{EntryPoint: "test/entry.js"})
+				res, err := runner.Run(context.Background(), logrus.StandardLogger(), data.runtime, hash, env, "user", &script.RunOptions{EntryPoint: "test/entry.js"})
 				So(res, ShouldBeNil)
 				So(err, ShouldNotBeNil)
 			}
@@ -226,7 +226,7 @@ func TestRunnerIntegration(t *testing.T) {
 				hash := util.GenerateKey()
 				err := uploadFile(repo, hash, []byte(data.script), "test/entry.js")
 				So(err, ShouldBeNil)
-				res, err := runner.Run(logrus.StandardLogger(), data.runtime, hash, "", "user", script.RunOptions{EntryPoint: "test/entry.js"})
+				res, err := runner.Run(context.Background(), logrus.StandardLogger(), data.runtime, hash, "", "user", &script.RunOptions{EntryPoint: "test/entry.js"})
 				So(err, ShouldBeNil)
 
 				So(res.Code, ShouldEqual, 0)
@@ -236,7 +236,7 @@ func TestRunnerIntegration(t *testing.T) {
 		})
 
 		Convey("runs scripts with timeout", func() {
-			timeout := 50 * time.Millisecond
+			timeout := 100 * time.Millisecond
 			graceTimeout := 3 * time.Second
 
 			var tests = []scriptTimeoutTest{
@@ -249,7 +249,7 @@ func TestRunnerIntegration(t *testing.T) {
 				hash := util.GenerateKey()
 				err := uploadFile(repo, hash, []byte(data.script), script.SupportedRuntimes[data.runtime].DefaultEntryPoint)
 				So(err, ShouldBeNil)
-				res, err := runner.Run(logrus.StandardLogger(), data.runtime, hash, "", "user", script.RunOptions{Timeout: timeout})
+				res, err := runner.Run(context.Background(), logrus.StandardLogger(), data.runtime, hash, "", "user", &script.RunOptions{Timeout: timeout})
 
 				if data.deadlineExceeded {
 					So(err, ShouldResemble, context.DeadlineExceeded)
@@ -278,7 +278,7 @@ func TestRunnerIntegration(t *testing.T) {
 				hash := util.GenerateKey()
 				err := uploadFile(repo, hash, []byte(data.script), script.SupportedRuntimes[data.runtime].DefaultEntryPoint)
 				So(err, ShouldBeNil)
-				res, err := runner.Run(logrus.StandardLogger(), data.runtime, hash, "", "user", script.RunOptions{})
+				res, err := runner.Run(context.Background(), logrus.StandardLogger(), data.runtime, hash, "", "user", &script.RunOptions{})
 				So(err, ShouldBeNil)
 
 				So(res.Code, ShouldEqual, 13)
@@ -297,13 +297,34 @@ func TestRunnerIntegration(t *testing.T) {
 				hash := util.GenerateKey()
 				err := uploadFile(repo, hash, []byte(data.script), script.SupportedRuntimes[data.runtime].DefaultEntryPoint)
 				So(err, ShouldBeNil)
-				res, err := runner.Run(logrus.StandardLogger(), data.runtime, hash, "", "user", script.RunOptions{})
+				res, err := runner.Run(context.Background(), logrus.StandardLogger(), data.runtime, hash, "", "user", &script.RunOptions{})
 				So(err, ShouldEqual, io.EOF)
 
 				So(res.Code, ShouldEqual, 1)
 				So(string(res.Stdout), ShouldStartWith, "codebox\n")
 				So(res.Stderr, ShouldNotBeEmpty)
 				So(res.Response, ShouldBeNil)
+			}
+		})
+
+		Convey("runs weighted scripts", func() {
+			var tests = []scriptTest{
+				{"nodejs_v6", `console.log('codebox')`},
+				{"nodejs_v8", `console.log('codebox')`},
+			}
+			for _, data := range tests {
+				hash := util.GenerateKey()
+				err := uploadFile(repo, hash, []byte(data.script), script.SupportedRuntimes[data.runtime].DefaultEntryPoint)
+				So(err, ShouldBeNil)
+				res, err := runner.Run(context.Background(), logrus.StandardLogger(), data.runtime, hash, "", "user", &script.RunOptions{
+					MCPU: uint32(runner.Options().Constraints.CPULimit/1e6) * 2})
+				So(err, ShouldBeNil)
+
+				So(res.Code, ShouldEqual, 0)
+				So(string(res.Stdout), ShouldStartWith, "codebox\n")
+				So(res.Stderr, ShouldBeEmpty)
+				So(res.Response, ShouldBeNil)
+				So(res.Weight, ShouldEqual, 2)
 			}
 		})
 

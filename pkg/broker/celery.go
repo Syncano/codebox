@@ -34,6 +34,7 @@ type ScriptTrace struct {
 	Status     string             `json:"status"`
 	Duration   int64              `json:"duration"`
 	Result     *ScriptTraceResult `json:"result,omitempty"`
+	Weight     uint32             `json:"weight"`
 }
 
 // ScriptTraceResult defines a serialized form of script result (nested in script trace).
@@ -89,6 +90,7 @@ func NewScriptTrace(traceID uint64, result *scriptpb.RunResponse) *ScriptTrace {
 		Status:     status,
 		Duration:   result.GetTook(),
 		Result:     scriptResult,
+		Weight:     result.Weight,
 	}
 }
 

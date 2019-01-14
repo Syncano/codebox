@@ -207,7 +207,7 @@ setTimeout(function() {
 			lbVars := readJSON("http://localhost:9080/debug/vars")
 			workerVars := readJSON("http://localhost:9180/debug/vars")
 			So(lbVars["workers"].(float64), ShouldEqual, 1)
-			So(workerVars["slots"].(float64), ShouldEqual, script.DefaultOptions.Concurrency)
+			So(workerVars["cpu"].(float64), ShouldEqual, script.DefaultOptions.MCPU)
 		})
 
 		// Kill started processes and their children.

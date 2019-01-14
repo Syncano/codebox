@@ -139,6 +139,7 @@ type Result struct {
 	Response       *HTTPResponse
 	Took           time.Duration
 	Overhead       time.Duration
+	Weight         uint
 	Cached         bool
 }
 

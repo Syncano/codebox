@@ -23,7 +23,7 @@ const (
 )
 
 var (
-	initOnce                    sync.Once
+	initOnceScript              sync.Once
 	executionDurationsHistogram = prometheus.NewHistogram(prometheus.HistogramOpts{
 		Name:    "codebox_execution_duration_seconds",
 		Help:    "Codebox execution latency distributions.",
@@ -54,7 +54,7 @@ var _ pb.ScriptRunnerServer = (*Server)(nil)
 // NewServer initializes new worker server.
 func NewServer(runner Runner) *Server {
 	// Register prometheus exports.
-	initOnce.Do(func() {
+	initOnceScript.Do(func() {
 		prometheus.MustRegister(
 			executionDurationsHistogram,
 			overheadDurationsHistogram,
@@ -114,11 +114,12 @@ func (s *Server) Run(stream pb.ScriptRunner_RunServer) error {
 	} else {
 		args = opts.GetArgs()
 	}
-	ret, err := s.Runner.Run(logger, meta.Runtime, meta.SourceHash, meta.Environment, meta.UserID,
-		RunOptions{
+	ret, err := s.Runner.Run(stream.Context(), logger, meta.Runtime, meta.SourceHash, meta.Environment, meta.UserID,
+		&RunOptions{
 			EntryPoint:  opts.GetEntryPoint(),
 			OutputLimit: opts.GetOutputLimit(),
 			Timeout:     time.Duration(opts.GetTimeout()) * time.Millisecond,
+			MCPU:        opts.GetMCPU(),
 
 			Args:   args,
 			Meta:   opts.GetMeta(),
@@ -177,6 +178,7 @@ func (s *Server) sendResponse(stream pb.ScriptRunner_RunServer, ret *Result) err
 			Took:     resTook,
 			Time:     time.Now().UnixNano(),
 			Cached:   ret.Cached,
+			Weight:   uint32(ret.Weight),
 		},
 	}
 

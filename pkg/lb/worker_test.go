@@ -37,25 +37,25 @@ func TestWorker(t *testing.T) {
 		repoCli := new(repomocks.RepoClient)
 		scriptCli := new(scriptmocks.ScriptRunnerClient)
 		worker := &Worker{
-			ID:         "id",
-			freeSlots:  1,
-			alive:      true,
-			repoCli:    repoCli,
-			scriptCli:  scriptCli,
-			containers: make(map[ScriptInfo]int),
+			ID:        "id",
+			freeCPU:   2000,
+			alive:     true,
+			repoCli:   repoCli,
+			scriptCli: scriptCli,
+			scripts:   make(map[ScriptInfo]int),
 		}
 
-		Convey("GrabSlot returns false for dead worker", func() {
+		Convey("Reserve returns false for dead worker", func() {
 			worker.alive = false
-			So(worker.GrabSlot(false), ShouldBeFalse)
-			So(worker.FreeSlots(), ShouldEqual, 1)
+			So(worker.Reserve(100, 100, false), ShouldBeFalse)
+			So(worker.FreeCPU(), ShouldEqual, 2000)
 		})
-		Convey("GrabSlot returns false when requireSlots is true and there are < 0 slots", func() {
-			So(worker.GrabSlot(true), ShouldBeTrue)
-			So(worker.GrabSlot(true), ShouldBeFalse)
-			So(worker.FreeSlots(), ShouldEqual, 0)
-			So(worker.GrabSlot(false), ShouldBeTrue)
-			So(worker.FreeSlots(), ShouldEqual, -1)
+		Convey("Reserve returns false when requireSlots is true and there are < 0 slots", func() {
+			So(worker.Reserve(2000, 100, true), ShouldBeTrue)
+			So(worker.Reserve(2000, 100, true), ShouldBeFalse)
+			So(worker.FreeCPU(), ShouldEqual, 0)
+			So(worker.Reserve(2000, 100, false), ShouldBeTrue)
+			So(worker.FreeCPU(), ShouldEqual, -2000)
 		})
 
 		Convey("given MemMapFs and mocked stream, Upload", func() {

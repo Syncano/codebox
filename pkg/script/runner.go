@@ -8,17 +8,18 @@ import (
 	"expvar"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/docker/docker/pkg/stdcopy"
-
 	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/imdario/mergo"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/sync/semaphore"
 
 	"github.com/Syncano/codebox/pkg/cache"
 	"github.com/Syncano/codebox/pkg/docker"
@@ -34,12 +35,12 @@ type DockerRunner struct {
 	createMu       sync.Mutex
 	containerCache *cache.StackCache
 	containerPool  map[string]chan *Container
-	taskPool       chan bool
+	poolSemaphore  *semaphore.Weighted
 	taskWaitGroup  sync.WaitGroup
 
 	muHandler          sync.RWMutex
 	onContainerRemoved ContainerRemovedHandler
-	onSlotReady        SlotReadyHandler
+	onRunDone          RunDoneHandler
 
 	dockerMgr docker.Manager
 	fileRepo  filerepo.Repo
@@ -51,8 +52,8 @@ type DockerRunner struct {
 type Options struct {
 	// Constraints
 	Concurrency     uint
+	MCPU            uint
 	NodeIOPS        uint64
-	MemoryLimit     uint64
 	MemoryMargin    uint64
 	StreamMaxLength int
 
@@ -62,6 +63,7 @@ type Options struct {
 	CreateRetrySleep  time.Duration
 	PruneImages       bool
 	UseExistingImages bool
+	Constraints       docker.Constraints
 
 	// Cache
 	ContainerTTL       time.Duration
@@ -74,14 +76,22 @@ type Options struct {
 // DefaultOptions holds default options values for script runner.
 var DefaultOptions = Options{
 	Concurrency:     2,
+	MCPU:            2000,
 	NodeIOPS:        150,
-	MemoryLimit:     256 * 1024 * 1024,
 	MemoryMargin:    100 * 1024 * 1024,
 	StreamMaxLength: 512 * 1024,
 
 	CreateTimeout:    10 * time.Second,
 	CreateRetryCount: 3,
 	CreateRetrySleep: 500 * time.Millisecond,
+	Constraints: docker.Constraints{
+		// CPU and IOPS limit is calculated based on concurrency.
+		MemoryLimit:     200 * 1024 * 1024,
+		MemorySwapLimit: 0,
+		PidLimit:        32,
+		NofileUlimit:    1024,
+		StorageLimit:    "500M",
+	},
 
 	ContainerTTL:       45 * time.Minute,
 	ContainersCapacity: 250,
@@ -89,17 +99,20 @@ var DefaultOptions = Options{
 	HostStoragePath: "/home/codebox/storage",
 }
 
-// SlotReadyHandler is a callback function called whenever slot becomes ready.
-type SlotReadyHandler func()
+// RunDoneHandler is a callback function called whenever run has finished.
+type RunDoneHandler func(cont *Container, options *RunOptions)
 
 // ContainerRemovedHandler is a callback function called whenever container is removed.
-type ContainerRemovedHandler func(ci *Container)
+type ContainerRemovedHandler func(cont *Container)
 
 // RunOptions holds settable options for run command.
 type RunOptions struct {
 	EntryPoint  string
 	OutputLimit uint32
 	Timeout     time.Duration
+	MCPU        uint32
+	Memory      uint64
+	Weight      uint
 
 	Args   []byte
 	Meta   []byte
@@ -154,7 +167,8 @@ func (c *Container) String() string {
 }
 
 var (
-	freeSlotsCounter *expvar.Int
+	initOnceRunner sync.Once
+	freeCPUCounter *expvar.Int
 
 	// ErrUnsupportedRuntime signals prohibited usage of unknown runtime.
 	ErrUnsupportedRuntime = errors.New("unsupported runtime")
@@ -179,16 +193,28 @@ const (
 
 // NewRunner initializes a new script runner.
 func NewRunner(options Options, dockerMgr docker.Manager, checker sys.SystemChecker, repo filerepo.Repo) (*DockerRunner, error) {
-	if freeSlotsCounter == nil {
-		freeSlotsCounter = expvar.NewInt("slots")
-	}
+	initOnceRunner.Do(func() {
+		freeCPUCounter = expvar.NewInt("cpu")
+	})
 	mergo.Merge(&options, DefaultOptions) // nolint - error not possible
 
 	// Set concurrency limits on docker.
-	dockerMgr.SetLimits(options.Concurrency, options.NodeIOPS)
+	dockerMCPU := uint(dockerMgr.Info().NCPU * 1000)
+	if options.MCPU > dockerMCPU {
+		logrus.WithFields(
+			logrus.Fields{
+				"requested": options.MCPU,
+				"available": dockerMCPU,
+			}).Warn("CPU defined higher than available CPU resources, using what we got instead")
+		options.MCPU = dockerMCPU
+	}
+
+	// Calculate CPU and IOPS limit.
+	options.Constraints.CPULimit = int64((options.MCPU-uint(dockerMgr.Options().ReservedCPU*1e3))*1e6) / int64(options.Concurrency)
+	options.Constraints.IOPSLimit = options.NodeIOPS / uint64(options.Concurrency)
 
 	// Check memory requirements.
-	if err := checker.CheckFreeMemory(options.MemoryLimit*uint64(options.Concurrency) + options.MemoryMargin); err != nil {
+	if err := checker.CheckFreeMemory(uint64(options.Constraints.MemoryLimit)*uint64(options.Concurrency) + options.MemoryMargin); err != nil {
 		return nil, err
 	}
 
@@ -228,7 +254,7 @@ func (r *DockerRunner) CleanupUnused() {
 			wg.Add(1)
 			go func(cID string) {
 				ctx, cancel := context.WithTimeout(context.Background(), dockerTimeout)
-				if e := r.dockerMgr.StopContainer(ctx, cID); e != nil {
+				if e := r.dockerMgr.ContainerStop(ctx, cID); e != nil {
 					logrus.WithField("containerID", cID).Warn("Stopping container failed")
 				}
 				cancel()
@@ -271,10 +297,10 @@ func (r *DockerRunner) DownloadAllImages() error {
 	return nil
 }
 
-func (r *DockerRunner) processRun(logger logrus.FieldLogger, runtime, sourceHash, environment, containerHash string, options RunOptions) (*Result, *Container, bool, error) {
+func (r *DockerRunner) processRun(ctx context.Context, logger logrus.FieldLogger, runtime, sourceHash, environment, containerHash string, options *RunOptions) (*Result, *Container, bool, error) {
 	start := time.Now()
 	logger = logger.WithFields(logrus.Fields{"runtime": runtime, "options": options, "containerHash": containerHash})
-	cont, fromCache, err := r.getContainer(runtime, sourceHash, environment, containerHash)
+	cont, fromCache, err := r.getContainer(runtime, sourceHash, environment, containerHash, options.Weight)
 	if err != nil {
 		return nil, cont, fromCache, err
 	}
@@ -334,10 +360,11 @@ func (r *DockerRunner) processRun(logger logrus.FieldLogger, runtime, sourceHash
 	}
 
 	// Return processed response.
-	ctx, cancel := context.WithTimeout(context.Background(), options.Timeout+graceTimeout)
+	ctx, cancel := context.WithTimeout(ctx, options.Timeout+graceTimeout)
 	defer cancel()
 	mux, err := readMux(ctx, conn, options.OutputLimit)
 
+	// On container crash, get stderr from it.
 	if err == io.EOF || err == io.ErrUnexpectedEOF {
 		if stream, e := r.dockerMgr.ContainerErrorLog(ctx, cont.ID); e == nil {
 			stdcopy.StdCopy(mux[MuxStdout], mux[MuxStderr], stream) // nolint: errcheck
@@ -346,7 +373,7 @@ func (r *DockerRunner) processRun(logger logrus.FieldLogger, runtime, sourceHash
 
 	// Parse result.
 	var parseErr error
-	ret := &Result{Stdout: mux[MuxStdout].Bytes(), Stderr: mux[MuxStderr].Bytes(), Took: time.Since(start)}
+	ret := &Result{Stdout: mux[MuxStdout].Bytes(), Stderr: mux[MuxStderr].Bytes(), Took: time.Since(start), Weight: options.Weight}
 	parseErr = ret.Parse(mux[MuxResponse].Bytes(), r.options.StreamMaxLength, err)
 	if err == nil {
 		err = parseErr
@@ -355,22 +382,30 @@ func (r *DockerRunner) processRun(logger logrus.FieldLogger, runtime, sourceHash
 }
 
 // Run executes given script in a docker container.
-func (r *DockerRunner) Run(logger logrus.FieldLogger, runtime, sourceHash, environment, userID string, options RunOptions) (*Result, error) {
+func (r *DockerRunner) Run(ctx context.Context, logger logrus.FieldLogger, runtime, sourceHash, environment, userID string, options *RunOptions) (*Result, error) {
 	if _, ok := SupportedRuntimes[runtime]; !ok {
 		return nil, ErrUnsupportedRuntime
 	}
 	if options.EntryPoint == "" {
 		options.EntryPoint = SupportedRuntimes[runtime].DefaultEntryPoint
 	}
-	if options.Timeout == 0 {
+	if options.Timeout <= 0 {
 		options.Timeout = defaultTimeout
 	}
+	if options.MCPU == 0 {
+		options.MCPU = uint32(r.options.Constraints.CPULimit / 1e6)
+	}
+	if options.Weight == 0 {
+		options.Weight = uint(math.Ceil(float64(options.MCPU) * 1e6 / float64(r.options.Constraints.CPULimit)))
+	}
+
 	logger = logger.WithFields(logrus.Fields{
 		"runtime":     runtime,
 		"options":     options,
 		"sourceHash":  sourceHash,
 		"userID":      userID,
 		"environment": environment,
+		"weight":      options.Weight,
 	})
 
 	if !r.IsRunning() {
@@ -379,13 +414,17 @@ func (r *DockerRunner) Run(logger logrus.FieldLogger, runtime, sourceHash, envir
 	}
 	start := time.Now()
 
-	// Acquire lock from pool.
-	<-r.taskPool
-	freeSlotsCounter.Add(-1) // Decrease free slots counter.
+	// Acquire from semaphore.
+	if err := r.poolSemaphore.Acquire(ctx, int64(options.Weight)); err != nil {
+		return nil, err
+	}
+
+	// Decrease free resource counter.
+	freeCPUCounter.Add(-int64(options.MCPU))
 	r.taskWaitGroup.Add(1)
 
 	containerHash := fmt.Sprintf("%s/%s/%s/%x", sourceHash, userID, environment, util.Hash(options.EntryPoint))
-	ret, cont, fromCache, err := r.processRun(logger, runtime, sourceHash, environment, containerHash, options)
+	ret, cont, fromCache, err := r.processRun(ctx, logger, runtime, sourceHash, environment, containerHash, options)
 	took := time.Since(start)
 
 	if err != nil {
@@ -408,11 +447,12 @@ func (r *DockerRunner) Run(logger logrus.FieldLogger, runtime, sourceHash, envir
 		"containerID": cont.ID,
 	}).Info("Run finished")
 
-	go r.afterRun(runtime, cont, fromCache, err)
+	freeCPUCounter.Add(int64(options.MCPU))
+	go r.afterRun(runtime, cont, options, fromCache, err)
 	return ret, err
 }
 
-func (r *DockerRunner) afterRun(runtime string, cont *Container, fromCache bool, err error) {
+func (r *DockerRunner) afterRun(runtime string, cont *Container, options *RunOptions, fromCache bool, err error) {
 	logger := logrus.WithError(err).WithField("container", cont)
 	// Add new container if we took it from the pool.
 	recreate := !fromCache
@@ -473,13 +513,13 @@ func (r *DockerRunner) afterRun(runtime string, cont *Container, fromCache bool,
 		}
 	}
 
-	r.taskPool <- true
-	freeSlotsCounter.Add(1) // Increase free slots counter.
+	// Release semaphore.
+	r.poolSemaphore.Release(int64(options.Weight))
 	r.taskWaitGroup.Done()
 
 	r.muHandler.RLock()
-	if r.onSlotReady != nil {
-		go r.onSlotReady()
+	if r.onRunDone != nil {
+		go r.onRunDone(cont, options)
 	}
 	r.muHandler.RUnlock()
 }
@@ -499,18 +539,16 @@ func (r *DockerRunner) CreatePool() (string, error) {
 		return "", err
 	}
 
-	// Create and fill task pool and reserve memory for each concurrency.
-	r.taskPool = make(chan bool, r.options.Concurrency)
+	// Create pool semaphore and reserve memory for each concurrency.
+	r.poolSemaphore = semaphore.NewWeighted(int64(r.options.Concurrency))
 	for i := uint(0); i < r.options.Concurrency; i++ {
-		r.taskPool <- true
-
-		if err := r.sys.ReserveMemory(r.options.MemoryLimit); err != nil {
+		if err := r.sys.ReserveMemory(uint64(r.options.Constraints.MemoryLimit)); err != nil {
 			return "", err
 		}
 	}
 
-	// Set free slots counter.
-	freeSlotsCounter.Set(int64(r.options.Concurrency))
+	// Set free resources counter.
+	freeCPUCounter.Set(int64(r.options.MCPU))
 
 	// Create and fill container pool.
 	r.containerPool = make(map[string]chan *Container)
@@ -560,11 +598,12 @@ func (r *DockerRunner) StopPool() {
 	}
 
 	r.OnContainerRemoved(nil)
-	r.OnSlotReady(nil)
+	r.OnRunDone(nil)
 
 	r.setRunning(false)
 	logrus.Info("Stopping pool")
-	freeSlotsCounter.Set(0) // Reset free slots counter.
+	// Reset free resources counter.
+	freeCPUCounter.Set(0)
 
 	// Wait for all tasks to be done and cleanup all containers.
 	r.taskWaitGroup.Wait()
@@ -603,23 +642,34 @@ func (r *DockerRunner) Shutdown() {
 	r.containerCache.StopJanitor()
 }
 
-func (r *DockerRunner) getContainer(runtime, sourceHash, environment, containerHash string) (cont *Container, fromCache bool, err error) {
+func (r *DockerRunner) getContainer(runtime, sourceHash, environment, containerHash string, weight uint) (cont *Container, fromCache bool, err error) {
 	// Try to get a container from cache.
 	cacheVal := r.containerCache.Pop(containerHash)
 	if cacheVal != nil {
 		cont = cacheVal.(*Container)
-		fromCache = true
-		return
+		return cont, true, nil
 	}
 
 	// Fallback to pool.
 	cont = <-r.containerPool[runtime]
 
+	// Set CPU/Memory resources if using higher weight.
+	if weight > 1 {
+		ctx, cancel := context.WithTimeout(context.Background(), dockerTimeout)
+		defer cancel()
+		if err = r.dockerMgr.ContainerUpdate(ctx, cont.ID, docker.Constraints{
+			CPULimit:    int64(weight) * r.options.Constraints.CPULimit,
+			MemoryLimit: int64(weight) * r.options.Constraints.MemoryLimit,
+		}); err != nil {
+			return cont, false, err
+		}
+	}
+
 	// Linking sources.
 	logger := logrus.WithFields(logrus.Fields{"container": cont, "runtime": runtime})
 	if err = r.fileRepo.Link(cont.volumeKey, sourceHash, userMount); err != nil {
 		logger.WithError(err).WithField("sourceHash", sourceHash).Error("Linking error")
-		return
+		return cont, false, err
 	}
 
 	// Linking environment.
@@ -628,7 +678,7 @@ func (r *DockerRunner) getContainer(runtime, sourceHash, environment, containerH
 			logger.WithError(err).WithField("environment", environment).Error("Mounting error")
 		}
 	}
-	return
+	return cont, false, err
 }
 
 func (r *DockerRunner) createFreshContainer(ctx context.Context, runtime string) (*Container, error) {
@@ -646,11 +696,11 @@ func (r *DockerRunner) createFreshContainer(ctx context.Context, runtime string)
 	}
 
 	// Create container for given runtime with default constraints.
-	cont.ID, err = r.dockerMgr.CreateContainer(
+	cont.ID, err = r.dockerMgr.ContainerCreate(
 		ctx, rInfo.Image, rInfo.User, rInfo.Command,
 		rInfo.Environment,
 		map[string]string{containerLabel: r.poolID},
-		rInfo.Constraints,
+		r.options.Constraints,
 		[]string{volHostPath + ":/app:ro,rslave"},
 	)
 	if err != nil {
@@ -659,12 +709,12 @@ func (r *DockerRunner) createFreshContainer(ctx context.Context, runtime string)
 	logger = logger.WithField("container", cont)
 
 	// Start and attach to container (wrapper mode).
-	err = r.dockerMgr.StartContainer(ctx, cont.ID)
+	err = r.dockerMgr.ContainerStart(ctx, cont.ID)
 	if err != nil {
 		return cont, err
 	}
 
-	cont.resp, err = r.dockerMgr.AttachContainer(ctx, cont.ID)
+	cont.resp, err = r.dockerMgr.ContainerAttach(ctx, cont.ID)
 	if err != nil {
 		return cont, err
 	}
@@ -696,7 +746,7 @@ func (r *DockerRunner) cleanupContainer(cont *Container) {
 	// Stop the container.
 	if cont.ID != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), dockerTimeout)
-		if err := r.dockerMgr.StopContainer(ctx, cont.ID); err != nil {
+		if err := r.dockerMgr.ContainerStop(ctx, cont.ID); err != nil {
 			logger.WithError(err).Warn("Stopping container failed")
 		}
 		cancel()
@@ -741,11 +791,11 @@ func (r *DockerRunner) OnContainerRemoved(f ContainerRemovedHandler) {
 	r.muHandler.Unlock()
 }
 
-// OnSlotReady sets an (optional) function that when slot becomes ready.
+// OnRunDone sets an (optional) function that when run has finished.
 // Set to nil to disable.
-func (r *DockerRunner) OnSlotReady(f SlotReadyHandler) {
+func (r *DockerRunner) OnRunDone(f RunDoneHandler) {
 	r.muHandler.Lock()
-	r.onSlotReady = f
+	r.onRunDone = f
 	r.muHandler.Unlock()
 }
 

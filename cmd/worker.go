@@ -61,19 +61,23 @@ var workerCmd = cli.Command{
 			Name: "use-existing-images", Usage: "check if images exist and only download if they are missing",
 			EnvVar: "USE_EXISTING_IMAGES", Destination: &scriptOptions.UseExistingImages,
 		},
+
+		// Script Runner limits.
 		cli.UintFlag{
 			Name: "concurrency, c", Usage: "script concurrency",
 			EnvVar: "CONCURRENCY", Value: script.DefaultOptions.Concurrency, Destination: &scriptOptions.Concurrency,
 		},
-
-		// Script Runner limits.
-		cli.Uint64Flag{
-			Name: "iops", Usage: "script total iops limit",
-			EnvVar: "IOPS", Value: script.DefaultOptions.NodeIOPS, Destination: &scriptOptions.NodeIOPS,
+		cli.UintFlag{
+			Name: "cpu", Usage: "runner total cpu limit (in millicpus)",
+			EnvVar: "MCPU", Value: script.DefaultOptions.MCPU, Destination: &scriptOptions.MCPU,
 		},
 		cli.Uint64Flag{
+			Name: "iops", Usage: "runner total iops limit",
+			EnvVar: "IOPS", Value: script.DefaultOptions.NodeIOPS, Destination: &scriptOptions.NodeIOPS,
+		},
+		cli.Int64Flag{
 			Name: "memory-limit, m", Usage: "script memory limit",
-			EnvVar: "MEMORY", Value: script.DefaultOptions.MemoryLimit, Destination: &scriptOptions.MemoryLimit,
+			EnvVar: "MEMORY", Value: script.DefaultOptions.Constraints.MemoryLimit, Destination: &scriptOptions.Constraints.MemoryLimit,
 		},
 		cli.Uint64Flag{
 			Name: "memory-margin", Usage: "runner memory margin",
@@ -313,9 +317,9 @@ func startServer(
 		}
 		cancel()
 	})
-	runner.OnSlotReady(func() {
+	runner.OnRunDone(func(cont *script.Container, options *script.RunOptions) {
 		ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
-		if _, e := client.SlotReady(ctx, &lbpb.SlotReadyRequest{Id: poolID}); err != nil {
+		if _, e := client.ResourceRelease(ctx, &lbpb.ResourceReleaseRequest{Id: poolID, MCPU: options.MCPU, Memory: options.Memory}); err != nil {
 			errCh <- e
 		}
 		cancel()
@@ -326,10 +330,10 @@ func startServer(
 	defer cancel()
 	if _, err = client.Register(ctx,
 		&lbpb.RegisterRequest{
-			Id:          poolID,
-			Concurrency: uint32(runner.Options().Concurrency),
-			Port:        uint32(lis.Addr().(*net.TCPAddr).Port),
-			Memory:      syschecker.AvailableMemory(),
+			Id:     poolID,
+			Port:   uint32(lis.Addr().(*net.TCPAddr).Port),
+			MCPU:   uint32(scriptOptions.MCPU - uint(dockerOptions.ReservedCPU*1000)),
+			Memory: syschecker.AvailableMemory(),
 		}); err != nil {
 		return false, err
 	}
