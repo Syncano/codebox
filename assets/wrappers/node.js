@@ -132,12 +132,12 @@ class ScriptContext {
       return
     }
 
+    console.error(error)
     if (error.message === 'Script execution timed out.') {
       this.exitCode = 124
     } else {
       this.exitCode = 1
     }
-    throw error
   }
 
   sendResponse (final = false) {
@@ -215,7 +215,7 @@ function processScript (context) {
 var server = net.createServer(function (sock) {
   socket = sock
 
-  sock.on('data', function (chunk) {
+  sock.on('data', (chunk) => {
     sock.unref()
 
     if (data === undefined) {
@@ -261,9 +261,7 @@ var server = net.createServer(function (sock) {
     }
   })
 
-  sock.on('close', function () {
-    socket = undefined
-  })
+  sock.on('close', () => { socket = undefined })
 })
 
 function socketWrite (sock, mux, ...chunks) {
@@ -305,6 +303,10 @@ function setupAsyncMode (async) {
   asyncMode = async
 
   if (!asyncMode) {
+    process.on('uncaughtException', (error) => {
+      lastContext.handleError(error)
+    })
+
     // Restart reader before exit.
     process.on('beforeExit', (code) => {
       server.ref()
@@ -316,6 +318,6 @@ function setupAsyncMode (async) {
 // Start listening.
 let address = os.networkInterfaces()['eth0'][0].address
 server.listen(APP_PORT, address)
-server.on('listening', function () {
+server.on('listening', () => {
   origStdoutWrite.apply(process.stdout, [address + ':' + APP_PORT + '\n'])
 })
