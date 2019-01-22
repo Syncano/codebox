@@ -12,42 +12,44 @@ const MUX_STDERR = 2
 const MUX_RESPONSE = 3
 const SCRIPT_FUNC = new vm.Script(`
 {
-  let __f = __func({
-      args: ARGS,
-      meta: META,
-      config: CONFIG,
-      HttpResponse,
-      setResponse,
-  })
-  if (__f instanceof Promise) {
-    __f.then(function (r) {
-      if (r instanceof HttpResponse) {
-        setResponse(r)
-      }
+  let __f
+
+  try {
+    __f = __func({
+        args: ARGS,
+        meta: META,
+        config: CONFIG,
+        HttpResponse,
+        setResponse,
     })
-  } else if (__f instanceof HttpResponse) {
-    setResponse(__f)
+  } catch (error) {
+    __script.handleError(error)
   }
+
+  if (__f instanceof Promise) {
+    __f.catch(function (error) {
+      __script.handleError(error)
+    })
+
+    __f.then(function (r) {
+      __script.setResponse(r)
+      __script.sendResponse()
+    })
+
+  } else {
+    __script.setResponse(__f)
+    __script.sendResponse()
+}
 }`)
 
-let outputResponse
-let socket
+let lastContext
 let script
 let scriptFunc
-let scriptContext = {
-  APP_PATH,
-  ENV_PATH,
-  HttpResponse,
-  setResponse,
-  exports,
-  require,
-  module,
-  __filename,
-  __dirname
-}
+let socket
 let data
 let dataCursor
 let origStdoutWrite
+let asyncMode
 
 // Patch process.exit.
 function ExitError (code) {
@@ -59,51 +61,122 @@ process.exit = function (code) {
   throw new ExitError(code)
 }
 
-// Inject globals to script context.
-for (let attrname in global) {
-  scriptContext[attrname] = global[attrname]
-  scriptContext['global'] = scriptContext
+// Patch process stdout/stderr write.
+origStdoutWrite = process.stdout.write
+process.stdout.write = streamWrite(MUX_STDOUT)
+process.stderr.write = streamWrite(MUX_STDERR)
+
+let commonCtx = {
+  APP_PATH,
+  ENV_PATH,
+  __filename,
+  __dirname,
+
+  // globals
+  exports,
+  process,
+  Buffer,
+  clearImmediate,
+  clearInterval,
+  clearTimeout,
+  setImmediate,
+  setInterval,
+  setTimeout,
+  console,
+  module,
+  require
 }
+
+// Inject globals to common context.
+commonCtx['global'] = commonCtx
 
 // HttpResponse class.
-function HttpResponse (statusCode, content, contentType, headers) {
-  this.statusCode = statusCode || 200
-  this.content = content || ''
-  this.contentType = contentType || 'application/json'
-  this.headers = headers || {}
-}
-
-HttpResponse.prototype.json = function () {
-  for (let k in this.headers) {
-    this.headers[k] = String(this.headers[k])
+class HttpResponse {
+  constructor (statusCode, content, contentType, headers) {
+    this.statusCode = statusCode || 200
+    this.content = content || ''
+    this.contentType = contentType || 'application/json'
+    this.headers = headers || {}
   }
-  return JSON.stringify({
-    sc: parseInt(this.statusCode),
-    ct: String(this.contentType),
-    h: this.headers
-  })
-}
 
-function setResponse (response) {
-  outputResponse = response
+  json () {
+    for (let k in this.headers) {
+      this.headers[k] = String(this.headers[k])
+    }
+    return JSON.stringify({
+      sc: parseInt(this.statusCode),
+      ct: String(this.contentType),
+      h: this.headers
+    })
+  }
+}
+commonCtx['HttpResponse'] = HttpResponse
+
+// ScriptContext class.
+class ScriptContext {
+  constructor (responseMux = MUX_RESPONSE) {
+    this.outputResponse = null
+    this.exitCode = null
+    this.responseMux = responseMux
+  }
+
+  setResponse (response) {
+    if (response instanceof HttpResponse) {
+      this.outputResponse = response
+    }
+  }
+
+  handleError (error) {
+    if (error instanceof ExitError) {
+      this.exitCode = error.code
+      return
+    }
+
+    if (error.message === 'Script execution timed out.') {
+      this.exitCode = 124
+    } else {
+      this.exitCode = 1
+    }
+    throw error
+  }
+
+  sendResponse (final = false) {
+    if (!final && !asyncMode) {
+      return
+    }
+
+    let exitCode = process.exitCode
+    if (this.exitCode !== null) {
+      exitCode = this.exitCode
+    }
+
+    if (this.outputResponse !== null && this.outputResponse instanceof HttpResponse) {
+      let json = this.outputResponse.json()
+      let jsonLen = Buffer.allocUnsafe(4)
+      jsonLen.writeUInt32LE(Buffer.byteLength(json))
+      socketWrite(socket, this.responseMux, String.fromCharCode(exitCode), jsonLen, json, this.outputResponse.content)
+    } else {
+      socketWrite(socket, this.responseMux, String.fromCharCode(exitCode))
+    }
+  }
 }
 
 // Main process script function.
 function processScript (context) {
   const timeout = context._timeout
-  let ctx = {}
-  process.exitCode = 0
-  outputResponse = null
 
   // Create script and context if it's the first run.
   if (script === undefined) {
+    // Setup async mode.
+    setupAsyncMode(context._async)
+
     const entryPoint = context._entryPoint
     const scriptFilename = path.join(APP_PATH, entryPoint)
     const source = fs.readFileSync(scriptFilename)
 
-    scriptContext.module.filename = scriptFilename
-    scriptContext.__filename = scriptFilename
-    scriptContext.__dirname = path.dirname(scriptFilename)
+    commonCtx.module.filename = scriptFilename
+    commonCtx.__filename = scriptFilename
+    commonCtx.__dirname = path.dirname(scriptFilename)
 
     script = new vm.Script(source, {
       filename: entryPoint
@@ -111,9 +184,7 @@ function processScript (context) {
   }
 
   // Prepare context.
-  for (let key in scriptContext) {
-    ctx[key] = scriptContext[key]
-  }
+  let ctx = Object.assign({}, commonCtx)
 
   for (let key in context) {
     if (key.startsWith('_')) {
@@ -121,25 +192,23 @@ function processScript (context) {
     }
     ctx[key] = context[key]
   }
+  ctx['__script'] = lastContext = new ScriptContext(ctx._response)
+  // For backwards compatibility.
+  ctx['setResponse'] = (r) => lastContext.setResponse(r)
 
+  // Run script.
+  let opts = { timeout: timeout / 1e6 }
   if (scriptFunc === undefined) {
-    // Start script.
-    let ret = script.runInNewContext(ctx, {
-      timeout: timeout / 1e6
-    })
+    let ret = script.runInNewContext(ctx, opts)
     if (typeof (ret) === 'function') {
       scriptFunc = ret
-      ctx['__func'] = scriptContext['__func'] = scriptFunc
-      processScriptFunc(ctx)
+      ctx['__func'] = commonCtx['__func'] = scriptFunc
+      SCRIPT_FUNC.runInNewContext(ctx, opts)
     }
   } else {
     // Run script function if it's defined.
-    processScriptFunc(ctx)
+    SCRIPT_FUNC.runInNewContext(ctx, opts)
   }
-}
-
-function processScriptFunc (ctx) {
-  SCRIPT_FUNC.runInNewContext(ctx)
 }
 
 // Create server and process data on it.
@@ -163,9 +232,8 @@ var server = net.createServer(function (sock) {
 
     // Read context JSON.
     let contextSize = data.readUInt32LE(4)
-    let context
     let contextJSON = data.slice(8, 8 + contextSize)
-    context = JSON.parse(contextJSON)
+    let context = JSON.parse(contextJSON)
 
     // Process files into context.ARGS.
     if (context._files) {
@@ -187,7 +255,9 @@ var server = net.createServer(function (sock) {
     try {
       processScript(context)
     } finally {
-      server.unref()
+      if (!asyncMode) {
+        server.unref()
+      }
     }
   })
 
@@ -220,47 +290,28 @@ function socketWrite (sock, mux, ...chunks) {
   }
 }
 
-// Patch process.stderr and stdout.
-origStdoutWrite = process.stdout.write
-process.stdout.write = function () {
-  if (arguments.length > 0) {
-    socketWrite(socket, MUX_STDOUT, arguments[0])
-  }
-}
-process.stderr.write = function () {
-  if (arguments.length > 0) {
-    socketWrite(socket, MUX_STDERR, arguments[0])
+function streamWrite (mux) {
+  return function () {
+    if (arguments.length > 0) {
+      socketWrite(socket, mux, arguments[0])
+    }
   }
 }
 
-// Process uncaught exception.
-process.on('uncaughtException', (e) => {
-  if (e instanceof ExitError) {
-    process.exitCode = e.code
+function setupAsyncMode (async) {
+  if (async === asyncMode) {
     return
   }
+  asyncMode = async
 
-  console.error(e)
-  if (e.message === 'Script execution timed out.') {
-    process.exitCode = 124
-  } else {
-    process.exitCode = 1
+  if (!asyncMode) {
+    // Restart reader before exit.
+    process.on('beforeExit', (code) => {
+      server.ref()
+      lastContext.sendResponse(true)
+    })
   }
-})
-
-// Restart reader before exit.
-process.on('beforeExit', (code) => {
-  server.ref()
-
-  if (outputResponse !== null && outputResponse instanceof HttpResponse) {
-    let json = outputResponse.json()
-    let jsonLen = Buffer.allocUnsafe(4)
-    jsonLen.writeUInt32LE(Buffer.byteLength(json))
-    socketWrite(socket, MUX_RESPONSE, String.fromCharCode(code), jsonLen, json, outputResponse.content)
-  } else {
-    socketWrite(socket, MUX_RESPONSE, String.fromCharCode(code))
-  }
-})
+}
 
 // Start listening.
 let address = os.networkInterfaces()['eth0'][0].address
