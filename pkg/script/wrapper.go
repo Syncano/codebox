@@ -28,12 +28,14 @@ type contextFile struct {
 }
 
 type wrapperContext struct {
-	EntryPoint string           `json:"_entryPoint"`
-	Timeout    time.Duration    `json:"_timeout"`
-	Files      []contextFile    `json:"_files"`
-	Args       *json.RawMessage `json:"ARGS"`
-	Config     *json.RawMessage `json:"CONFIG"`
-	Meta       *json.RawMessage `json:"META"`
+	Async       bool             `json:"_async"`
+	MuxResponse int              `json:"_response"`
+	EntryPoint  string           `json:"_entryPoint"`
+	Timeout     time.Duration    `json:"_timeout"`
+	Files       []contextFile    `json:"_files"`
+	Args        *json.RawMessage `json:"ARGS"`
+	Config      *json.RawMessage `json:"CONFIG"`
+	Meta        *json.RawMessage `json:"META"`
 }
 
 // SupportedRuntimes defines info and constraints of all runtimes.

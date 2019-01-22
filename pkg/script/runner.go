@@ -330,12 +330,14 @@ func (r *DockerRunner) processRun(ctx context.Context, logger logrus.FieldLogger
 
 	// Prepare context for container.
 	scriptContext := wrapperContext{
-		EntryPoint: options.EntryPoint,
-		Timeout:    options.Timeout,
-		Args:       (*json.RawMessage)(&options.Args),
-		Meta:       (*json.RawMessage)(&options.Meta),
-		Config:     (*json.RawMessage)(&options.Config),
-		Files:      files,
+		Async:       false,
+		MuxResponse: MuxResponse,
+		EntryPoint:  options.EntryPoint,
+		Timeout:     options.Timeout,
+		Args:        (*json.RawMessage)(&options.Args),
+		Meta:        (*json.RawMessage)(&options.Meta),
+		Config:      (*json.RawMessage)(&options.Config),
+		Files:       files,
 	}
 	scriptContextBytes, err := json.Marshal(scriptContext)
 	util.Must(err)
