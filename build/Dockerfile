@@ -35,7 +35,7 @@ RUN set -ex \
         ca-certificates
 
 COPY codebox-static /usr/local/bin/codebox
-COPY codewrapper-static ${WRAPPERPATH}
+COPY codewrapper ${WRAPPERPATH}
 
 WORKDIR /home/codebox
 USER codebox
