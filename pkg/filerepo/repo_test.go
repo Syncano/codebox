@@ -276,7 +276,7 @@ func TestRepo(t *testing.T) {
 		Convey("Link creates a link inside volume to resource", func() {
 			sc.On("GetDiskUsage", dir).Return(float64(0), uint64(math.MaxUint64))
 			lockCh, storeKey := repo.StoreLock("reskey")
-			repo.Store("reskey", storeKey, bytes.NewReader([]byte("abc")), "name", os.ModeCharDevice)
+			repo.Store("reskey", storeKey, bytes.NewReader([]byte("abc")), "name", os.ModePerm)
 			repo.StoreUnlock("reskey", storeKey, lockCh, true)
 			volKey, path, e := repo.CreateVolume()
 			So(e, ShouldBeNil)
@@ -378,7 +378,7 @@ func TestRepoWithMocks(t *testing.T) {
 			fs.On("Create", mock.Anything).Return(file, nil)
 			fs.On("Chmod", mock.Anything, mock.Anything).Return(err)
 
-			e := repo.storeFile("path", &mockReader{io.EOF}, "name", os.ModeCharDevice)
+			e := repo.storeFile("path", &mockReader{io.EOF}, "name", os.ModePerm)
 			So(e, ShouldEqual, err)
 
 			file.Close()
