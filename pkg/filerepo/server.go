@@ -3,6 +3,7 @@ package filerepo
 import (
 	"context"
 	"io"
+	"os"
 
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc/codes"
@@ -131,7 +132,7 @@ func (s *Server) processChunkUpload(key, storeKey, chunkName string, chunkCh cha
 		chunkCh = make(chan []byte, 1)
 
 		go func() {
-			_, err := s.Repo.Store(key, storeKey, &util.ChannelReader{Channel: chunkCh}, chunk.GetName())
+			_, err := s.Repo.Store(key, storeKey, &util.ChannelReader{Channel: chunkCh}, chunk.GetName(), os.ModePerm)
 			if err != nil {
 				err = s.ParseError(err)
 				s.Repo.Delete(key)

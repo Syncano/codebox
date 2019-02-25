@@ -12,6 +12,8 @@ services:
       - /go/src/github.com/Syncano/codebox/vendor
     depends_on:
       - dind
+    environment:
+      - WRAPPERPATH=/go/src/github.com/Syncano/codebox/build/codewrapper-static
 
   dind:
     privileged: true

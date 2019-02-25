@@ -24,9 +24,9 @@ func GenerateRandomString(n int) string {
 	return string(b)
 }
 
-// GenerateKey creates random string with length=40.
+// GenerateKey creates random string with length=32.
 func GenerateKey() string {
-	return GenerateRandomString(40)
+	return GenerateRandomString(32)
 }
 
 // Retry retries f() and sleeps between retries.

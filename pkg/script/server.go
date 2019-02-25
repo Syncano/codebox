@@ -120,6 +120,7 @@ func (s *Server) Run(stream pb.ScriptRunner_RunServer) error {
 			OutputLimit: opts.GetOutputLimit(),
 			Timeout:     time.Duration(opts.GetTimeout()) * time.Millisecond,
 			MCPU:        opts.GetMCPU(),
+			Async:       opts.GetAsync(),
 
 			Args:   args,
 			Meta:   opts.GetMeta(),
@@ -171,14 +172,15 @@ func (s *Server) sendResponse(stream pb.ScriptRunner_RunServer, ret *Result) err
 
 	responses := []*pb.RunResponse{
 		{
-			Code:     int32(ret.Code),
-			Stdout:   ret.Stdout,
-			Stderr:   ret.Stderr,
-			Response: httpResponse,
-			Took:     resTook,
-			Time:     time.Now().UnixNano(),
-			Cached:   ret.Cached,
-			Weight:   uint32(ret.Weight),
+			ContainerID: ret.ContainerID,
+			Code:        int32(ret.Code),
+			Stdout:      ret.Stdout,
+			Stderr:      ret.Stderr,
+			Response:    httpResponse,
+			Took:        resTook,
+			Time:        time.Now().UnixNano(),
+			Cached:      ret.Cached,
+			Weight:      uint32(ret.Weight),
 		},
 	}
 

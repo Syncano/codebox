@@ -202,7 +202,7 @@ func (s *Server) Run(stream pb.ScriptRunner_RunServer) error {
 	return s.processRun(stream, runMeta, scriptMeta, scriptChunk)
 }
 
-func (s *Server) processRun(stream pb.ScriptRunner_RunServer, runMeta *pb.RunRequest_MetaMessage,
+func (s *Server) processRun(stream pb.ScriptRunner_RunServer, runMeta *pb.RunRequest_MetaMessage, // nolint: gocyclo
 	scriptMeta *scriptpb.RunRequest_MetaMessage, scriptChunk []*scriptpb.RunRequest_ChunkMessage) error {
 
 	ctx := stream.Context()
@@ -226,37 +226,46 @@ func (s *Server) processRun(stream pb.ScriptRunner_RunServer, runMeta *pb.RunReq
 		defer s.limiter.Unlock(runMeta.ConcurrencyKey, int(runMeta.ConcurrencyLimit))
 	}
 
-	script := ScriptInfo{SourceHash: scriptMeta.SourceHash, Environment: scriptMeta.Environment, UserID: scriptMeta.UserID}
+	script := ScriptInfo{
+		SourceHash:  scriptMeta.SourceHash,
+		Environment: scriptMeta.Environment,
+		UserID:      scriptMeta.UserID,
+		Async:       scriptMeta.GetOptions().GetAsync() > 0,
+	}
 	retry := 0
 
 	if runErr := util.RetryWithCritical(s.options.WorkerRetry, workerRetrySleep, func() (bool, error) {
 		retry++
-		worker, fromCache := s.grabWorker(script)
-		if worker == nil {
-			return true, ErrNoWorkersAvailable
-		}
-		logger = logger.WithFields(logrus.Fields{"worker": worker, "script": &script, "try": retry, "fromCache": fromCache})
 
 		// Check and refresh source and environment.
 		if s.fileRepo.Get(scriptMeta.SourceHash) == "" || (scriptMeta.Environment != "" && s.fileRepo.Get(scriptMeta.Environment) == "") {
 			return true, ErrSourceNotAvailable
 		}
 
-		resCh, err := s.processWorkerRun(ctx, logger, worker, scriptMeta, scriptChunk)
+		// Grab worker.
+		cont, fromCache := s.grabWorker(script)
+		if cont == nil {
+			return true, ErrNoWorkersAvailable
+		}
+		logger = logger.WithFields(logrus.Fields{"container": cont, "script": &script, "try": retry, "fromCache": fromCache})
+
+		resCh, err := s.processWorkerRun(ctx, logger, cont, scriptMeta, scriptChunk)
 		if err != nil {
 			logger.WithError(err).Warn("Worker processing Run failed")
 			// Release worker resources as it failed prematurely.
-			worker.Release(script.MCPU, script.Memory, true)
-			s.handleWorkerError(worker, err)
+			cont.Release(script.MCPU, script.Memory)
+			s.handleWorkerError(cont, err)
 			return err == context.Canceled, err
 		}
-		worker.ResetErrorCount()
+		cont.ResetErrorCount()
 
-		cached := false
+		var response *scriptpb.RunResponse
 		for res := range resCh {
 			switch v := res.(type) {
 			case *scriptpb.RunResponse:
-				cached = v.Cached
+				if response == nil {
+					response = v
+				}
 				if err = stream.Send(v); err != nil {
 					logger.WithField("res", v).Warn("Sending data error")
 					return true, err
@@ -265,15 +274,15 @@ func (s *Server) processRun(stream pb.ScriptRunner_RunServer, runMeta *pb.RunReq
 			case error:
 				// Retry on worker error.
 				logger.WithError(v).Warn("Worker error")
-				s.handleWorkerError(worker, v)
+				s.handleWorkerError(cont, v)
 				return false, v
 			}
 		}
 
-		if cached {
+		if response != nil && response.Cached {
 			// Add container to worker cache if we got any response.
 			s.mu.Lock()
-			worker.AddCache(script, s.workerContainerCache)
+			cont.AddCache(s.workerContainerCache, script, response.ContainerID, cont)
 			s.mu.Unlock()
 		}
 
@@ -286,15 +295,15 @@ func (s *Server) processRun(stream pb.ScriptRunner_RunServer, runMeta *pb.RunReq
 	return nil
 }
 
-func (s *Server) uploadResource(ctx context.Context, logger logrus.FieldLogger, worker *Worker, key string) error {
-	exists, err := worker.Exists(ctx, key)
+func (s *Server) uploadResource(ctx context.Context, logger logrus.FieldLogger, cont *WorkerContainer, key string) error {
+	exists, err := cont.Exists(ctx, key)
 	if err != nil {
 		logger.WithError(err).Warn("Worker grpc:repo:Exists failed")
 		return err
 	}
 
 	if !exists.Ok {
-		if err := worker.Upload(ctx, s.fileRepo.GetFS(), s.fileRepo.Get(key), key); err != nil {
+		if err := cont.Upload(ctx, s.fileRepo.GetFS(), s.fileRepo.Get(key), key); err != nil {
 			logger.WithError(err).Warn("Worker grpc:repo:Upload failed")
 			return err
 		}
@@ -303,25 +312,26 @@ func (s *Server) uploadResource(ctx context.Context, logger logrus.FieldLogger, 
 
 }
 
-func (s *Server) processWorkerRun(ctx context.Context, logger logrus.FieldLogger, worker *Worker,
+func (s *Server) processWorkerRun(ctx context.Context, logger logrus.FieldLogger, cont *WorkerContainer,
 	meta *scriptpb.RunRequest_MetaMessage, chunk []*scriptpb.RunRequest_ChunkMessage) (<-chan interface{}, error) {
 
 	for _, key := range []string{meta.SourceHash, meta.Environment} {
 		if key != "" {
-			if err := s.uploadResource(ctx, logger, worker, key); err != nil {
+			if err := s.uploadResource(ctx, logger, cont, key); err != nil {
 				return nil, err
 			}
 		}
 	}
 
-	return worker.Run(ctx, meta, chunk)
+	return cont.Run(ctx, meta, chunk)
 }
 
 // grabWorker finds worker with container in cache and highest amount of free CPU.
 // Fallback to any worker with highest amount of free CPU.
-func (s *Server) grabWorker(script ScriptInfo) (*Worker, bool) {
+func (s *Server) grabWorker(script ScriptInfo) (*WorkerContainer, bool) { // nolint: gocyclo
 	var (
-		worker, workerMax   *Worker
+		workerMax           *Worker
+		container           *WorkerContainer
 		fromCache           bool
 		freeCPU, freeCPUMax int32
 	)
@@ -329,51 +339,48 @@ func (s *Server) grabWorker(script ScriptInfo) (*Worker, bool) {
 	s.mu.Lock()
 	for {
 		freeCPU = 0
-		if set, ok := s.workerContainerCache[script]; ok {
-
-			for _, v := range set.Values() {
-				w := v.(*Worker)
+		if m, ok := s.workerContainerCache[script]; ok {
+			for _, w := range m {
 				cpu := w.FreeCPU()
 
-				if (worker == nil || cpu > freeCPU) && s.workers.Contains(w.ID) && w.Alive() {
+				if (container == nil || (cpu > freeCPU || w.Conns() > 1)) && s.workers.Contains(w.ID) && w.Alive() {
 					fromCache = true
-					worker = w
+					container = w
 					freeCPU = cpu
 				}
 			}
 		}
 
-		// If no worker with cached container found or if there is a big discrepancy between worker with max free CPU
-		// and worker with cached container - use that instead to balance the load.
-		workerMax, freeCPUMax = s.findWorkerWithMaxFreeCPU()
-		if worker == nil || freeCPUMax > 2*freeCPU {
-			fromCache = false
-			worker, freeCPU = workerMax, freeCPUMax
+		// If no worker with cached container found - use container with max free cpu instead.
+		if container == nil {
+			workerMax, freeCPUMax = s.findWorkerWithMaxFreeCPU()
+			if workerMax != nil {
+				fromCache = false
+				container = &WorkerContainer{Worker: workerMax}
+				freeCPU = freeCPUMax
+			}
 		}
 
 		// If still cannot find a worker - abandon all hope.
-		if worker == nil {
+		if container == nil {
 			break
 		}
 		// If CPU requirements are met, require reservation to be successful.
 		require := freeCPU > int32(script.MCPU)
-		if s.workers.Get(worker.ID) != nil && worker.Reserve(script.MCPU, script.Memory, require) {
-			if fromCache {
-				worker.RemoveCache(script, s.workerContainerCache)
-			}
+		if s.workers.Get(container.ID) != nil && container.Reserve(script.MCPU, script.Memory, require) {
 			break
 		}
 	}
 	s.mu.Unlock()
-	return worker, fromCache
+	return container, fromCache
 }
 
-func (s *Server) handleWorkerError(worker *Worker, err error) {
+func (s *Server) handleWorkerError(cont *WorkerContainer, err error) {
 	if err == context.Canceled {
 		return
 	}
-	if worker.IncreaseErrorCount() >= s.options.WorkerErrorThreshold {
-		s.workers.Delete(worker.ID)
+	if cont.IncreaseErrorCount() >= s.options.WorkerErrorThreshold {
+		s.workers.Delete(cont.ID)
 	}
 }
 
@@ -387,7 +394,7 @@ func (s *Server) ResourceRelease(ctx context.Context, in *pb.ResourceReleaseRequ
 		return nil, ErrUnknownWorkerID
 	}
 
-	cur.(*Worker).Release(in.MCPU, in.Memory, false)
+	cur.(*Worker).Release(in.MCPU, in.Memory)
 	return &pb.ResourceReleaseResponse{}, nil
 }
 
@@ -403,7 +410,7 @@ func (s *Server) ContainerRemoved(ctx context.Context, in *pb.ContainerRemovedRe
 	}
 
 	s.mu.Lock()
-	cur.(*Worker).RemoveCache(ci, s.workerContainerCache)
+	cur.(*Worker).RemoveCache(s.workerContainerCache, ci, in.ContainerID)
 	s.mu.Unlock()
 	return &pb.ContainerRemovedResponse{}, nil
 }

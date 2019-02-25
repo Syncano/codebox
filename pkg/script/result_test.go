@@ -1,25 +1,24 @@
-package script
+package script_test
 
 import (
-	"bytes"
 	"context"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net"
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	. "github.com/smartystreets/goconvey/convey"
+
+	"github.com/Syncano/codebox/pkg/script"
+	"github.com/Syncano/codebox/pkg/util"
 )
 
 func TestResultParsing(t *testing.T) {
 	Convey("Given no custom response, Parse sets it to null", t, func() {
 		data := []byte{50}
-		res := &Result{}
+		res := &script.Result{}
 		e := res.Parse(data, 1024, nil)
 		So(e, ShouldBeNil)
 		So(res.Code, ShouldEqual, 50)
@@ -27,7 +26,7 @@ func TestResultParsing(t *testing.T) {
 	})
 	Convey("Given valid custom response, Parse parses struct correctly", t, func() {
 		data := []byte("\x32" + "\x30\x00\x00\x00" + `{"sc":200,"ct":"text/some-html","h":{"abc":"1"}}abc`)
-		res := &Result{}
+		res := &script.Result{}
 		e := res.Parse(data, 1024, nil)
 		So(e, ShouldBeNil)
 		So(res.Code, ShouldEqual, 50)
@@ -58,7 +57,7 @@ func TestResultParsing(t *testing.T) {
 			buf := make([]byte, 4)
 			binary.LittleEndian.PutUint32(buf, uint32(len(resp)))
 			data := append(append([]byte("2"), buf...), resp...)
-			res := &Result{}
+			res := &script.Result{}
 			e := res.Parse(data, 1024, nil)
 			So(e, ShouldBeNil)
 		}
@@ -88,26 +87,26 @@ func TestResultParsing(t *testing.T) {
 			buf := make([]byte, 4)
 			binary.LittleEndian.PutUint32(buf, uint32(len(resp)))
 			data := append(append([]byte{1}, buf...), resp...)
-			res := &Result{}
+			res := &script.Result{}
 			e := res.Parse(data, 1024, nil)
 			So(res.Code, ShouldEqual, 1)
 			So(e, ShouldBeNil)
-			So(res.Stderr, ShouldResemble, ResponseValidationErrorText)
+			So(res.Stderr, ShouldResemble, script.ResponseValidationErrorText)
 		}
 		for _, data := range [][]byte{
 			[]byte(`2` + "\x30\x00\x00"),
 			[]byte(`2` + "\x30\x00\x00\x00" + `{"sc":200}abc`),
 			[]byte(`2` + "\x0f\x00\x00\x00" + `{"h":{"key":1}}`),
 		} {
-			res := &Result{}
+			res := &script.Result{}
 			e := res.Parse(data, 1024, nil)
 			So(res.Code, ShouldEqual, 1)
-			So(e, ShouldEqual, ErrIncorrectCustomResponse)
+			So(e, ShouldEqual, script.ErrIncorrectCustomResponse)
 		}
 	})
 	Convey("Given deadline exceeded process error, Parse sets code to 124", t, func() {
 		data := []byte{1}
-		res := &Result{}
+		res := &script.Result{}
 		e := res.Parse(data, 1024, context.DeadlineExceeded)
 		So(e, ShouldBeNil)
 		So(res.Code, ShouldEqual, 124)
@@ -115,68 +114,22 @@ func TestResultParsing(t *testing.T) {
 	})
 	Convey("Given limit reached error, Parse sets code to 1", t, func() {
 		data := []byte{1}
-		res := &Result{}
-		e := res.Parse(data, 1024, ErrLimitReached)
+		res := &script.Result{}
+		e := res.Parse(data, 1024, util.ErrLimitReached)
 		So(e, ShouldBeNil)
 		So(res.Code, ShouldEqual, 1)
-		So(res.Stderr, ShouldResemble, LimitReachedText)
+		So(res.Stderr, ShouldResemble, script.LimitReachedText)
 		So(res.Response, ShouldBeNil)
 	})
 	Convey("Given too large streams, Parse trims them and sets code to 1", t, func() {
 		data := []byte{1}
 		stdout := []byte(strings.Repeat("a", 2048))
-		res := &Result{Stdout: stdout}
+		res := &script.Result{Stdout: stdout}
 		e := res.Parse(data, 1024, nil)
 		So(e, ShouldBeNil)
 		So(res.Code, ShouldEqual, 1)
 		So(res.Stdout, ShouldResemble, stdout[:1024])
-		So(res.Stderr, ShouldResemble, LimitReachedText)
+		So(res.Stderr, ShouldResemble, script.LimitReachedText)
 		So(res.Response, ShouldBeNil)
-	})
-}
-
-func TestMuxParsing(t *testing.T) {
-	Convey("Given net server,", t, func() {
-		l, _ := net.Listen("tcp", "127.0.0.1:3000")
-		defer l.Close()
-
-		retCh := make(chan map[byte]*bytes.Buffer, 1)
-		errCh := make(chan error, 1)
-		readMuxConn := func(ctx context.Context, limit uint32) {
-			conn, _ := net.Dial("tcp", "127.0.0.1:3000")
-			ret, err := readMux(ctx, conn, limit)
-			retCh <- ret
-			errCh <- err
-		}
-
-		Convey("readMux respects context", func() {
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
-			go readMuxConn(ctx, 0)
-			So(<-errCh, ShouldResemble, context.DeadlineExceeded)
-			cancel()
-		})
-		Convey("readMux respects limit and trims the output", func() {
-			go readMuxConn(context.Background(), 1)
-			conn, _ := l.Accept()
-			conn.Write([]byte{MuxStdout, 2, 0, 0, 0, 0, 0})
-			So(<-errCh, ShouldResemble, ErrLimitReached)
-			ret := <-retCh
-			So(len(ret[MuxStdout].Bytes()), ShouldEqual, 1)
-		})
-		Convey("readMux respects limit and trims the output for expected mux as well", func() {
-			go readMuxConn(context.Background(), 1)
-			conn, _ := l.Accept()
-			conn.Write([]byte{MuxResponse, 2, 0, 0, 0, 0, 0})
-			So(<-errCh, ShouldResemble, ErrLimitReached)
-			ret := <-retCh
-			So(len(ret[MuxResponse].Bytes()), ShouldEqual, 1)
-		})
-		Convey("readMux propagates unexpected eof error", func() {
-			go readMuxConn(context.Background(), 0)
-			conn, _ := l.Accept()
-			conn.Write([]byte{MuxStdout, 2, 0, 0, 0, 0})
-			conn.Close()
-			So(<-errCh, ShouldResemble, io.ErrUnexpectedEOF)
-		})
 	})
 }

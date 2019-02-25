@@ -62,6 +62,8 @@ type uwsgiRunPayload struct {
 	Runtime          string  `json:"runtime_name"`
 	ConcurrencyLimit int32   `json:"concurrency_limit"`
 	Timeout          float64 `json:"timeout"`
+	Async            uint32  `json:"async"`
+	MCPU             uint32  `json:"mcpu"`
 }
 
 func createCacheKey(schema, endpointName, hash string) string {
@@ -89,7 +91,12 @@ func writeTraceResponse(w http.ResponseWriter, trace *ScriptTrace) {
 		return
 	}
 
+	// Clear weight before marshaling.
+	tmp := trace.Weight
+	trace.Weight = 0
 	ret, _ := json.Marshal(trace)
+	trace.Weight = tmp
+
 	httpCode, ok := statusToHTTPCode[trace.Status]
 	if ok {
 		w.WriteHeader(httpCode)
@@ -219,6 +226,8 @@ func (s *Server) prepareRequest(r *http.Request, payload *uwsgiPayload) (*broker
 							EntryPoint:  payload.EntryPoint,
 							OutputLimit: payload.OutputLimit,
 							Timeout:     int64(payload.Run.Timeout * 1000),
+							Async:       payload.Run.Async,
+							MCPU:        payload.Run.MCPU,
 							Args:        []byte(payload.Run.Args),
 							Config:      []byte(payload.Run.Config),
 							Meta:        []byte(payload.Run.Meta),

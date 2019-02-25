@@ -203,13 +203,13 @@ func TestManagerMethods(t *testing.T) {
 				cli.On("ContainerCreate", context.Background(), mock.Anything, mock.Anything, mock.Anything, "").Return(
 					container.ContainerCreateCreatedBody{ID: "someid"}, nil)
 
-				create := func(constraints Constraints) (string, error, *container.HostConfig) {
+				create := func(constraints *Constraints) (string, error, *container.HostConfig) {
 					id, e := m.ContainerCreate(context.Background(), "image", "user", []string{"cmd"}, []string{"env"},
 						map[string]string{"label": "value"}, constraints, []string{"bind"})
 					return id, e, cli.Calls[0].Arguments.Get(2).(*container.HostConfig)
 				}
 				Convey("returns ID", func() {
-					id, e, hostConfig := create(Constraints{})
+					id, e, hostConfig := create(&Constraints{})
 					So(e, ShouldBeNil)
 					So(id, ShouldEqual, "someid")
 					So(hostConfig.Ulimits, ShouldBeNil)
@@ -217,7 +217,7 @@ func TestManagerMethods(t *testing.T) {
 					So(hostConfig.NetworkMode, ShouldBeEmpty)
 				})
 				Convey("sets up nofile limit", func() {
-					_, _, hostConfig := create(Constraints{NofileUlimit: 1000})
+					_, _, hostConfig := create(&Constraints{NofileUlimit: 1000})
 					So(hostConfig.Ulimits, ShouldResemble, []*units.Ulimit{{
 						Name: "nofile",
 						Soft: 1000,
@@ -226,12 +226,12 @@ func TestManagerMethods(t *testing.T) {
 				})
 				Convey("sets up storageopt", func() {
 					m.storageLimitSupported = true
-					_, _, hostConfig := create(Constraints{StorageLimit: "100M"})
+					_, _, hostConfig := create(&Constraints{StorageLimit: "100M"})
 					So(hostConfig.StorageOpt, ShouldResemble, map[string]string{"size": "100M"})
 				})
 				Convey("sets up network isolation", func() {
 					m.options.Network = "network"
-					_, _, hostConfig := create(Constraints{})
+					_, _, hostConfig := create(&Constraints{})
 					So(hostConfig.NetworkMode, ShouldEqual, "network")
 				})
 			})
@@ -240,7 +240,7 @@ func TestManagerMethods(t *testing.T) {
 				cli.On("ContainerCreate", context.Background(), mock.Anything, mock.Anything, mock.Anything, "").Return(
 					container.ContainerCreateCreatedBody{}, io.EOF)
 				_, e := m.ContainerCreate(context.Background(), "image", "user", []string{"cmd"}, []string{"cmd"},
-					map[string]string{"label": "value"}, Constraints{}, []string{"bind"})
+					map[string]string{"label": "value"}, &Constraints{}, []string{"bind"})
 				So(e, ShouldEqual, io.EOF)
 			})
 		})
@@ -277,14 +277,9 @@ func TestManagerMethods(t *testing.T) {
 			m.ContainerStop(context.Background(), "id")
 		})
 
-		Convey("ContainerErrorLog calls ContainerLogs", func() {
-			cli.On("ContainerLogs", context.Background(), "id", mock.Anything).Return(nil, nil)
-			m.ContainerErrorLog(context.Background(), "id")
-		})
-
 		Convey("ContainerUpdate calls ContainerUpdate", func() {
 			cli.On("ContainerUpdate", context.Background(), "id", mock.Anything).Return(containertypes.ContainerUpdateOKBody{}, nil)
-			m.ContainerUpdate(context.Background(), "id", Constraints{})
+			m.ContainerUpdate(context.Background(), "id", &Constraints{})
 		})
 
 		cli.AssertExpectations(t)

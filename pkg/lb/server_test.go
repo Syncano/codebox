@@ -88,6 +88,7 @@ func TestServerMethods(t *testing.T) {
 					stream.On("Recv").Return(validReq1, nil).Once()
 					stream.On("Recv").Return(validReq2, nil).Once()
 					stream.On("Recv").Return(nil, io.EOF).Once()
+					repo.On("Get", "hash").Return("/path")
 
 					e := s.Run(stream)
 					So(e, ShouldEqual, ErrNoWorkersAvailable)
@@ -277,24 +278,33 @@ func TestServerMethods(t *testing.T) {
 				s.workers.Set("id1", NewWorker("id1", net.TCPAddr{}, 2, 128))
 				s.workers.Set("id2", w2)
 
-				w2.AddCache(ci, s.workerContainerCache)
+				w2.AddCache(s.workerContainerCache, ci, "id2", &WorkerContainer{Worker: w2})
 				w, fromCache := s.grabWorker(ci)
 				So(w.ID, ShouldEqual, "id2")
 				So(fromCache, ShouldBeTrue)
-
-				// Another grab should return worker from pool.
-				w, fromCache = s.grabWorker(ci)
-				So(w.ID, ShouldEqual, "id1")
-				So(fromCache, ShouldBeFalse)
 			})
 			Convey("skips worker from container cache if it's missing from cache", func() {
 				w2 := NewWorker("id2", net.TCPAddr{}, 1, 128)
 				s.workers.Set("id1", NewWorker("id1", net.TCPAddr{}, 2, 128))
 
-				w2.AddCache(ci, s.workerContainerCache)
+				w2.AddCache(s.workerContainerCache, ci, "id1", &WorkerContainer{Worker: w2})
 				w, fromCache := s.grabWorker(ci)
 				So(w.ID, ShouldEqual, "id1")
 				So(fromCache, ShouldBeFalse)
+			})
+			Convey("prefers worker from container cache with higher free cpu/conns", func() {
+				w1 := NewWorker("id1", net.TCPAddr{}, 2, 128)
+				w2 := NewWorker("id2", net.TCPAddr{}, 1, 128)
+				s.workers.Set("id1", w1)
+				s.workers.Set("id2", w2)
+
+				w1.AddCache(s.workerContainerCache, ci, "id1", &WorkerContainer{Worker: w1})
+				w2.AddCache(s.workerContainerCache, ci, "id2", &WorkerContainer{Worker: w2})
+				w, fromCache := s.grabWorker(ci)
+				So(w.ID, ShouldEqual, "id1")
+				So(fromCache, ShouldBeTrue)
+				w1.RemoveCache(s.workerContainerCache, ci, "id1")
+				So(s.workerContainerCache[ci], ShouldHaveLength, 1)
 			})
 			Convey("returns nil if there are no workers", func() {
 				w, _ := s.grabWorker(ci)
@@ -361,7 +371,8 @@ func TestServerMethods(t *testing.T) {
 			})
 			Convey("given container in cache", func() {
 				ci := ScriptInfo{SourceHash: "hash", UserID: "user"}
-				wi.AddCache(ci, s.workerContainerCache)
+				wc := &WorkerContainer{Worker: wi}
+				wi.AddCache(s.workerContainerCache, ci, "id1", wc)
 				So(wi.scripts, ShouldNotBeEmpty)
 				So(s.workerContainerCache, ShouldNotBeEmpty)
 
@@ -373,7 +384,8 @@ func TestServerMethods(t *testing.T) {
 					So(s.workerContainerCache, ShouldBeEmpty)
 				})
 				Convey("ContainerRemoved keeps container in cache if refcount > 1", func() {
-					wi.AddCache(ci, s.workerContainerCache)
+					wc := &WorkerContainer{Worker: wi}
+					wi.AddCache(s.workerContainerCache, ci, "id1", wc)
 					So(len(wi.scripts), ShouldEqual, 1)
 
 					_, e := s.ContainerRemoved(context.Background(),
@@ -382,7 +394,7 @@ func TestServerMethods(t *testing.T) {
 
 					So(len(wi.scripts), ShouldEqual, 1)
 					So(s.workerContainerCache, ShouldNotBeEmpty)
-					So(s.workerContainerCache[ci].Contains(wi), ShouldBeTrue)
+					So(s.workerContainerCache[ci], ShouldContainKey, "id1")
 				})
 				Convey("Disconnect removes worker and all containers from cache", func() {
 					_, e := s.Disconnect(context.Background(), &pb.DisconnectRequest{Id: "id1"})

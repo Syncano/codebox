@@ -3,17 +3,19 @@ package script
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"time"
 
 	"github.com/Syncano/codebox/assets"
+	"github.com/Syncano/codebox/pkg/docker"
 )
 
 // RuntimeInfo describes a supported runtime.
 type RuntimeInfo struct {
 	FileName          string
 	AssetName         string
-	Command           []string
+	Command           func(*docker.Constraints) []string
 	Environment       []string
 	Image             string
 	User              string
@@ -27,27 +29,34 @@ type contextFile struct {
 	Length      int    `json:"length"`
 }
 
-type wrapperContext struct {
-	Async       bool             `json:"_async"`
-	MuxResponse int              `json:"_response"`
-	EntryPoint  string           `json:"_entryPoint"`
-	Timeout     time.Duration    `json:"_timeout"`
-	Files       []contextFile    `json:"_files"`
-	Args        *json.RawMessage `json:"ARGS"`
-	Config      *json.RawMessage `json:"CONFIG"`
-	Meta        *json.RawMessage `json:"META"`
+type scriptSetup struct {
+	Async      bool          `json:"async"`
+	EntryPoint string        `json:"entryPoint"`
+	Timeout    time.Duration `json:"timeout"`
+}
+
+type scriptContext struct {
+	Delim  string           `json:"_delim"`
+	Files  []contextFile    `json:"_files"`
+	Args   *json.RawMessage `json:"ARGS"`
+	Config *json.RawMessage `json:"CONFIG"`
+	Meta   *json.RawMessage `json:"META"`
+}
+
+func nodeCommand(constraints *docker.Constraints) []string {
+	return []string{
+		"node",
+		fmt.Sprintf("--max_old_space_size=%d", constraints.MemoryLimit/1024/1024),
+		"/app/wrapper/node.js",
+	}
 }
 
 // SupportedRuntimes defines info and constraints of all runtimes.
 var SupportedRuntimes = map[string]*RuntimeInfo{
 	"nodejs_v6": {
-		FileName:  "node.js",
-		AssetName: "wrappers/node.js",
-		Command: []string{
-			"node",
-			"--max_old_space_size=256",
-			"/app/wrapper/node.js",
-		},
+		FileName:          "node.js",
+		AssetName:         "wrappers/node.js",
+		Command:           nodeCommand,
 		Environment:       []string{"NODE_PATH=/app/env/node_modules:/app/code"},
 		Image:             "node:6-stretch",
 		User:              "node",
@@ -55,13 +64,9 @@ var SupportedRuntimes = map[string]*RuntimeInfo{
 	},
 
 	"nodejs_v8": {
-		FileName:  "node.js",
-		AssetName: "wrappers/node.js",
-		Command: []string{
-			"node",
-			"--max_old_space_size=256",
-			"/app/wrapper/node.js",
-		},
+		FileName:          "node.js",
+		AssetName:         "wrappers/node.js",
+		Command:           nodeCommand,
 		Environment:       []string{"NODE_PATH=/app/env/node_modules:/app/code"},
 		Image:             "node:8-stretch",
 		User:              "node",

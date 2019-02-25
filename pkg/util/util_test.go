@@ -29,7 +29,7 @@ func TestGenerateKey(t *testing.T) {
 		val2 := GenerateKey()
 		So(val1, ShouldNotEqual, val2)
 		So(len(val1), ShouldEqual, len(val2))
-		So(len(val1), ShouldEqual, 40)
+		So(len(val1), ShouldEqual, 32)
 	})
 }
 

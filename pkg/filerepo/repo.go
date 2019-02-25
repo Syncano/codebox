@@ -125,9 +125,9 @@ func (r *FsRepo) StoragePath() string {
 }
 
 // Store stores a file in cache.
-func (r *FsRepo) Store(key string, storeKey string, src io.Reader, filename string) (string, error) {
+func (r *FsRepo) Store(key string, storeKey string, src io.Reader, filename string, mode os.FileMode) (string, error) {
 	path := filepath.Join(r.StoragePath(), fileStorageName, key, storeKey)
-	return path, r.storeFile(path, src, filename)
+	return path, r.storeFile(path, src, filename, mode)
 }
 
 // StoreLock starts storing procedure returning lock channel and storeKey if key doesn't exist, nil and "" otherwise.
@@ -182,9 +182,9 @@ func (r *FsRepo) StoreUnlock(key, storeKey string, ch chan struct{}, save bool) 
 }
 
 // PermStore stores a file in permanent storage.
-func (r *FsRepo) PermStore(key string, src io.Reader, filename string) (path string, err error) {
+func (r *FsRepo) PermStore(key string, src io.Reader, filename string, mode os.FileMode) (path string, err error) {
 	path = filepath.Join(r.StoragePath(), fileStorageName, key)
-	if err = r.storeFile(path, src, filename); err != nil {
+	if err = r.storeFile(path, src, filename, mode); err != nil {
 		return
 	}
 	r.muStore.Lock()
@@ -193,7 +193,7 @@ func (r *FsRepo) PermStore(key string, src io.Reader, filename string) (path str
 	return
 }
 
-func (r *FsRepo) storeFile(path string, src io.Reader, filename string) error {
+func (r *FsRepo) storeFile(path string, src io.Reader, filename string, mode os.FileMode) error {
 	// Check disk space.
 	for {
 		percent, _ := r.sys.GetDiskUsage(r.options.BasePath)
@@ -209,8 +209,7 @@ func (r *FsRepo) storeFile(path string, src io.Reader, filename string) error {
 	filePath := filepath.Join(path, filename)
 
 	// Create dir.
-	err := r.fs.MkdirAll(filepath.Dir(filePath), os.ModePerm)
-	if err != nil {
+	if err := r.fs.MkdirAll(filepath.Dir(filePath), os.ModePerm); err != nil {
 		return err
 	}
 
@@ -218,6 +217,11 @@ func (r *FsRepo) storeFile(path string, src io.Reader, filename string) error {
 	file, err := r.fs.Create(filePath)
 	if err != nil {
 		return err
+	}
+	if mode != 0 {
+		if err = r.fs.Chmod(filePath, mode); err != nil {
+			return err
+		}
 	}
 	if _, err = io.Copy(file, src); err != nil {
 		file.Close() // nolint - don't care about the error
@@ -294,7 +298,7 @@ func (r *FsRepo) deleteVolume(vol *Volume) error {
 }
 
 func (r *FsRepo) umount(path string) error {
-	return r.command.Run(fusermountCmd, "-u", path)
+	return r.command.Run(fusermountCmd, "-uz", path)
 }
 
 // CleanupVolume deletes all files/links and mounts from a volume.
@@ -332,7 +336,7 @@ func (r *FsRepo) Link(volKey, resKey, destName string) error {
 		destRel, _ := filepath.Rel(resPath, path) // nolint - this error cannot happen as we walk the resPath.
 		destPath := filepath.Join(vol.Path, destName, destRel)
 		if info.IsDir() {
-			return r.fs.Mkdir(destPath, os.ModePerm)
+			return r.fs.MkdirAll(destPath, os.ModePerm)
 		}
 		return r.fs.Link(path, destPath)
 	})
