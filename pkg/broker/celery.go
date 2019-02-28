@@ -34,7 +34,7 @@ type ScriptTrace struct {
 	Status     string             `json:"status"`
 	Duration   int64              `json:"duration"`
 	Result     *ScriptTraceResult `json:"result,omitempty"`
-	Weight     uint32             `json:"weight"`
+	Weight     uint32             `json:"weight,omitempty"`
 }
 
 // ScriptTraceResult defines a serialized form of script result (nested in script trace).

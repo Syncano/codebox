@@ -4,7 +4,6 @@ package mocks
 
 import context "context"
 import docker "github.com/Syncano/codebox/pkg/docker"
-import io "io"
 import mock "github.com/stretchr/testify/mock"
 import types "github.com/docker/docker/api/types"
 
@@ -35,42 +34,19 @@ func (_m *Manager) ContainerAttach(ctx context.Context, containerID string) (typ
 }
 
 // ContainerCreate provides a mock function with given fields: ctx, image, user, cmd, env, labels, constraints, binds
-func (_m *Manager) ContainerCreate(ctx context.Context, image string, user string, cmd []string, env []string, labels map[string]string, constraints docker.Constraints, binds []string) (string, error) {
+func (_m *Manager) ContainerCreate(ctx context.Context, image string, user string, cmd []string, env []string, labels map[string]string, constraints *docker.Constraints, binds []string) (string, error) {
 	ret := _m.Called(ctx, image, user, cmd, env, labels, constraints, binds)
 
 	var r0 string
-	if rf, ok := ret.Get(0).(func(context.Context, string, string, []string, []string, map[string]string, docker.Constraints, []string) string); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, []string, []string, map[string]string, *docker.Constraints, []string) string); ok {
 		r0 = rf(ctx, image, user, cmd, env, labels, constraints, binds)
 	} else {
 		r0 = ret.Get(0).(string)
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(context.Context, string, string, []string, []string, map[string]string, docker.Constraints, []string) error); ok {
+	if rf, ok := ret.Get(1).(func(context.Context, string, string, []string, []string, map[string]string, *docker.Constraints, []string) error); ok {
 		r1 = rf(ctx, image, user, cmd, env, labels, constraints, binds)
-	} else {
-		r1 = ret.Error(1)
-	}
-
-	return r0, r1
-}
-
-// ContainerErrorLog provides a mock function with given fields: ctx, containerID
-func (_m *Manager) ContainerErrorLog(ctx context.Context, containerID string) (io.ReadCloser, error) {
-	ret := _m.Called(ctx, containerID)
-
-	var r0 io.ReadCloser
-	if rf, ok := ret.Get(0).(func(context.Context, string) io.ReadCloser); ok {
-		r0 = rf(ctx, containerID)
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(io.ReadCloser)
-		}
-	}
-
-	var r1 error
-	if rf, ok := ret.Get(1).(func(context.Context, string) error); ok {
-		r1 = rf(ctx, containerID)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -107,11 +83,11 @@ func (_m *Manager) ContainerStop(ctx context.Context, containerID string) error 
 }
 
 // ContainerUpdate provides a mock function with given fields: ctx, containerID, constraints
-func (_m *Manager) ContainerUpdate(ctx context.Context, containerID string, constraints docker.Constraints) error {
+func (_m *Manager) ContainerUpdate(ctx context.Context, containerID string, constraints *docker.Constraints) error {
 	ret := _m.Called(ctx, containerID, constraints)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, docker.Constraints) error); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string, *docker.Constraints) error); ok {
 		r0 = rf(ctx, containerID, constraints)
 	} else {
 		r0 = ret.Error(0)

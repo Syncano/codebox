@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/docker/docker/client"
+	"github.com/go-redis/redis"
 	grpc_retry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
@@ -35,7 +36,7 @@ const (
 
 var (
 	dockerOptions = docker.Options{}
-	scriptOptions = script.Options{}
+	scriptOptions = script.Options{Constraints: new(docker.Constraints)}
 )
 
 var workerCmd = cli.Command{
@@ -46,6 +47,12 @@ var workerCmd = cli.Command{
 		cli.DurationFlag{
 			Name: "heartbeat, b", Usage: "heartbeat sent to load balancer",
 			EnvVar: "HEARTBEAT", Value: 5 * time.Second,
+		},
+
+		// Redis options.
+		cli.StringFlag{
+			Name: "redis-addr", Usage: "redis TCP address",
+			EnvVar: "REDIS_ADDR", Value: "redis:6379",
 		},
 
 		// Script Runner general options.
@@ -163,6 +170,13 @@ var workerCmd = cli.Command{
 			"buildtime": App.Compiled,
 		}).Info("Worker starting")
 
+		// Initialize redis client.
+		redisClient := redis.NewClient(&redis.Options{
+			Addr:     c.String("redis-addr"),
+			Password: "",
+			DB:       0,
+		})
+
 		// Initialize docker client.
 		cli, err := client.NewClientWithOpts(client.FromEnv, client.WithVersion(docker.DockerVersion))
 		if err != nil {
@@ -186,7 +200,7 @@ var workerCmd = cli.Command{
 
 		// Initialize script runner.
 		logrus.WithField("options", scriptOptions).Debug("Initializing script runner")
-		runner, err := script.NewRunner(scriptOptions, dockerMgr, syschecker, repo)
+		runner, err := script.NewRunner(scriptOptions, dockerMgr, syschecker, repo, redisClient)
 		if err != nil {
 			return err
 		}
@@ -253,6 +267,7 @@ var workerCmd = cli.Command{
 
 		runner.Shutdown()
 		repo.Shutdown()
+		redisClient.Close()
 		return nil
 	},
 }
@@ -309,6 +324,7 @@ func startServer(
 		if _, e := client.ContainerRemoved(ctx,
 			&lbpb.ContainerRemovedRequest{
 				Id:          poolID,
+				ContainerID: cont.ID,
 				SourceHash:  cont.SourceHash,
 				Environment: cont.Environment,
 				UserID:      cont.UserID,
@@ -317,7 +333,7 @@ func startServer(
 		}
 		cancel()
 	})
-	runner.OnRunDone(func(cont *script.Container, options *script.RunOptions) {
+	runner.OnContainerReleased(func(cont *script.Container, options *script.RunOptions) {
 		ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 		if _, e := client.ResourceRelease(ctx, &lbpb.ResourceReleaseRequest{Id: poolID, MCPU: options.MCPU, Memory: options.Memory}); err != nil {
 			errCh <- e

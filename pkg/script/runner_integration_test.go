@@ -40,7 +40,7 @@ const (
 
 func uploadFile(repo filerepo.Repo, key string, data []byte, filename string) error {
 	lockCh, storeKey := repo.StoreLock(key)
-	_, err := repo.Store(key, storeKey, bytes.NewReader(data), filename)
+	_, err := repo.Store(key, storeKey, bytes.NewReader(data), filename, 0)
 	if err != nil {
 		return err
 	}
@@ -70,13 +70,15 @@ func TestRunnerIntegration(t *testing.T) {
 		// Initialize file repo.
 		repo := filerepo.New(filerepo.Options{}, syschecker, new(filerepo.LinkFs), new(filerepo.Command))
 
+		redisCli := new(script.MockRedisClient)
+
 		// Initialize script runner.
 		runner, err := script.NewRunner(script.Options{
 			Concurrency:       2,
 			PruneImages:       false,
 			HostStoragePath:   os.Getenv("HOST_STORAGE_PATH"),
 			UseExistingImages: true,
-		}, dockerMgr, syschecker, repo)
+		}, dockerMgr, syschecker, repo, redisCli)
 		So(err, ShouldBeNil)
 
 		So(runner.DownloadAllImages(), ShouldBeNil)
@@ -254,36 +256,16 @@ func TestRunnerIntegration(t *testing.T) {
 				if data.deadlineExceeded {
 					So(err, ShouldResemble, context.DeadlineExceeded)
 					So(time.Since(t), ShouldBeBetween, timeout+graceTimeout, 1*time.Second+graceTimeout)
-					So(res.Stderr, ShouldBeEmpty)
 
 				} else {
 					So(err, ShouldBeNil)
-					So(time.Since(t), ShouldBeBetween, timeout, 1*time.Second)
+					So(time.Since(t), ShouldBeBetween, timeout, graceTimeout)
+					So(string(res.Stdout), ShouldEqual, "codebox\n")
 					So(res.Stderr, ShouldNotBeEmpty)
 				}
 
 				So(res.Code, ShouldEqual, 124)
 				So(res.Took, ShouldBeGreaterThanOrEqualTo, timeout)
-				So(string(res.Stdout), ShouldEqual, "codebox\n")
-				So(res.Response, ShouldBeNil)
-			}
-		})
-
-		Convey("runs scripts with exit code", func() {
-			var tests = []scriptTest{
-				{"nodejs_v6", `console.log('codebox'); process.exit(13); console.log('nope')`},
-				{"nodejs_v8", `console.log('codebox'); process.exit(13); console.log('nope')`},
-			}
-			for _, data := range tests {
-				hash := util.GenerateKey()
-				err := uploadFile(repo, hash, []byte(data.script), script.SupportedRuntimes[data.runtime].DefaultEntryPoint)
-				So(err, ShouldBeNil)
-				res, err := runner.Run(context.Background(), logrus.StandardLogger(), data.runtime, hash, "", "user", &script.RunOptions{})
-				So(err, ShouldBeNil)
-
-				So(res.Code, ShouldEqual, 13)
-				So(string(res.Stdout), ShouldEqual, "codebox\n")
-				So(res.Stderr, ShouldBeEmpty)
 				So(res.Response, ShouldBeNil)
 			}
 		})

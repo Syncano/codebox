@@ -102,7 +102,7 @@ func (ac *Channel) Init(url string) error {
 
 // IsRunning returns true if channel is setup and running.
 func (ac *Channel) IsRunning() bool {
-	return (atomic.LoadUint32(&ac.running) == 1)
+	return atomic.LoadUint32(&ac.running) == 1
 }
 
 func (ac *Channel) setRunning(running bool) {

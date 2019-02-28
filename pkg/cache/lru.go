@@ -62,8 +62,8 @@ func (c *LRUCache) Refresh(key string) bool {
 
 func (c *LRUCache) set(key string, val interface{}) {
 	cItem := &Item{object: val, expiration: time.Now().Add(c.options.TTL).UnixNano()}
-	c.increaseLength()
 	cItem.valuesListElement = c.valuesList.PushBack(&valuesItem{key: key, item: cItem})
+	c.checkLength()
 	c.valueMap[key] = cItem
 }
 
@@ -106,8 +106,7 @@ func (c *LRUCache) Delete(key string) bool {
 
 	curVal, ok := c.valueMap[key]
 	if ok {
-		c.delete(curVal.(*Item).valuesListElement)
-		return true
+		return c.delete(curVal.(*Item).valuesListElement)
 	}
 	return false
 }

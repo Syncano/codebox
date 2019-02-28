@@ -1,23 +1,21 @@
 package script
 
 import (
+	"bufio"
 	"context"
-	"encoding/binary"
-	"encoding/json"
 	"errors"
 	"expvar"
 	"fmt"
 	"io"
 	"math"
-	"net"
+	"os"
 	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/docker/docker/api/types"
-	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/imdario/mergo"
+	"github.com/juju/ratelimit"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/semaphore"
 
@@ -33,18 +31,22 @@ type DockerRunner struct {
 	poolID         string
 	running        uint32
 	createMu       sync.Mutex
-	containerCache *cache.StackCache
+	containerCache *cache.LRUSetCache
 	containerPool  map[string]chan *Container
 	poolSemaphore  *semaphore.Weighted
 	taskWaitGroup  sync.WaitGroup
 
-	muHandler          sync.RWMutex
-	onContainerRemoved ContainerRemovedHandler
-	onRunDone          RunDoneHandler
+	muHandler           sync.RWMutex
+	onContainerRemoved  ContainerRemovedHandler
+	onContainerReleased ContainerReleasedHandler
+
+	containerWaitLock sync.Mutex
+	containerWait     map[string]chan struct{}
 
 	dockerMgr docker.Manager
 	fileRepo  filerepo.Repo
 	sys       sys.SystemChecker
+	redisCli  RedisClient
 	options   Options
 }
 
@@ -63,7 +65,7 @@ type Options struct {
 	CreateRetrySleep  time.Duration
 	PruneImages       bool
 	UseExistingImages bool
-	Constraints       docker.Constraints
+	Constraints       *docker.Constraints
 
 	// Cache
 	ContainerTTL       time.Duration
@@ -71,6 +73,10 @@ type Options struct {
 
 	// File repo
 	HostStoragePath string
+
+	// Rate limiting
+	StreamCapacityLimit    int64
+	StreamPerMinuteQuantum int64
 }
 
 // DefaultOptions holds default options values for script runner.
@@ -84,7 +90,7 @@ var DefaultOptions = Options{
 	CreateTimeout:    10 * time.Second,
 	CreateRetryCount: 3,
 	CreateRetrySleep: 500 * time.Millisecond,
-	Constraints: docker.Constraints{
+	Constraints: &docker.Constraints{
 		// CPU and IOPS limit is calculated based on concurrency.
 		MemoryLimit:     200 * 1024 * 1024,
 		MemorySwapLimit: 0,
@@ -96,11 +102,14 @@ var DefaultOptions = Options{
 	ContainerTTL:       45 * time.Minute,
 	ContainersCapacity: 250,
 
+	StreamCapacityLimit:    5 << 20,
+	StreamPerMinuteQuantum: 1 << 20,
+
 	HostStoragePath: "/home/codebox/storage",
 }
 
-// RunDoneHandler is a callback function called whenever run has finished.
-type RunDoneHandler func(cont *Container, options *RunOptions)
+// ContainerReleasedHandler is a callback function called whenever run has finished.
+type ContainerReleasedHandler func(cont *Container, options *RunOptions)
 
 // ContainerRemovedHandler is a callback function called whenever container is removed.
 type ContainerRemovedHandler func(cont *Container)
@@ -113,6 +122,7 @@ type RunOptions struct {
 	MCPU        uint32
 	Memory      uint64
 	Weight      uint
+	Async       uint32
 
 	Args   []byte
 	Meta   []byte
@@ -131,41 +141,6 @@ func (ro RunOptions) String() string {
 	return fmt.Sprintf("{EntryPoint:%.25s, OutputLimit:%d, Timeout:%v}", ro.EntryPoint, ro.OutputLimit, ro.Timeout)
 }
 
-// Container defines unique container information.
-type Container struct {
-	ID          string
-	SourceHash  string
-	Environment string
-	UserID      string
-
-	mu        sync.Mutex
-	resp      types.HijackedResponse
-	conn      io.ReadWriteCloser
-	addr      string
-	volumeKey string
-}
-
-// Conn returns container conn.
-func (c *Container) Conn() (io.ReadWriteCloser, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if c.conn == nil {
-		conn, err := net.DialTimeout("tcp", c.addr, dockerTimeout)
-		if err != nil {
-			return nil, err
-		}
-
-		c.conn = conn
-	}
-
-	return c.conn, nil
-}
-
-func (c *Container) String() string {
-	return fmt.Sprintf("{ID:%s, VolumeKey:%s}", c.ID, c.volumeKey)
-}
-
 var (
 	initOnceRunner sync.Once
 	freeCPUCounter *expvar.Int
@@ -176,11 +151,17 @@ var (
 	ErrPoolNotRunning = errors.New("pool not running")
 	// ErrPoolAlreadyCreated signals pool being already created.
 	ErrPoolAlreadyCreated = errors.New("pool already created")
+	// ErrSemaphoreNotAcquired signals a non critical error occurring for context timeouts and similar cases.
+	ErrSemaphoreNotAcquired = errors.New("semaphore was not acquired succesfully")
 )
 
 const (
-	containerLabel        = "workerId"
-	wrapperMount          = "wrapper"
+	containerLabel = "workerId"
+	wrapperMount   = "wrapper"
+	wrapperCommand = "/app/wrapper/codewrapper"
+	wrapperName    = "codewrapper"
+	wrapperPathEnv = "WRAPPERPATH"
+
 	userMount             = "code"
 	environmentMount      = "env"
 	environmentFileName   = "squashfs.img"
@@ -189,10 +170,11 @@ const (
 	dockerTimeout         = 8 * time.Second
 	dockerDownloadTimeout = 5 * time.Minute
 	stdWriterPrefixLen    = 8
+	containerLogFormat    = "stream:%s:%s:log"
 )
 
 // NewRunner initializes a new script runner.
-func NewRunner(options Options, dockerMgr docker.Manager, checker sys.SystemChecker, repo filerepo.Repo) (*DockerRunner, error) {
+func NewRunner(options Options, dockerMgr docker.Manager, checker sys.SystemChecker, repo filerepo.Repo, redisClient RedisClient) (*DockerRunner, error) {
 	initOnceRunner.Do(func() {
 		freeCPUCounter = expvar.NewInt("cpu")
 	})
@@ -218,7 +200,7 @@ func NewRunner(options Options, dockerMgr docker.Manager, checker sys.SystemChec
 		return nil, err
 	}
 
-	containerCache := cache.NewStackCache(cache.Options{
+	containerCache := cache.NewLRUSetCache(cache.Options{
 		TTL:      options.ContainerTTL,
 		Capacity: options.ContainersCapacity,
 	})
@@ -228,8 +210,10 @@ func NewRunner(options Options, dockerMgr docker.Manager, checker sys.SystemChec
 		sys:            checker,
 		options:        options,
 		containerCache: containerCache,
+		redisCli:       redisClient,
 	}
 	r.containerCache.OnValueEvicted(r.onEvictedContainerHandler)
+	r.containerWait = make(map[string]chan struct{})
 	return r, nil
 }
 
@@ -297,90 +281,82 @@ func (r *DockerRunner) DownloadAllImages() error {
 	return nil
 }
 
-func (r *DockerRunner) processRun(ctx context.Context, logger logrus.FieldLogger, runtime, sourceHash, environment, containerHash string, options *RunOptions) (*Result, *Container, bool, error) {
+func (r *DockerRunner) processRun(ctx context.Context, logger logrus.FieldLogger, runtime, requestID, sourceHash, environment, userID string, options *RunOptions) (*Result, *Container, bool, error) {
 	start := time.Now()
-	logger = logger.WithFields(logrus.Fields{"runtime": runtime, "options": options, "containerHash": containerHash})
-	cont, fromCache, err := r.getContainer(runtime, sourceHash, environment, containerHash, options.Weight)
+	conn, cont, newContainer, err := r.getContainer(ctx, runtime, requestID, sourceHash, environment, userID, options)
 	if err != nil {
-		return nil, cont, fromCache, err
+		return nil, cont, newContainer, err
 	}
+	logger = logger.WithFields(logrus.Fields{"runtime": runtime, "options": options, "containerHash": cont.Hash})
+	defer conn.Close()
 
-	logger = logger.WithFields(logrus.Fields{"cache": fromCache, "container": cont})
+	// Run.
+	logger = logger.WithFields(logrus.Fields{"new": newContainer, "container": cont})
 	logger.Info("Running in container")
 
-	// Communicate with stream we got.
-	conn, err := cont.Conn()
+	delim, err := cont.Run(conn, options)
 	if err != nil {
-		return nil, cont, fromCache, err
-	}
-
-	// Prepare files for context.
-	var filesSize int
-	var files []contextFile
-	for f, data := range options.Files {
-		flen := len(data.Data)
-		files = append(files, contextFile{
-			Name:        f,
-			Filename:    data.Filename,
-			ContentType: data.ContentType,
-			Length:      flen,
-		})
-		filesSize += flen
-	}
-
-	// Prepare context for container.
-	scriptContext := wrapperContext{
-		Async:       false,
-		MuxResponse: MuxResponse,
-		EntryPoint:  options.EntryPoint,
-		Timeout:     options.Timeout,
-		Args:        (*json.RawMessage)(&options.Args),
-		Meta:        (*json.RawMessage)(&options.Meta),
-		Config:      (*json.RawMessage)(&options.Config),
-		Files:       files,
-	}
-	scriptContextBytes, err := json.Marshal(scriptContext)
-	util.Must(err)
-	contextSize := len(scriptContextBytes)
-
-	// Send context.
-	totalLen := make([]byte, 4)
-	contextLen := make([]byte, 4)
-	binary.LittleEndian.PutUint32(totalLen, uint32(contextSize+filesSize+8))
-	binary.LittleEndian.PutUint32(contextLen, uint32(contextSize))
-	for _, data := range [][]byte{totalLen, contextLen, scriptContextBytes} {
-		if _, err = conn.Write(data); err != nil {
-			return nil, cont, fromCache, err
-		}
-	}
-
-	// Now send files for context.
-	for _, f := range files {
-		if _, err = conn.Write(options.Files[f.Name].Data); err != nil {
-			return nil, cont, fromCache, err
-		}
+		return nil, cont, newContainer, err
 	}
 
 	// Return processed response.
 	ctx, cancel := context.WithTimeout(ctx, options.Timeout+graceTimeout)
 	defer cancel()
-	mux, err := readMux(ctx, conn, options.OutputLimit)
+	limit := int(options.OutputLimit)
 
-	// On container crash, get stderr from it.
-	if err == io.EOF || err == io.ErrUnexpectedEOF {
-		if stream, e := r.dockerMgr.ContainerErrorLog(ctx, cont.ID); e == nil {
-			stdcopy.StdCopy(mux[MuxStdout], mux[MuxStderr], stream) // nolint: errcheck
-		}
+	var output []byte
+	ret := &Result{
+		ContainerID: cont.ID,
+		Weight:      options.Weight,
+	}
+	if options.Async <= 1 {
+		output, ret.Stdout, ret.Stderr, err = r.processOutput(ctx, conn, cont.Stdout(), cont.Stderr(), delim, limit)
+	} else {
+		output, err = r.processOutputAsync(ctx, conn, limit)
 	}
 
 	// Parse result.
 	var parseErr error
-	ret := &Result{Stdout: mux[MuxStdout].Bytes(), Stderr: mux[MuxStderr].Bytes(), Took: time.Since(start), Weight: options.Weight}
-	parseErr = ret.Parse(mux[MuxResponse].Bytes(), r.options.StreamMaxLength, err)
+	ret.Took = time.Since(start)
+	parseErr = ret.Parse(output, r.options.StreamMaxLength, err)
 	if err == nil {
 		err = parseErr
 	}
-	return ret, cont, fromCache, err
+	return ret, cont, newContainer, err
+}
+
+func (r *DockerRunner) processOutput(ctx context.Context, conn, stdout, stderr io.Reader, delim string, limit int) ([]byte, []byte, []byte, error) {
+	var wg sync.WaitGroup
+	// In non async mode simply read stdout and stderr.
+	wg.Add(2)
+	var e1, e2 error
+	var stdoutBytes, stderrBytes []byte
+
+	go func() {
+		stdoutBytes, e1 = util.ReadLimitedUntil(ctx, stdout, delim, r.options.StreamMaxLength)
+		wg.Done()
+	}()
+
+	go func() {
+		stderrBytes, e2 = util.ReadLimitedUntil(ctx, stderr, delim, r.options.StreamMaxLength)
+		wg.Done()
+	}()
+
+	output, err := util.ReadLimited(ctx, conn, limit)
+	wg.Wait()
+
+	if err == nil {
+		if e1 != nil {
+			err = e1
+		} else if e2 != nil {
+			err = e2
+		}
+	}
+	return output, stdoutBytes, stderrBytes, err
+}
+
+func (r *DockerRunner) processOutputAsync(ctx context.Context, conn io.Reader, limit int) ([]byte, error) {
+	return util.ReadLimited(ctx, conn, limit)
 }
 
 // Run executes given script in a docker container.
@@ -415,31 +391,16 @@ func (r *DockerRunner) Run(ctx context.Context, logger logrus.FieldLogger, runti
 		return nil, ErrPoolNotRunning
 	}
 	start := time.Now()
-
-	// Acquire from semaphore.
-	if err := r.poolSemaphore.Acquire(ctx, int64(options.Weight)); err != nil {
-		return nil, err
-	}
-
-	// Decrease free resource counter.
-	freeCPUCounter.Add(-int64(options.MCPU))
 	r.taskWaitGroup.Add(1)
-
-	containerHash := fmt.Sprintf("%s/%s/%s/%x", sourceHash, userID, environment, util.Hash(options.EntryPoint))
-	ret, cont, fromCache, err := r.processRun(ctx, logger, runtime, sourceHash, environment, containerHash, options)
+	requestID := util.GenerateKey()
+	ret, cont, newContainer, err := r.processRun(ctx, logger, runtime, requestID, sourceHash, environment, userID, options)
 	took := time.Since(start)
 
 	if err != nil {
 		logger = logger.WithError(err)
-	} else {
-		// Save container info and store it in cache.
-		ret.Cached = true
-		cont.SourceHash = sourceHash
-		cont.Environment = environment
-		cont.UserID = userID
-		r.containerCache.Push(containerHash, cont)
 	}
-	if ret != nil && ret.Took > 0 {
+	if ret != nil {
+		ret.Cached = newContainer
 		ret.Overhead = took - ret.Took
 	}
 
@@ -449,57 +410,62 @@ func (r *DockerRunner) Run(ctx context.Context, logger logrus.FieldLogger, runti
 		"containerID": cont.ID,
 	}).Info("Run finished")
 
-	freeCPUCounter.Add(int64(options.MCPU))
-	go r.afterRun(runtime, cont, options, fromCache, err)
+	// Cleanup only if it's the last connection.
+	go r.afterRun(runtime, cont, requestID, options, newContainer, err)
 	return ret, err
 }
 
-func (r *DockerRunner) afterRun(runtime string, cont *Container, options *RunOptions, fromCache bool, err error) {
+func (r *DockerRunner) processContainerDone(runtime string, cont *Container, requestID string, options *RunOptions, newContainer bool, err error) {
 	logger := logrus.WithError(err).WithField("container", cont)
 	// Add new container if we took it from the pool.
-	recreate := !fromCache
+	recreate := newContainer
 
+	switch {
 	// If we encountered missing resource - reuse container.
-	if err == filerepo.ErrResourceNotFound {
+	case err == filerepo.ErrResourceNotFound:
 		// If cleanup volume fails - cleanup whole container and recreate in next block. Otherwise - return it to pool.
 		if err = r.fileRepo.CleanupVolume(cont.volumeKey); err == nil {
 			r.containerPool[runtime] <- cont
-			recreate = false
+			return
 		}
+
+	// If semaphore was not acquired for new container, simply return it to pool.
+	case err == ErrSemaphoreNotAcquired:
+		r.containerPool[runtime] <- cont
+		return
 	}
 
+	// Release container resources.
+	if e := r.releaseContainer(cont, requestID, options); e != nil && err == nil {
+		err = e
+	}
+
+	// If we have an error at this point, stop accepting connections to container and mark it for cleanup.
 	if err != nil {
 		// Check for non critical errors.
 		logFunc := logger.Warn
-		if err != ErrLimitReached && err != io.EOF && err != context.DeadlineExceeded {
+		if err != util.ErrLimitReached && err != io.EOF && err != context.DeadlineExceeded {
 			logFunc = logger.Error
 		}
 		logFunc("Recovering from container error")
-		r.cleanupContainer(cont)
+		cont.StopAcceptingConnections()
+		r.containerCache.Delete(cont.Hash, cont)
 	}
 	// Add new container if needed.
 	if recreate {
-		// Try to create a container, on fail - clean it up and retry.
-		if err = util.Retry(r.options.CreateRetryCount, r.options.CreateRetrySleep, func() error {
-			ctx, cancel := context.WithTimeout(context.Background(), r.options.CreateTimeout)
-			defer cancel()
-
-			// Allow only 1 concurrent container creation as it is relatively heavy operation.
-			r.createMu.Lock()
-			newContainer, e := r.createFreshContainer(ctx, runtime)
-			r.createMu.Unlock()
-
-			if e != nil {
-				r.cleanupContainer(newContainer)
-				return err
-			}
-
-			r.containerPool[runtime] <- newContainer
-			return nil
-		}); err != nil {
+		if err = r.recreateContainer(runtime); err != nil {
 			// If we did fail to create a container, panic!
 			panic(err)
 		}
+	}
+}
+
+func (r *DockerRunner) afterRun(runtime string, cont *Container, requestID string, options *RunOptions, newContainer bool, err error) {
+	logger := logrus.WithError(err).WithField("container", cont)
+	r.processContainerDone(runtime, cont, requestID, options, newContainer, err)
+
+	if !cont.IsAcceptingConnections() && cont.ConnsNum() == 0 {
+		r.cleanupContainer(cont)
 	}
 
 	// Try to reserve needed memory. If not enough memory available - remove LRU containers until satisfied.
@@ -515,15 +481,28 @@ func (r *DockerRunner) afterRun(runtime string, cont *Container, options *RunOpt
 		}
 	}
 
-	// Release semaphore.
-	r.poolSemaphore.Release(int64(options.Weight))
 	r.taskWaitGroup.Done()
+}
 
-	r.muHandler.RLock()
-	if r.onRunDone != nil {
-		go r.onRunDone(cont, options)
-	}
-	r.muHandler.RUnlock()
+func (r *DockerRunner) recreateContainer(runtime string) error {
+	// Try to create a container, on fail - clean it up and retry.
+	return util.Retry(r.options.CreateRetryCount, r.options.CreateRetrySleep, func() error {
+		ctx, cancel := context.WithTimeout(context.Background(), r.options.CreateTimeout)
+		defer cancel()
+
+		// Allow only 1 concurrent container creation as it is relatively heavy operation.
+		r.createMu.Lock()
+		newContainer, err := r.createFreshContainer(ctx, runtime)
+		r.createMu.Unlock()
+
+		if err != nil {
+			r.cleanupContainer(newContainer)
+			return err
+		}
+
+		r.containerPool[runtime] <- newContainer
+		return nil
+	})
 }
 
 // CreatePool creates the container pool. Meant to run only once.
@@ -556,10 +535,17 @@ func (r *DockerRunner) CreatePool() (string, error) {
 	r.containerPool = make(map[string]chan *Container)
 	done := make(chan error, r.options.Concurrency)
 
+	// Store codewrapper in repo.
+	f, err := os.Open(os.Getenv(wrapperPathEnv)) // nolint: gosec
+	util.Must(err)
+	if _, err := r.fileRepo.PermStore(wrapperName, bufio.NewReader(f), wrapperName, os.ModePerm); err != nil {
+		return "", err
+	}
+
 	// Process concurrently each runtime.
 	for runtime, rInfo := range SupportedRuntimes {
 		// Store wrappers.
-		if _, err := r.fileRepo.PermStore(runtime, rInfo.Wrapper(), rInfo.FileName); err != nil {
+		if _, err := r.fileRepo.PermStore(runtime, rInfo.Wrapper(), rInfo.FileName, 0); err != nil {
 			return "", err
 		}
 
@@ -600,7 +586,7 @@ func (r *DockerRunner) StopPool() {
 	}
 
 	r.OnContainerRemoved(nil)
-	r.OnRunDone(nil)
+	r.OnContainerReleased(nil)
 
 	r.setRunning(false)
 	logrus.Info("Stopping pool")
@@ -644,48 +630,179 @@ func (r *DockerRunner) Shutdown() {
 	r.containerCache.StopJanitor()
 }
 
-func (r *DockerRunner) getContainer(runtime, sourceHash, environment, containerHash string, weight uint) (cont *Container, fromCache bool, err error) {
+func (r *DockerRunner) reserveContainer(ctx context.Context, cont *Container, connID string, new bool, options *RunOptions, constraints *docker.Constraints) error {
+	return cont.Reserve(connID, func(numConns int) error {
+		if numConns == 1 {
+			// If it's the first concurrent connection, acquire semaphore and adapt docker container if needed.
+			if r.poolSemaphore.Acquire(ctx, int64(options.Weight)) != nil {
+				return ErrSemaphoreNotAcquired
+			}
+			freeCPUCounter.Add(-int64(options.MCPU))
+
+			// Set CPU/Memory resources for async container or if using higher weight for new non-async container.
+			if options.Async > 1 || (new && options.Weight > 1) {
+				ctx2, cancel := context.WithTimeout(ctx, dockerTimeout)
+				defer cancel()
+				if err := r.dockerMgr.ContainerUpdate(ctx2, cont.ID, constraints); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	})
+}
+
+func (r *DockerRunner) releaseContainer(cont *Container, requestID string, options *RunOptions) error {
+	released := false
+	if err := cont.Release(requestID, func(numConns int) error {
+		if numConns == 0 {
+			released = true
+			r.poolSemaphore.Release(int64(options.Weight))
+			freeCPUCounter.Add(int64(options.MCPU))
+
+			// Freeze CPU resources for async container.
+			if options.Async > 1 {
+				ctx2, cancel := context.WithTimeout(context.Background(), dockerTimeout)
+				defer cancel()
+				if err := r.dockerMgr.ContainerUpdate(ctx2, cont.ID, &docker.Constraints{
+					CPUPeriod:   1000000,
+					CPUQuota:    1000,
+					MemoryLimit: int64(options.Weight) * r.options.Constraints.MemoryLimit,
+				}); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	if released {
+		r.muHandler.RLock()
+		if r.onContainerReleased != nil {
+			go r.onContainerReleased(cont, options)
+		}
+		r.muHandler.RUnlock()
+	}
+	return nil
+}
+
+func (r *DockerRunner) getContainer(ctx context.Context, runtime, requestID, sourceHash, environment, userID string, options *RunOptions) (conn io.ReadWriteCloser, cont *Container, newContainer bool, err error) { // nolint: gocyclo
+	constraints := &docker.Constraints{
+		CPULimit:    int64(options.Weight) * r.options.Constraints.CPULimit,
+		MemoryLimit: int64(options.Weight) * r.options.Constraints.MemoryLimit,
+	}
+
 	// Try to get a container from cache.
-	cacheVal := r.containerCache.Pop(containerHash)
-	if cacheVal != nil {
-		cont = cacheVal.(*Container)
-		return cont, true, nil
+	containerHash := fmt.Sprintf("%s/%s/%s/%x", sourceHash, userID, environment, util.Hash(options.EntryPoint))
+	cacheVal := r.containerCache.Get(containerHash)
+	for _, c := range cacheVal {
+		cont = c.(*Container)
+
+		// If container is in good standing, use it from cache.
+		if cont.IsAcceptingConnections() && r.containerCache.Refresh(containerHash, c) {
+
+			if err = r.reserveContainer(ctx, cont, requestID, false, options, constraints); err != nil {
+				if err == ErrTooManyConnections || !cont.IsAcceptingConnections() {
+					continue
+				}
+				return conn, cont, false, err
+			}
+			conn, err = cont.Conn()
+			return conn, cont, false, err
+		}
+	}
+
+	// With async, before using container from pool first make a lock to avoid multiple multi-conn containers at once.
+	if options.Async > 1 {
+		r.containerWaitLock.Lock()
+		if ch, ok := r.containerWait[containerHash]; ok {
+			r.containerWaitLock.Lock()
+			<-ch
+			return r.getContainer(ctx, runtime, requestID, sourceHash, environment, userID, options)
+		}
+		ch := make(chan struct{})
+		r.containerWait[containerHash] = ch
+		r.containerWaitLock.Unlock()
+
+		defer func() {
+			r.containerWaitLock.Lock()
+			delete(r.containerWait, containerHash)
+			r.containerWaitLock.Unlock()
+			close(ch)
+		}()
 	}
 
 	// Fallback to pool.
 	cont = <-r.containerPool[runtime]
-
-	// Set CPU/Memory resources if using higher weight.
-	if weight > 1 {
-		ctx, cancel := context.WithTimeout(context.Background(), dockerTimeout)
-		defer cancel()
-		if err = r.dockerMgr.ContainerUpdate(ctx, cont.ID, docker.Constraints{
-			CPULimit:    int64(weight) * r.options.Constraints.CPULimit,
-			MemoryLimit: int64(weight) * r.options.Constraints.MemoryLimit,
-		}); err != nil {
-			return cont, false, err
-		}
+	cont.Configure(options)
+	cont.SourceHash = sourceHash
+	cont.Environment = environment
+	cont.UserID = userID
+	cont.Hash = containerHash
+	if err = r.reserveContainer(ctx, cont, requestID, true, options, constraints); err != nil {
+		return conn, cont, true, err
 	}
 
 	// Linking sources.
 	logger := logrus.WithFields(logrus.Fields{"container": cont, "runtime": runtime})
 	if err = r.fileRepo.Link(cont.volumeKey, sourceHash, userMount); err != nil {
 		logger.WithError(err).WithField("sourceHash", sourceHash).Error("Linking error")
-		return cont, false, err
+		return conn, cont, true, err
 	}
 
 	// Linking environment.
 	if environment != "" {
 		if err = r.fileRepo.Mount(cont.volumeKey, environment, environmentFileName, environmentMount); err != nil {
 			logger.WithError(err).WithField("environment", environment).Error("Mounting error")
+			return conn, cont, true, err
 		}
 	}
-	return cont, false, err
+
+	// Send setup message.
+	if conn, err = cont.Setup(options, constraints); err != nil {
+		return conn, cont, true, err
+	}
+
+	// In async container start stdout/err reader.
+	if options.Async > 1 {
+		lim := ratelimit.NewBucketWithQuantum(time.Minute, 5<<20, 1<<20)
+		lim.TakeMaxDuration(1, 0)
+		ch := fmt.Sprintf(containerLogFormat, userID, sourceHash)
+		util.SubscribeRateLimited(cont.stdout,
+			lim,
+			func(message []byte) {
+				r.redisCli.Publish(ch, cont.ID+"\tO\t"+string(message))
+			},
+			func(err error) {
+				if cont.IsAcceptingConnections() {
+					logger.WithError(err).Warn("Stdout streaming error")
+					cont.StopAcceptingConnections()
+				}
+			})
+
+		util.SubscribeRateLimited(cont.stderr,
+			lim,
+			func(message []byte) {
+				r.redisCli.Publish(ch, cont.ID+"\tE\t"+string(message))
+			},
+			func(err error) {
+				if cont.IsAcceptingConnections() {
+					logger.WithError(err).Warn("Stderr streaming error")
+					cont.StopAcceptingConnections()
+				}
+			})
+	}
+
+	// Add container to cache.
+	r.containerCache.Add(containerHash, cont)
+	return conn, cont, true, err
 }
 
 func (r *DockerRunner) createFreshContainer(ctx context.Context, runtime string) (*Container, error) {
 	var err error
-	cont := new(Container)
+	cont := NewContainer(runtime)
 	logger := logrus.WithField("runtime", runtime)
 	start := time.Now()
 	rInfo := SupportedRuntimes[runtime]
@@ -699,7 +816,7 @@ func (r *DockerRunner) createFreshContainer(ctx context.Context, runtime string)
 
 	// Create container for given runtime with default constraints.
 	cont.ID, err = r.dockerMgr.ContainerCreate(
-		ctx, rInfo.Image, rInfo.User, rInfo.Command,
+		ctx, rInfo.Image, rInfo.User, []string{wrapperCommand},
 		rInfo.Environment,
 		map[string]string{containerLabel: r.poolID},
 		r.options.Constraints,
@@ -711,12 +828,11 @@ func (r *DockerRunner) createFreshContainer(ctx context.Context, runtime string)
 	logger = logger.WithField("container", cont)
 
 	// Start and attach to container (wrapper mode).
-	err = r.dockerMgr.ContainerStart(ctx, cont.ID)
+	cont.resp, err = r.dockerMgr.ContainerAttach(ctx, cont.ID)
 	if err != nil {
 		return cont, err
 	}
-
-	cont.resp, err = r.dockerMgr.ContainerAttach(ctx, cont.ID)
+	err = r.dockerMgr.ContainerStart(ctx, cont.ID)
 	if err != nil {
 		return cont, err
 	}
@@ -746,6 +862,7 @@ func (r *DockerRunner) cleanupContainer(cont *Container) {
 	logger.Info("Stopping and cleaning up container")
 
 	// Stop the container.
+	cont.Stop()
 	if cont.ID != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), dockerTimeout)
 		if err := r.dockerMgr.ContainerStop(ctx, cont.ID); err != nil {
@@ -759,17 +876,20 @@ func (r *DockerRunner) cleanupContainer(cont *Container) {
 			logger.WithError(err).Warn("Removing volume failed")
 		}
 	}
-}
-
-func (r *DockerRunner) onEvictedContainerHandler(key string, val interface{}) {
-	cont := val.(*Container)
 
 	r.muHandler.RLock()
 	if r.onContainerRemoved != nil {
 		go r.onContainerRemoved(cont)
 	}
 	r.muHandler.RUnlock()
-	r.cleanupContainer(cont)
+}
+
+func (r *DockerRunner) onEvictedContainerHandler(key string, val interface{}) {
+	cont := val.(*Container)
+	cont.StopAcceptingConnections()
+	if cont.ConnsNum() == 0 {
+		r.cleanupContainer(cont)
+	}
 }
 
 // IsRunning returns true if pool is setup and running.
@@ -793,11 +913,11 @@ func (r *DockerRunner) OnContainerRemoved(f ContainerRemovedHandler) {
 	r.muHandler.Unlock()
 }
 
-// OnRunDone sets an (optional) function that when run has finished.
+// OnContainerReleased sets an (optional) function that when container has been released.
 // Set to nil to disable.
-func (r *DockerRunner) OnRunDone(f RunDoneHandler) {
+func (r *DockerRunner) OnContainerReleased(f ContainerReleasedHandler) {
 	r.muHandler.Lock()
-	r.onRunDone = f
+	r.onContainerReleased = f
 	r.muHandler.Unlock()
 }
 
@@ -806,8 +926,10 @@ func (r *DockerRunner) createWrapperVolume(runtime string) (string, string, erro
 	if err != nil {
 		return "", "", err
 	}
-	if err = r.fileRepo.Link(volKey, runtime, wrapperMount); err != nil {
-		return "", "", err
+	for _, resKey := range []string{wrapperName, runtime} {
+		if err = r.fileRepo.Link(volKey, resKey, wrapperMount); err != nil {
+			return "", "", err
+		}
 	}
 	volRelPath, err := r.fileRepo.RelativePath(volPath)
 	util.Must(err)

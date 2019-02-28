@@ -44,10 +44,12 @@ func TestWorker(t *testing.T) {
 			scriptCli: scriptCli,
 			scripts:   make(map[ScriptInfo]int),
 		}
+		cont := &WorkerContainer{Worker: worker}
 
 		Convey("Reserve returns false for dead worker", func() {
 			worker.alive = false
 			So(worker.Reserve(100, 100, false), ShouldBeFalse)
+			So(cont.Reserve(100, 100, false), ShouldBeFalse)
 			So(worker.FreeCPU(), ShouldEqual, 2000)
 		})
 		Convey("Reserve returns false when requireSlots is true and there are < 0 slots", func() {
@@ -66,20 +68,20 @@ func TestWorker(t *testing.T) {
 			Convey("propagates Meta Send error", func() {
 				stream.On("Send", mock.Anything).Return(err)
 				repoCli.On("Exists", mock.Anything, mock.Anything).Return(&repopb.ExistsResponse{Ok: false}, nil)
-				e := worker.Upload(context.Background(), fs, "/path", "key")
+				e := cont.Upload(context.Background(), fs, "/path", "key")
 				So(e, ShouldEqual, err)
 			})
 			Convey("propagates Recv error", func() {
 				stream.On("Send", mock.Anything).Return(nil)
 				stream.On("Recv", mock.Anything).Return(nil, err).Once()
 				repoCli.On("Exists", mock.Anything, mock.Anything).Return(&repopb.ExistsResponse{Ok: false}, nil)
-				e := worker.Upload(context.Background(), fs, "/path", "key")
+				e := cont.Upload(context.Background(), fs, "/path", "key")
 				So(e, ShouldEqual, err)
 			})
 			Convey("returns if not accepted", func() {
 				stream.On("Send", mock.Anything).Return(nil).Once()
 				stream.On("Recv", mock.Anything).Return(&repopb.UploadResponse{Accepted: false}, nil).Once()
-				e := worker.Upload(context.Background(), fs, "/path", "key")
+				e := cont.Upload(context.Background(), fs, "/path", "key")
 				So(e, ShouldBeNil)
 			})
 			Convey("given successful meta send", func() {
@@ -89,13 +91,13 @@ func TestWorker(t *testing.T) {
 				Convey("on Walk error, checks Exists", func() {
 					repoCli.On("Exists", mock.Anything, mock.Anything).Return(&repopb.ExistsResponse{Ok: true}, nil)
 
-					e := worker.Upload(context.Background(), fs, "/path", "key")
+					e := cont.Upload(context.Background(), fs, "/path", "key")
 					So(e, ShouldBeNil)
 				})
 				Convey("propagates Walk error", func() {
 					repoCli.On("Exists", mock.Anything, mock.Anything).Return(&repopb.ExistsResponse{Ok: false}, nil)
 
-					e := worker.Upload(context.Background(), fs, "/path", "key")
+					e := cont.Upload(context.Background(), fs, "/path", "key")
 					So(e, ShouldNotBeNil)
 				})
 				Convey("given file in MemMapFs", func() {
@@ -104,19 +106,19 @@ func TestWorker(t *testing.T) {
 
 					Convey("propagates Chunk Send error", func() {
 						stream.On("Send", mock.Anything).Return(err).Once()
-						e := worker.Upload(context.Background(), fs, "/path", "key")
+						e := cont.Upload(context.Background(), fs, "/path", "key")
 						So(e, ShouldEqual, err)
 					})
 					Convey("propagates Done Send error", func() {
 						stream.On("Send", mock.Anything).Return(nil).Times(1)
 						stream.On("Send", mock.Anything).Return(err).Once()
-						e := worker.Upload(context.Background(), fs, "/path", "key")
+						e := cont.Upload(context.Background(), fs, "/path", "key")
 						So(e, ShouldEqual, err)
 					})
 					Convey("propagates last Recv error", func() {
 						stream.On("Send", mock.Anything).Return(nil).Times(2)
 						stream.On("Recv", mock.Anything).Return(nil, err).Once()
-						e := worker.Upload(context.Background(), fs, "/path", "key")
+						e := cont.Upload(context.Background(), fs, "/path", "key")
 						So(e, ShouldEqual, err)
 					})
 					Convey("given mocked fs, Upload propagates read error", func() {
@@ -126,7 +128,7 @@ func TestWorker(t *testing.T) {
 						mockfs.On("Open", "/path").Return(fs.Open("/path"))
 						mockfs.On("Open", "/path/file.js").Return(nil, err)
 
-						e := worker.Upload(context.Background(), mockfs, "/path", "key")
+						e := cont.Upload(context.Background(), mockfs, "/path", "key")
 						So(e, ShouldEqual, err)
 						mockfs.AssertExpectations(t)
 					})
@@ -138,7 +140,7 @@ func TestWorker(t *testing.T) {
 
 		Convey("Run propagates gRPC error", func() {
 			scriptCli.On("Run", mock.Anything).Return(nil, err)
-			_, e := worker.Run(context.Background(), &scriptpb.RunRequest_MetaMessage{}, nil)
+			_, e := cont.Run(context.Background(), &scriptpb.RunRequest_MetaMessage{}, nil)
 			So(e, ShouldEqual, err)
 		})
 		Convey("given mocked stream, Run", func() {
@@ -157,7 +159,7 @@ func TestWorker(t *testing.T) {
 				stream.On("CloseSend").Return(err)
 			})
 
-			_, e := worker.Run(context.Background(), &scriptpb.RunRequest_MetaMessage{}, []*scriptpb.RunRequest_ChunkMessage{
+			_, e := cont.Run(context.Background(), &scriptpb.RunRequest_MetaMessage{}, []*scriptpb.RunRequest_ChunkMessage{
 				{Name: "chunk1", Data: []byte("data")},
 			})
 			So(e, ShouldEqual, err)

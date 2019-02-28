@@ -19,10 +19,6 @@
   revision = "7195df32062bf57e9f0f86d3b03453ed0b7508b5"
 
 [[constraint]]
-  name = "github.com/emirpasic/gods"
-  version = "1.12.0"
-
-[[constraint]]
   name = "github.com/evalphobia/logrus_sentry"
   version = "0.4.6"
 

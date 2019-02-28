@@ -51,12 +51,12 @@ func TestRepo(t *testing.T) {
 			Convey("Store creates file(s) on successful disk check and entry in cache", func() {
 				lockCh, storeKey := repo.StoreLock("key")
 				So(lockCh, ShouldNotBeNil)
-				path, e := repo.Store("key", storeKey, bytes.NewReader([]byte(content)), "name1")
+				path, e := repo.Store("key", storeKey, bytes.NewReader([]byte(content)), "name1", 0)
 				So(path, ShouldStartWith, dir)
 				So(e, ShouldBeNil)
 				stat, _ := os.Stat(path)
 				So(stat.IsDir(), ShouldBeTrue)
-				_, e = repo.Store("key", storeKey, bytes.NewReader([]byte(content)), "name2")
+				_, e = repo.Store("key", storeKey, bytes.NewReader([]byte(content)), "name2", 0)
 				So(e, ShouldBeNil)
 				repo.StoreUnlock("key", storeKey, lockCh, true)
 
@@ -92,12 +92,12 @@ func TestRepo(t *testing.T) {
 				})
 			})
 			Convey("PermStore creates file(s) on successful disk check and entry in internal map (no ttl)", func() {
-				path, e := repo.PermStore("key", bytes.NewReader([]byte(content)), "name1")
+				path, e := repo.PermStore("key", bytes.NewReader([]byte(content)), "name1", 0)
 				So(path, ShouldStartWith, dir)
 				So(e, ShouldBeNil)
 				stat, _ := os.Stat(path)
 				So(stat.IsDir(), ShouldBeTrue)
-				_, e = repo.PermStore("key", bytes.NewReader([]byte(content)), "name2")
+				_, e = repo.PermStore("key", bytes.NewReader([]byte(content)), "name2", 0)
 				So(e, ShouldBeNil)
 
 				// Verify that correct files exists.
@@ -123,14 +123,14 @@ func TestRepo(t *testing.T) {
 			})
 			Convey("StoreUnlock with save=false discards the file", func() {
 				lockCh, storeKey := repo.StoreLock("key")
-				path, _ := repo.Store("key", storeKey, bytes.NewReader([]byte(content)), "name")
+				path, _ := repo.Store("key", storeKey, bytes.NewReader([]byte(content)), "name", 0)
 				repo.StoreUnlock("key", storeKey, lockCh, false)
 				_, e := os.Stat(path)
 				So(os.IsNotExist(e), ShouldBeTrue)
 			})
 			Convey("StoreUnlock discards files if key was set in meantime", func() {
 				lockCh, storeKey := repo.StoreLock("key")
-				path, _ := repo.Store("key", storeKey, bytes.NewReader([]byte("abc")), "name")
+				path, _ := repo.Store("key", storeKey, bytes.NewReader([]byte("abc")), "name", 0)
 				repo.fileCache.Set("key", Resource{Path: "path"})
 				repo.StoreUnlock("key", storeKey, lockCh, true)
 				_, e := os.Stat(path)
@@ -180,11 +180,11 @@ func TestRepo(t *testing.T) {
 			sc.On("GetDiskUsage", dir).Return(float64(100), uint64(0))
 
 			Convey("Store propagates storeFile error", func() {
-				_, e := repo.Store("key", "storeKey", bytes.NewReader([]byte("abc")), "name")
+				_, e := repo.Store("key", "storeKey", bytes.NewReader([]byte("abc")), "name", 0)
 				So(e, ShouldEqual, ErrNotEnoughDiskSpace)
 			})
 			Convey("PermStore propagates storeFile error", func() {
-				_, e := repo.PermStore("key", bytes.NewReader([]byte("abc")), "name")
+				_, e := repo.PermStore("key", bytes.NewReader([]byte("abc")), "name", 0)
 				So(e, ShouldEqual, ErrNotEnoughDiskSpace)
 			})
 		})
@@ -202,7 +202,7 @@ func TestRepo(t *testing.T) {
 
 			// Verify that from cache 2 firstly added items are deleted while perm store remains untouched.
 			path := filepath.Join(repo.StoragePath(), fileStorageName, "name")
-			e := repo.storeFile(path, bytes.NewReader([]byte("abc")), "name")
+			e := repo.storeFile(path, bytes.NewReader([]byte("abc")), "name", 0)
 			So(e, ShouldBeNil)
 			So(eviction, ShouldEqual, 2)
 			So(repo.fileCache.Len(), ShouldEqual, 1)
@@ -268,7 +268,7 @@ func TestRepo(t *testing.T) {
 		Convey("Link returns error when volume is not found", func() {
 			sc.On("GetDiskUsage", dir).Return(float64(0), uint64(math.MaxUint64))
 			lockCh, storeKey := repo.StoreLock("reskey")
-			repo.Store("reskey", storeKey, bytes.NewReader([]byte("abc")), "name")
+			repo.Store("reskey", storeKey, bytes.NewReader([]byte("abc")), "name", 0)
 			repo.StoreUnlock("reskey", storeKey, lockCh, true)
 			e := repo.Link("volkey", "reskey", "dest")
 			So(e, ShouldEqual, ErrVolumeNotFound)
@@ -276,7 +276,7 @@ func TestRepo(t *testing.T) {
 		Convey("Link creates a link inside volume to resource", func() {
 			sc.On("GetDiskUsage", dir).Return(float64(0), uint64(math.MaxUint64))
 			lockCh, storeKey := repo.StoreLock("reskey")
-			repo.Store("reskey", storeKey, bytes.NewReader([]byte("abc")), "name")
+			repo.Store("reskey", storeKey, bytes.NewReader([]byte("abc")), "name", os.ModePerm)
 			repo.StoreUnlock("reskey", storeKey, lockCh, true)
 			volKey, path, e := repo.CreateVolume()
 			So(e, ShouldBeNil)
@@ -356,7 +356,7 @@ func TestRepoWithMocks(t *testing.T) {
 			fs.On("MkdirAll", mock.Anything, mock.Anything).Return(nil)
 			fs.On("Create", mock.Anything).Return(&os.File{}, err)
 
-			e := repo.storeFile("path", nil, "name")
+			e := repo.storeFile("path", nil, "name", 0)
 			So(e, ShouldEqual, err)
 		})
 		Convey("storeFile propagates Read error", func() {
@@ -365,7 +365,20 @@ func TestRepoWithMocks(t *testing.T) {
 			fs.On("MkdirAll", mock.Anything, mock.Anything).Return(nil)
 			fs.On("Create", mock.Anything).Return(file, nil)
 
-			e := repo.storeFile("path", &mockReader{err}, "name")
+			e := repo.storeFile("path", &mockReader{err}, "name", 0)
+			So(e, ShouldEqual, err)
+
+			file.Close()
+			os.Remove(file.Name())
+		})
+		Convey("storeFile propagates Chmod error", func() {
+			file, _ := ioutil.TempFile("", "")
+			sc.On("GetDiskUsage", dir).Return(float64(0), uint64(math.MaxUint64))
+			fs.On("MkdirAll", mock.Anything, mock.Anything).Return(nil)
+			fs.On("Create", mock.Anything).Return(file, nil)
+			fs.On("Chmod", mock.Anything, mock.Anything).Return(err)
+
+			e := repo.storeFile("path", &mockReader{io.EOF}, "name", os.ModePerm)
 			So(e, ShouldEqual, err)
 
 			file.Close()
@@ -379,7 +392,7 @@ func TestRepoWithMocks(t *testing.T) {
 			fs.On("MkdirAll", mock.Anything, mock.Anything).Return(nil)
 			fs.On("Create", mock.Anything).Return(file, nil)
 
-			e := repo.storeFile("path", &mockReader{io.EOF}, "name")
+			e := repo.storeFile("path", &mockReader{io.EOF}, "name", 0)
 			So(e, ShouldNotBeNil)
 			So(e, ShouldResemble, file.Close())
 
@@ -401,7 +414,7 @@ func TestRepoWithMocks(t *testing.T) {
 			})
 			Convey("storeFile propagates error", func() {
 				sc.On("GetDiskUsage", dir).Return(float64(0), uint64(math.MaxUint64))
-				e := repo.storeFile("path", nil, "name")
+				e := repo.storeFile("path", nil, "name", 0)
 				So(e, ShouldEqual, err)
 			})
 		})
@@ -445,13 +458,13 @@ func TestRepoWithMocks(t *testing.T) {
 
 		Convey("deleteVolume calls unmount on all mounts", func() {
 			fs.On("RemoveAll", mock.Anything).Return(nil)
-			commander.On("Run", "fusermount", "-u", mock.Anything).Return(nil).Twice()
+			commander.On("Run", "fusermount", "-uz", mock.Anything).Return(nil).Twice()
 			e := repo.deleteVolume(&Volume{mounts: []string{"abc", "cba"}})
 			So(e, ShouldBeNil)
 		})
 		Convey("deleteVolume propagates unmount error", func() {
 			fs.On("RemoveAll", mock.Anything).Return(nil)
-			commander.On("Run", "fusermount", "-u", mock.Anything).Return(err)
+			commander.On("Run", "fusermount", "-uz", mock.Anything).Return(err)
 			e := repo.deleteVolume(&Volume{mounts: []string{"abc"}})
 			So(e, ShouldEqual, err)
 		})
@@ -499,7 +512,7 @@ squashfuse /tmp/storage/abc fuse.squashfuse rw,nosuid,nodev,relatime,user_id=0,g
 			file.Seek(0, 0)
 
 			fs.On("OpenFile", "/proc/mounts", os.O_RDONLY, os.ModePerm).Return(file, nil)
-			commander.On("Run", "fusermount", "-u", mock.Anything).Return(nil).Once()
+			commander.On("Run", "fusermount", "-uz", mock.Anything).Return(nil).Once()
 			repo.cleanupMounts()
 
 			file.Close()

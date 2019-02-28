@@ -59,9 +59,6 @@ func (l *Limiter) createLock(key string, limit int) (lock *lockData) {
 	v := l.channels.Get(key)
 	if v == nil {
 		ch := make(chan struct{}, limit)
-		for i := 0; i < limit; i++ {
-			ch <- struct{}{}
-		}
 		lock = &lockData{ch: ch}
 		l.channels.Set(key, lock)
 	} else {
@@ -93,7 +90,7 @@ func (l *Limiter) Lock(ctx context.Context, key string, limit int) error {
 	}
 
 	select {
-	case <-lock.ch:
+	case lock.ch <- struct{}{}:
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
@@ -107,7 +104,7 @@ func (l *Limiter) Unlock(key string, limit int) {
 	if v == nil {
 		return
 	}
-	v.(*lockData).ch <- struct{}{}
+	<-v.(*lockData).ch
 }
 
 // Shutdown stops everything.

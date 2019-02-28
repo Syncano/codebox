@@ -22,12 +22,11 @@ type Manager interface {
 	PruneImages(ctx context.Context) (types.ImagesPruneReport, error)
 
 	ListContainersByLabel(ctx context.Context, label string) ([]types.Container, error)
-	ContainerCreate(ctx context.Context, image, user string, cmd []string, env []string, labels map[string]string, constraints Constraints, binds []string) (string, error)
+	ContainerCreate(ctx context.Context, image, user string, cmd []string, env []string, labels map[string]string, constraints *Constraints, binds []string) (string, error)
 	ContainerAttach(ctx context.Context, containerID string) (types.HijackedResponse, error)
-	ContainerErrorLog(ctx context.Context, containerID string) (io.ReadCloser, error)
 	ContainerStart(ctx context.Context, containerID string) error
 	ContainerStop(ctx context.Context, containerID string) error
-	ContainerUpdate(ctx context.Context, containerID string, constraints Constraints) error
+	ContainerUpdate(ctx context.Context, containerID string, constraints *Constraints) error
 }
 
 // Assert that StdManager is compatible with our interface.
@@ -49,7 +48,6 @@ type Client interface {
 	ContainerUnpause(ctx context.Context, container string) error
 	ContainerList(ctx context.Context, options types.ContainerListOptions) ([]types.Container, error)
 	ContainerInspect(ctx context.Context, containerID string) (types.ContainerJSON, error)
-	ContainerLogs(ctx context.Context, container string, options types.ContainerLogsOptions) (io.ReadCloser, error)
 	ContainerUpdate(ctx context.Context, container string, updateConfig containertypes.UpdateConfig) (containertypes.ContainerUpdateOKBody, error)
 
 	ImagePull(ctx context.Context, ref string, options types.ImagePullOptions) (io.ReadCloser, error)

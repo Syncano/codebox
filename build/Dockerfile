@@ -1,5 +1,6 @@
 FROM alpine:3.8
 ENV SQUASHFUSE_VERSION 0.1.103
+ENV WRAPPERPATH /usr/local/bin/codewrapper
 
 RUN set -ex \   
     \
@@ -34,6 +35,7 @@ RUN set -ex \
         ca-certificates
 
 COPY codebox-static /usr/local/bin/codebox
+COPY codewrapper ${WRAPPERPATH}
 
 WORKDIR /home/codebox
 USER codebox

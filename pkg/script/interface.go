@@ -2,7 +2,10 @@ package script
 
 import (
 	"context"
+	"net"
 
+	"github.com/go-redis/redis"
+	"github.com/hashicorp/yamux"
 	"github.com/sirupsen/logrus"
 )
 
@@ -17,9 +20,28 @@ type Runner interface {
 	StopPool()
 	Shutdown()
 	OnContainerRemoved(f ContainerRemovedHandler)
-	OnRunDone(f RunDoneHandler)
+	OnContainerReleased(f ContainerReleasedHandler)
 	IsRunning() bool
 }
 
 // Assert that DockerRunner is compatible with our interface.
 var _ Runner = (*DockerRunner)(nil)
+
+// YamuxSession provides methods to open new session connections.
+//go:generate mockery -inpkg -testonly -name YamuxSession
+type YamuxSession interface {
+	Open() (net.Conn, error)
+	Close() error
+}
+
+// Assert that yamux.Session is compatible with our interface.
+var _ YamuxSession = (*yamux.Session)(nil)
+
+// RedisClient defines redis client methods we are using.
+//go:generate mockery -inpkg -testonly -name RedisClient
+type RedisClient interface {
+	Publish(channel string, message interface{}) *redis.IntCmd
+}
+
+// Assert that redis client is compatible with our interface.
+var _ RedisClient = (*redis.Client)(nil)

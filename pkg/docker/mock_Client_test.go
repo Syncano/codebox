@@ -102,29 +102,6 @@ func (_m *MockClient) ContainerList(ctx context.Context, options types.Container
 	return r0, r1
 }
 
-// ContainerLogs provides a mock function with given fields: ctx, _a1, options
-func (_m *MockClient) ContainerLogs(ctx context.Context, _a1 string, options types.ContainerLogsOptions) (io.ReadCloser, error) {
-	ret := _m.Called(ctx, _a1, options)
-
-	var r0 io.ReadCloser
-	if rf, ok := ret.Get(0).(func(context.Context, string, types.ContainerLogsOptions) io.ReadCloser); ok {
-		r0 = rf(ctx, _a1, options)
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(io.ReadCloser)
-		}
-	}
-
-	var r1 error
-	if rf, ok := ret.Get(1).(func(context.Context, string, types.ContainerLogsOptions) error); ok {
-		r1 = rf(ctx, _a1, options)
-	} else {
-		r1 = ret.Error(1)
-	}
-
-	return r0, r1
-}
-
 // ContainerPause provides a mock function with given fields: ctx, _a1
 func (_m *MockClient) ContainerPause(ctx context.Context, _a1 string) error {
 	ret := _m.Called(ctx, _a1)

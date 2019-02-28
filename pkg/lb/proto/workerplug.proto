@@ -28,6 +28,7 @@ message ResourceReleaseResponse {}
 
 message ContainerRemovedRequest {
   string id = 1;
+  string containerID = 5;
   string sourceHash = 2;
   string environment = 3;
   string userID = 4;

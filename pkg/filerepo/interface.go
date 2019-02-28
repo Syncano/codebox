@@ -2,6 +2,7 @@ package filerepo
 
 import (
 	"io"
+	"os"
 
 	"github.com/spf13/afero"
 )
@@ -11,10 +12,10 @@ import (
 type Repo interface {
 	Options() Options
 	StoragePath() string
-	Store(key, storeKey string, src io.Reader, filename string) (path string, err error)
+	Store(key, storeKey string, src io.Reader, filename string, mode os.FileMode) (path string, err error)
 	StoreLock(key string) (ch chan struct{}, storeKey string)
 	StoreUnlock(key, storeKey string, ch chan struct{}, save bool)
-	PermStore(key string, src io.Reader, filename string) (path string, err error)
+	PermStore(key string, src io.Reader, filename string, mode os.FileMode) (path string, err error)
 	Get(key string) string
 	Delete(key string)
 	CreateVolume() (string, string, error)

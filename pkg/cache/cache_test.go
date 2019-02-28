@@ -27,6 +27,13 @@ func TestCache(t *testing.T) {
 			Convey("and cannot be called twice", func() {
 				So(func() { c.Init(Options{}, nil) }, ShouldPanic)
 			})
+			Convey("delete returns false when delete handler returns nil", func() {
+				c.deleteHandler = func(item *valuesItem) *keyValue {
+					return nil
+				}
+				c.valuesList.PushBack(&valuesItem{key: "key", item: new(Item)})
+				So(c.DeleteLRU(), ShouldBeFalse)
+			})
 
 			c.StopJanitor()
 

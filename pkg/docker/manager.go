@@ -50,6 +50,8 @@ var ErrReservedCPUTooHigh = errors.New("value of reserved cpu is higher than ava
 // Constraints defines limitations for docker container.
 type Constraints struct {
 	CPULimit  int64
+	CPUPeriod int64
+	CPUQuota  int64
 	IOPSLimit uint64
 
 	MemoryLimit     int64
@@ -177,7 +179,7 @@ func (m *StdManager) ListContainersByLabel(ctx context.Context, label string) ([
 
 // ContainerCreate creates docker container for given image and command.
 func (m *StdManager) ContainerCreate(ctx context.Context, image, user string, cmd []string, env []string,
-	labels map[string]string, constraints Constraints, binds []string) (string, error) {
+	labels map[string]string, constraints *Constraints, binds []string) (string, error) {
 
 	stopTimeout := 0
 	containerConfig := container.Config{
@@ -241,11 +243,6 @@ func (m *StdManager) ContainerAttach(ctx context.Context, containerID string) (t
 	})
 }
 
-// ContainerErrorLog returns container error log.
-func (m *StdManager) ContainerErrorLog(ctx context.Context, containerID string) (io.ReadCloser, error) {
-	return m.client.ContainerLogs(ctx, containerID, types.ContainerLogsOptions{ShowStderr: true, Tail: "50", Follow: true})
-}
-
 // ContainerStart starts given containerID.
 func (m *StdManager) ContainerStart(ctx context.Context, containerID string) error {
 	return m.client.ContainerStart(ctx, containerID, types.ContainerStartOptions{})
@@ -258,11 +255,13 @@ func (m *StdManager) ContainerStop(ctx context.Context, containerID string) erro
 }
 
 // ContainerUpdate updates given containerID.
-func (m *StdManager) ContainerUpdate(ctx context.Context, containerID string, constraints Constraints) error {
+func (m *StdManager) ContainerUpdate(ctx context.Context, containerID string, constraints *Constraints) error {
 	_, err := m.client.ContainerUpdate(ctx, containerID, containertypes.UpdateConfig{
 		Resources: containertypes.Resources{
-			NanoCPUs: constraints.CPULimit,
-			Memory:   constraints.MemoryLimit,
+			NanoCPUs:  constraints.CPULimit,
+			CPUPeriod: constraints.CPUPeriod,
+			CPUQuota:  constraints.CPUQuota,
+			Memory:    constraints.MemoryLimit,
 		},
 	})
 	return err
