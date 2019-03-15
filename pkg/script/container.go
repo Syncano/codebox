@@ -237,7 +237,7 @@ func (c *Container) Reserve(connID string, success func(numConns int) error) err
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if c.conns == nil || len(c.conns) > c.connLimit {
+	if c.conns == nil || len(c.conns) >= c.connLimit {
 		return ErrTooManyConnections
 	}
 	if _, ok := c.conns[connID]; ok {

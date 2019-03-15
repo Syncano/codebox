@@ -384,6 +384,7 @@ func (r *DockerRunner) Run(ctx context.Context, logger logrus.FieldLogger, runti
 		"userID":      userID,
 		"environment": environment,
 		"weight":      options.Weight,
+		"async":       options.Async,
 	})
 
 	if !r.IsRunning() {
@@ -631,7 +632,8 @@ func (r *DockerRunner) Shutdown() {
 }
 
 func (r *DockerRunner) reserveContainer(ctx context.Context, cont *Container, connID string, new bool, options *RunOptions, constraints *docker.Constraints) error {
-	return cont.Reserve(connID, func(numConns int) error {
+
+	a := cont.Reserve(connID, func(numConns int) error {
 		if numConns == 1 {
 			// If it's the first concurrent connection, acquire semaphore and adapt docker container if needed.
 			if r.poolSemaphore.Acquire(ctx, int64(options.Weight)) != nil {
@@ -650,6 +652,7 @@ func (r *DockerRunner) reserveContainer(ctx context.Context, cont *Container, co
 		}
 		return nil
 	})
+	return a
 }
 
 func (r *DockerRunner) releaseContainer(cont *Container, requestID string, options *RunOptions) error {
@@ -702,7 +705,6 @@ func (r *DockerRunner) getContainer(ctx context.Context, runtime, requestID, sou
 
 		// If container is in good standing, use it from cache.
 		if cont.IsAcceptingConnections() && r.containerCache.Refresh(containerHash, c) {
-
 			if err = r.reserveContainer(ctx, cont, requestID, false, options, constraints); err != nil {
 				if err == ErrTooManyConnections || !cont.IsAcceptingConnections() {
 					continue

@@ -385,7 +385,7 @@ func (s *Server) processResponse(logger logrus.FieldLogger, start time.Time, met
 		if retStream != nil {
 			e := retStream.Send(r)
 			if e != nil {
-				logger.WithError(e).Error("LB grpc:broker:Send error")
+				logger.WithError(e).Warn("LB grpc:broker:Send error")
 				retStream = nil
 			}
 		}
@@ -402,7 +402,7 @@ func (s *Server) processResponse(logger logrus.FieldLogger, start time.Time, met
 			chunk, e := stream.Recv()
 			if e != nil {
 				if e != io.EOF {
-					logger.WithError(e).Error("LB grpc:lb:Recv error")
+					logger.WithError(e).Warn("LB grpc:lb:Recv error")
 				}
 				break
 			}
