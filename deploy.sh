@@ -3,6 +3,7 @@ export APP=codebox
 export VERSION="$2"
 
 export DOCKERIMAGE=${DOCKERIMAGE:-quay.io/syncano/codebox}
+export PYTHONWARNINGS=ignore::yaml.YAMLLoadWarning
 TARGET="$1"
 LB_TOTAL_NUM=1
 
