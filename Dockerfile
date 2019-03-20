@@ -1,4 +1,4 @@
-FROM golang:1.11
+FROM golang:1.12
 ENV SQUASHFUSE_VERSION 0.1.103
 
 RUN set -ex \
