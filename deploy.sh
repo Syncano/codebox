@@ -3,7 +3,6 @@ export APP=codebox
 export VERSION="$2"
 
 export DOCKERIMAGE=${DOCKERIMAGE:-quay.io/syncano/codebox}
-export PYTHONWARNINGS=ignore::yaml.YAMLLoadWarning
 TARGET="$1"
 LB_TOTAL_NUM=1
 
@@ -37,7 +36,7 @@ done
 envsubst() {
     for var in $(compgen -e); do
         echo "$var: \"${!var//\"/\\\"}\""
-    done | jinja2 $1
+    done | PYTHONWARNINGS=ignore jinja2 $1
 }
 
 deploy_broker() {
