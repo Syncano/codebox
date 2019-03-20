@@ -888,6 +888,10 @@ func (r *DockerRunner) cleanupContainer(cont *Container) {
 
 func (r *DockerRunner) onEvictedContainerHandler(key string, val interface{}) {
 	cont := val.(*Container)
+	// Do not cleanup container already being marked for clean up (doing after run of last connection).
+	if !cont.IsAcceptingConnections() {
+		return
+	}
 	cont.StopAcceptingConnections()
 	if cont.ConnsNum() == 0 {
 		r.cleanupContainer(cont)
