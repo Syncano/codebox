@@ -61,15 +61,18 @@ func New(options Options) (*Autoscaler, error) {
 	if len(host) == 0 || len(port) == 0 {
 		return nil, errors.New("unable to load in-cluster configuration, KUBERNETES_SERVICE_HOST and KUBERNETES_SERVICE_PORT must be defined")
 	}
+
 	// Load k8s files.
 	namespace, err := ioutil.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
 	if err != nil {
 		return nil, err
 	}
+
 	ca, err := ioutil.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/ca.crt")
 	if err != nil {
 		return nil, err
 	}
+
 	token, err := ioutil.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/token")
 	if err != nil {
 		return nil, err
@@ -77,6 +80,7 @@ func New(options Options) (*Autoscaler, error) {
 
 	// Configure TLS.
 	tlsConfig := &tls.Config{MinVersion: tls.VersionTLS12}
+
 	tlsConfig.RootCAs = x509.NewCertPool()
 	if !tlsConfig.RootCAs.AppendCertsFromPEM(ca) {
 		return nil, errors.New("certificate authority doesn't contain any certificates")
@@ -123,20 +127,25 @@ func (a *Autoscaler) getReplicas() (*scaleResponseSpec, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	req.Header.Set("Authorization", "Bearer "+a.token)
+
 	res, err := a.client.Do(req)
 	if res != nil {
 		defer res.Body.Close()
 	}
+
 	if err != nil {
 		return nil, err
 	}
+
 	respBody, err := ioutil.ReadAll(res.Body)
 	if err != nil {
 		return nil, err
 	}
 
 	var respSpec scaleResponseSpec
+
 	err = json.Unmarshal(respBody, &respSpec)
 	if err != nil {
 		return nil, err
@@ -147,21 +156,25 @@ func (a *Autoscaler) getReplicas() (*scaleResponseSpec, error) {
 
 func (a *Autoscaler) updateReplicas(updated int) error {
 	jsonData := fmt.Sprintf(`{"spec": {"replicas": %d}}`, updated)
+
 	req, err := http.NewRequest("PATCH", a.url, bytes.NewBuffer([]byte(jsonData)))
 	if err != nil {
 		return err
 	}
+
 	req.Header.Set("Authorization", "Bearer "+a.token)
 	req.Header.Set("Content-Type", "application/merge-patch+json")
+
 	res, err := a.client.Do(req)
 	if err != nil {
 		return err
 	}
+
 	return res.Body.Close()
 }
 
 // Start runs autoscaler loop in background and returns channel that if closed will stop the loop.
-func (a *Autoscaler) Start() chan struct{} { // nolint: gocyclo
+func (a *Autoscaler) Start() chan struct{} { // nolint: gocyclo, gocognit
 	stop := make(chan struct{})
 	ticker := time.NewTicker(checkPeriod)
 	freeCPUCounter := expvar.Get("cpu").(*expvar.Int)
@@ -222,7 +235,6 @@ func (a *Autoscaler) Start() chan struct{} { // nolint: gocyclo
 					err = a.updateReplicas(desiredReplicas)
 					if err != nil {
 						logrus.WithError(err).WithField("replicas", desiredReplicas).Warn("Autoscaling.UpdateScale failed")
-
 					}
 				}
 

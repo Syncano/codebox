@@ -45,6 +45,7 @@ func stripInAppPrefix(prefix, file string) string {
 	} else {
 		prefixI += len(prefix) + 1
 	}
+
 	return file[prefixI:]
 }
 
@@ -67,14 +68,17 @@ func (hook *LogrusStackHook) Fire(entry *logrus.Entry) error {
 			caller := stack.Caller(skipFrames)
 			caller.File = stripInAppPrefix(hook.InAppPrefix, caller.File)
 			entry.Data["caller"] = caller
+
 			break
 		}
 	}
+
 	for _, level := range hook.StackLevels {
 		if entry.Level == level {
 			entry.Data["stack"] = stack.Callers(skipFrames)
 			break
 		}
 	}
+
 	return nil
 }

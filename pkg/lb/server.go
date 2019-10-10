@@ -127,6 +127,7 @@ func NewServer(fileRepo filerepo.Repo, options ServerOptions) *Server {
 		limiter:              limiter.New(limiter.Options{}),
 	}
 	workers.OnValueEvicted(s.onEvictedWorkerHandler)
+
 	return s
 }
 
@@ -145,8 +146,10 @@ func (s *Server) Shutdown() {
 }
 
 func (s *Server) findWorkerWithMaxFreeCPU() *Worker {
-	var mCPU int32
-	var memory uint64
+	var (
+		mCPU   int32
+		memory uint64
+	)
 
 	chosen := s.workers.Reduce(func(key string, val, chosen interface{}) interface{} {
 		w := val.(*Worker)
@@ -163,23 +166,28 @@ func (s *Server) findWorkerWithMaxFreeCPU() *Worker {
 	if chosen == nil {
 		return nil
 	}
+
 	return chosen.(*Worker)
 }
 
 // Run runs script in secure environment of worker.
 func (s *Server) Run(stream pb.ScriptRunner_RunServer) error {
-	var runMeta *pb.RunRequest_MetaMessage
-	var scriptMeta *scriptpb.RunRequest_MetaMessage
-	var scriptChunk []*scriptpb.RunRequest_ChunkMessage
+	var (
+		runMeta     *pb.RunRequest_MetaMessage
+		scriptMeta  *scriptpb.RunRequest_MetaMessage
+		scriptChunk []*scriptpb.RunRequest_ChunkMessage
+	)
 
 	for {
 		in, err := stream.Recv()
 		if err == io.EOF {
 			break
 		}
+
 		if err != nil {
 			return err
 		}
+
 		switch v := in.Value.(type) {
 		case *pb.RunRequest_Meta:
 			runMeta = v.Meta
@@ -202,7 +210,6 @@ func (s *Server) Run(stream pb.ScriptRunner_RunServer) error {
 
 func (s *Server) processRun(stream pb.ScriptRunner_RunServer, runMeta *pb.RunRequest_MetaMessage, // nolint: gocyclo
 	scriptMeta *scriptpb.RunRequest_MetaMessage, scriptChunk []*scriptpb.RunRequest_ChunkMessage) error {
-
 	ctx := stream.Context()
 	peerAddr := util.PeerAddr(ctx)
 	logger := logrus.WithFields(logrus.Fields{
@@ -212,8 +219,9 @@ func (s *Server) processRun(stream pb.ScriptRunner_RunServer, runMeta *pb.RunReq
 		"sourceHash": scriptMeta.SourceHash,
 		"userID":     scriptMeta.UserID,
 	})
-	logger.Debug("grpc:lb:Run start")
 	start := time.Now()
+
+	logger.Debug("grpc:lb:Run start")
 
 	if runMeta != nil && runMeta.ConcurrencyLimit >= 0 {
 		if err := s.limiter.Lock(ctx, runMeta.ConcurrencyKey, int(runMeta.ConcurrencyLimit)); err != nil {
@@ -280,11 +288,13 @@ func (s *Server) processRun(stream pb.ScriptRunner_RunServer, runMeta *pb.RunReq
 		}
 
 		logger.WithField("took", time.Since(start)).Info("grpc:lb:Run")
+
 		return false, nil
 	}); runErr != nil {
 		logger.WithError(runErr).Warn("grpc:lb:Run failed")
 		return runErr
 	}
+
 	return nil
 }
 
@@ -296,6 +306,7 @@ func (s *Server) createScriptInfo(meta *scriptpb.RunRequest_MetaMessage) ScriptI
 		Async:       meta.GetOptions().GetAsync() > 0,
 		MCPU:        meta.GetOptions().GetMCPU(),
 	}
+
 	return script
 }
 
@@ -312,13 +323,12 @@ func (s *Server) uploadResource(ctx context.Context, logger logrus.FieldLogger, 
 			return err
 		}
 	}
-	return nil
 
+	return nil
 }
 
 func (s *Server) processWorkerRun(ctx context.Context, logger logrus.FieldLogger, cont *WorkerContainer,
 	meta *scriptpb.RunRequest_MetaMessage, chunk []*scriptpb.RunRequest_ChunkMessage) (<-chan interface{}, error) {
-
 	for _, key := range []string{meta.SourceHash, meta.Environment} {
 		if key != "" {
 			if err := s.uploadResource(ctx, logger, cont, key); err != nil {
@@ -343,6 +353,7 @@ func (s *Server) grabWorker(script ScriptInfo) (*WorkerContainer, bool) { // nol
 	s.mu.Lock()
 	for {
 		freeCPU = 0
+
 		if m, ok := s.workerContainerCache[script]; ok {
 			for _, w := range m {
 				cpu := w.FreeCPU()
@@ -368,11 +379,14 @@ func (s *Server) grabWorker(script ScriptInfo) (*WorkerContainer, bool) { // nol
 		if container == nil {
 			break
 		}
+
 		if s.workers.Get(container.ID) != nil && container.Reserve(script.MCPU) {
 			break
 		}
 	}
+
 	s.mu.Unlock()
+
 	return container, fromCache
 }
 
@@ -380,6 +394,7 @@ func (s *Server) handleWorkerError(cont *WorkerContainer, err error) {
 	if err == context.Canceled {
 		return
 	}
+
 	if cont.IncreaseErrorCount() >= s.options.WorkerErrorThreshold {
 		s.workers.Delete(cont.ID)
 	}
@@ -387,8 +402,7 @@ func (s *Server) handleWorkerError(cont *WorkerContainer, err error) {
 
 // ResourceRelease handles notifications sent by client whenever a slot is ready to accept connections.
 func (s *Server) ResourceRelease(ctx context.Context, in *pb.ResourceReleaseRequest) (*pb.ResourceReleaseResponse, error) {
-	peerAddr := util.PeerAddr(ctx)
-	logrus.WithFields(logrus.Fields{"id": in.GetId(), "peer": peerAddr}).Debug("grpc:lb:ResourceRelease")
+	logrus.WithFields(logrus.Fields{"id": in.GetId(), "peer": util.PeerAddr(ctx)}).Debug("grpc:lb:ResourceRelease")
 
 	cur := s.workers.Get(in.Id)
 	if cur == nil {
@@ -396,6 +410,7 @@ func (s *Server) ResourceRelease(ctx context.Context, in *pb.ResourceReleaseRequ
 	}
 
 	cur.(*Worker).Release(in.MCPU)
+
 	return &pb.ResourceReleaseResponse{}, nil
 }
 
@@ -403,6 +418,7 @@ func (s *Server) ResourceRelease(ctx context.Context, in *pb.ResourceReleaseRequ
 func (s *Server) ContainerRemoved(ctx context.Context, in *pb.ContainerRemovedRequest) (*pb.ContainerRemovedResponse, error) {
 	peerAddr := util.PeerAddr(ctx)
 	ci := ScriptInfo{SourceHash: in.SourceHash, Environment: in.Environment, UserID: in.UserID}
+
 	logrus.WithFields(logrus.Fields{"id": in.GetId(), "container": &ci, "peer": peerAddr}).Debug("grpc:lb:ContainerRemoved")
 
 	cur := s.workers.Get(in.Id)
@@ -413,12 +429,14 @@ func (s *Server) ContainerRemoved(ctx context.Context, in *pb.ContainerRemovedRe
 	s.mu.Lock()
 	cur.(*Worker).RemoveCache(s.workerContainerCache, ci, in.ContainerID)
 	s.mu.Unlock()
+
 	return &pb.ContainerRemovedResponse{}, nil
 }
 
 // Register is sent at the beginning by the worker.
 func (s *Server) Register(ctx context.Context, in *pb.RegisterRequest) (*pb.RegisterResponse, error) {
 	workerCounter.Add(1) // Increase worker count.
+
 	peerAddr := util.PeerAddr(ctx)
 	addr := net.TCPAddr{IP: peerAddr.(*net.TCPAddr).IP, Port: int(in.Port)}
 
@@ -428,6 +446,7 @@ func (s *Server) Register(ctx context.Context, in *pb.RegisterRequest) (*pb.Regi
 	w := NewWorker(in.Id, addr, in.MCPU, in.DefaultMCPU, in.Memory)
 	logrus.WithField("worker", w).Info("grpc:lb:Register")
 	s.workers.Set(in.Id, w)
+
 	return &pb.RegisterResponse{}, nil
 }
 
@@ -437,22 +456,25 @@ func (s *Server) Heartbeat(ctx context.Context, in *pb.HeartbeatRequest) (*pb.He
 	if w == nil {
 		return nil, ErrUnknownWorkerID
 	}
+
 	workerMemory.WithLabelValues(in.Id).Set(float64(in.Memory))
 	w.(*Worker).Heartbeat(in.Memory)
+
 	return &pb.HeartbeatResponse{}, nil
 }
 
 // Disconnect gracefully removes worker.
 func (s *Server) Disconnect(ctx context.Context, in *pb.DisconnectRequest) (*pb.DisconnectResponse, error) {
-	peerAddr := util.PeerAddr(ctx)
-	logrus.WithFields(logrus.Fields{"id": in.GetId(), "peer": peerAddr}).Info("grpc:lb:Disconnect")
+	logrus.WithFields(logrus.Fields{"id": in.GetId(), "peer": util.PeerAddr(ctx)}).Info("grpc:lb:Disconnect")
 
 	s.workers.Delete(in.Id)
+
 	return &pb.DisconnectResponse{}, nil
 }
 
 func (s *Server) onEvictedWorkerHandler(key string, val interface{}) {
 	workerCounter.Add(-1) // Decrease worker count.
+
 	w := val.(*Worker)
 
 	s.mu.Lock()

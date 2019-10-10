@@ -90,6 +90,7 @@ const (
 func New(options Options, checker sys.SystemChecker, fs Fs, command Commander) *FsRepo {
 	mergo.Merge(&options, DefaultOptions) // nolint - error not possible
 	util.Must(fs.MkdirAll(options.BasePath, os.ModePerm))
+
 	r := FsRepo{
 		storeID:    util.GenerateKey(),
 		options:    options,
@@ -100,12 +101,15 @@ func New(options Options, checker sys.SystemChecker, fs Fs, command Commander) *
 		volumes:    make(map[string]*Volume),
 		storeLocks: make(map[string]chan struct{}),
 	}
+
 	r.fileCache = cache.NewLRUCache(cache.Options{
 		TTL:             options.TTL,
 		CleanupInterval: options.CleanupInterval,
 		Capacity:        options.Capacity,
 	}, cache.LRUOptions{})
+
 	r.fileCache.OnValueEvicted(r.onValueEvictedHandler)
+
 	return &r
 }
 
@@ -138,13 +142,16 @@ func (r *FsRepo) StoreLock(key string) (chan struct{}, string) {
 	)
 
 	r.muStoreLocks.Lock()
+
 	ch, ok = r.storeLocks[key]
 	if !ok {
 		ch = make(chan struct{})
 		r.storeLocks[key] = ch
 		r.muStoreLocks.Unlock()
+
 		return ch, util.GenerateKey()
 	}
+
 	r.muStoreLocks.Unlock()
 
 	select {
@@ -157,8 +164,8 @@ func (r *FsRepo) StoreLock(key string) (chan struct{}, string) {
 	}
 
 	r.removeStoreLock(key, ch)
-	return r.StoreLock(key)
 
+	return r.StoreLock(key)
 }
 
 func (r *FsRepo) removeStoreLock(key string, ch chan struct{}) {
@@ -178,6 +185,7 @@ func (r *FsRepo) StoreUnlock(key, storeKey string, ch chan struct{}, save bool) 
 		r.fs.RemoveAll(path) // nolint - ignore error
 		r.removeStoreLock(key, ch)
 	}
+
 	close(ch)
 }
 
@@ -187,9 +195,11 @@ func (r *FsRepo) PermStore(key string, src io.Reader, filename string, mode os.F
 	if err = r.storeFile(path, src, filename, mode); err != nil {
 		return
 	}
+
 	r.muStore.Lock()
 	r.permStore[key] = path
 	r.muStore.Unlock()
+
 	return
 }
 
@@ -200,6 +210,7 @@ func (r *FsRepo) storeFile(path string, src io.Reader, filename string, mode os.
 		if percent < r.options.MaxDiskUsage {
 			break
 		}
+
 		removed := r.fileCache.DeleteLRU()
 		if !removed {
 			return ErrNotEnoughDiskSpace
@@ -218,15 +229,18 @@ func (r *FsRepo) storeFile(path string, src io.Reader, filename string, mode os.
 	if err != nil {
 		return err
 	}
+
 	if mode != 0 {
 		if err = r.fs.Chmod(filePath, mode); err != nil {
 			return err
 		}
 	}
+
 	if _, err = io.Copy(file, src); err != nil {
 		file.Close() // nolint - don't care about the error
 		return err
 	}
+
 	return file.Close()
 }
 
@@ -235,19 +249,23 @@ func (r *FsRepo) Get(key string) string {
 	if res := r.getPermStore(key); res != "" {
 		return res
 	}
+
 	if res := r.fileCache.Get(key); res != nil {
 		return res.(Resource).Path
 	}
+
 	return ""
 }
 
 func (r *FsRepo) getPermStore(key string) string {
 	r.muStore.RLock()
 	defer r.muStore.RUnlock()
+
 	val, ok := r.permStore[key]
 	if ok {
 		return val
 	}
+
 	return ""
 }
 
@@ -263,10 +281,13 @@ func (r *FsRepo) CreateVolume() (volKey string, path string, err error) {
 
 	volKey = util.GenerateKey()
 	path = filepath.Join(r.StoragePath(), volumeStorageName, volKey)
+
 	if err = r.fs.MkdirAll(path, os.ModePerm); err != nil {
 		return
 	}
+
 	r.volumes[volKey] = &Volume{Path: path}
+
 	return
 }
 
@@ -279,7 +300,9 @@ func (r *FsRepo) DeleteVolume(volKey string) error {
 	if !ok {
 		return ErrVolumeNotFound
 	}
+
 	delete(r.volumes, volKey)
+
 	return r.deleteVolume(vol)
 }
 
@@ -291,9 +314,11 @@ func (r *FsRepo) deleteVolume(vol *Volume) error {
 			err = e
 		}
 	}
+
 	if e := r.fs.RemoveAll(vol.Path); e != nil && err == nil {
 		return e
 	}
+
 	return err
 }
 
@@ -310,10 +335,13 @@ func (r *FsRepo) CleanupVolume(volKey string) error {
 	if !ok {
 		return ErrVolumeNotFound
 	}
+
 	if err := r.deleteVolume(vol); err != nil {
 		return err
 	}
+
 	vol.mounts = []string{}
+
 	return r.fs.MkdirAll(vol.Path, os.ModePerm)
 }
 
@@ -366,6 +394,7 @@ func (r *FsRepo) Mount(volKey, resKey, fileName, destName string) error {
 	if err == nil {
 		vol.mounts = append(vol.mounts, destName)
 	}
+
 	return err
 }
 
@@ -382,6 +411,7 @@ func (r *FsRepo) CleanupUnused() {
 		if file.Name() == r.storeID {
 			continue
 		}
+
 		path := filepath.Join(r.options.BasePath, file.Name())
 
 		if err := r.fs.RemoveAll(path); err != nil {
@@ -420,13 +450,16 @@ func (r *FsRepo) Flush() {
 	r.muStore.Unlock()
 
 	r.muVol.Lock()
+
 	for _, vol := range r.volumes {
 		r.deleteVolume(vol) // nolint - ignore error
 	}
-	r.volumes = make(map[string]*Volume)
-	r.muVol.Unlock()
 
+	r.volumes = make(map[string]*Volume)
+
+	r.muVol.Unlock()
 	r.fileCache.Flush()
+
 	if err := r.fs.RemoveAll(r.StoragePath()); err != nil {
 		panic(err)
 	}
@@ -444,7 +477,9 @@ func (r *FsRepo) onValueEvictedHandler(key string, val interface{}) {
 	r.muStoreLocks.Unlock()
 
 	path := val.(Resource).Path
+
 	logrus.WithFields(logrus.Fields{"key": key, "path": path}).Info("FileRepo path removed")
+
 	if err := r.fs.RemoveAll(path); err != nil {
 		panic(err)
 	}

@@ -68,6 +68,7 @@ func NewServer(runner Runner) *Server {
 // Run runs script in secure environment of worker.
 func (s *Server) Run(stream pb.ScriptRunner_RunServer) error {
 	var meta *pb.RunRequest_MetaMessage
+
 	chunkData := make(map[string]File)
 
 	for {
@@ -75,9 +76,11 @@ func (s *Server) Run(stream pb.ScriptRunner_RunServer) error {
 		if err == io.EOF {
 			break
 		}
+
 		if err != nil {
 			return err
 		}
+
 		switch v := in.Value.(type) {
 		case *pb.RunRequest_Meta:
 			meta = v.Meta
@@ -107,13 +110,17 @@ func (s *Server) Run(stream pb.ScriptRunner_RunServer) error {
 
 	// Use chunk ARGS, fallback to run args.
 	argsData, ok := chunkData[ChunkARGS]
+
 	var args []byte
+
 	if ok {
 		args = argsData.Data
+
 		delete(chunkData, ChunkARGS)
 	} else {
 		args = opts.GetArgs()
 	}
+
 	ret, err := s.Runner.Run(stream.Context(), logger, meta.Runtime, meta.SourceHash, meta.Environment, meta.UserID,
 		&RunOptions{
 			EntryPoint:  opts.GetEntryPoint(),
@@ -143,14 +150,17 @@ func (s *Server) Run(stream pb.ScriptRunner_RunServer) error {
 			return e
 		}
 	}
+
 	return nil
 }
 
 // sendResponse sends response back through grpc channel, chunking if needed.
 func (s *Server) sendResponse(stream pb.ScriptRunner_RunServer, ret *Result) error {
 	// Prepare response.
-	var httpResponse *pb.HTTPResponseMessage
-	var content []byte
+	var (
+		httpResponse *pb.HTTPResponseMessage
+		content      []byte
+	)
 
 	if ret.Response != nil {
 		httpResponse = &pb.HTTPResponseMessage{
@@ -190,6 +200,7 @@ func (s *Server) sendResponse(stream pb.ScriptRunner_RunServer, ret *Result) err
 		if len(content) < chunkSize {
 			cut = len(content)
 		}
+
 		responses = append(responses, &pb.RunResponse{
 			Response: &pb.HTTPResponseMessage{Content: content[:cut]},
 		})
@@ -201,17 +212,20 @@ func (s *Server) sendResponse(stream pb.ScriptRunner_RunServer, ret *Result) err
 			return err
 		}
 	}
+
 	return nil
 }
 
 // ParseError converts standard error to gRPC error with detected code.
 func (s *Server) ParseError(err error) error {
 	code := codes.Internal
+
 	switch err {
 	case ErrPoolNotRunning:
 		code = codes.ResourceExhausted
 	case filerepo.ErrResourceNotFound:
 		code = codes.FailedPrecondition
 	}
+
 	return status.Error(code, err.Error())
 }

@@ -71,6 +71,7 @@ func NewWorker(id string, addr net.TCPAddr, mCPU uint32, defaultMCPU uint32, mem
 	}
 
 	freeCPUCounter.Add(int64(mCPU))
+
 	return &w
 }
 
@@ -92,6 +93,7 @@ func (w *Worker) FreeMemory() uint64 {
 func (w *Worker) Alive() bool {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
+
 	return w.alive
 }
 
@@ -109,6 +111,7 @@ func (w *Worker) Reserve(mCPU uint32, require bool) bool {
 	w.mu.Unlock()
 
 	freeCPUCounter.Add(-int64(mCPU))
+
 	return true
 }
 
@@ -154,9 +157,11 @@ func uploadDir(stream repopb.Repo_UploadClient, fs afero.Fs, key, sourcePath str
 
 	// Wait for response to see if upload was accepted or not.
 	var r *repopb.UploadResponse
+
 	if r, err = stream.Recv(); err != nil {
 		return err
 	}
+
 	if !r.Accepted {
 		return nil
 	}
@@ -201,6 +206,7 @@ func uploadDir(stream repopb.Repo_UploadClient, fs afero.Fs, key, sourcePath str
 	if _, err = stream.Recv(); err != nil {
 		return err
 	}
+
 	return nil
 }
 
@@ -210,6 +216,7 @@ func (w *Worker) AddCache(cache ContainerWorkerCache, ci ScriptInfo, contID stri
 
 	container.containerID = contID
 	w.scripts[ci]++
+
 	if _, ok := cache[ci]; !ok {
 		cache[ci] = map[string]*WorkerContainer{contID: container}
 	} else {
@@ -252,6 +259,7 @@ func (w *Worker) Shutdown(cache ContainerWorkerCache) {
 					delete(m, contID)
 				}
 			}
+
 			if len(m) == 0 {
 				delete(cache, ci)
 			}
@@ -294,6 +302,7 @@ func (w *WorkerContainer) Upload(ctx context.Context, fs afero.Fs, sourcePath st
 			return nil
 		}
 	}
+
 	return err
 }
 
@@ -329,6 +338,7 @@ func (w *WorkerContainer) Run(ctx context.Context, meta *scriptpb.RunRequest_Met
 	}
 
 	ch := make(chan interface{}, 1)
+
 	go func() {
 		for {
 			runRes, err := stream.Recv()
@@ -345,6 +355,7 @@ func (w *WorkerContainer) Run(ctx context.Context, meta *scriptpb.RunRequest_Met
 			ch <- runRes
 		}
 	}()
+
 	return ch, nil
 }
 
@@ -361,6 +372,7 @@ func (w *WorkerContainer) Reserve(mCPU uint32) bool {
 		atomic.AddUint64(&w.conns, 1)
 		return true
 	}
+
 	return false
 }
 

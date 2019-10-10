@@ -25,8 +25,11 @@ var defaultLRUOptions = LRUOptions{
 // This one is based on LRU KV with TTL
 func NewLRUCache(options Options, lruOptions LRUOptions) *LRUCache {
 	mergo.Merge(&lruOptions, defaultLRUOptions) // nolint - error not possible
+
 	cache := LRUCache{lruOptions: lruOptions}
+
 	cache.Cache.Init(options, cache.deleteHandler)
+
 	return &cache
 }
 
@@ -48,10 +51,12 @@ func (c *LRUCache) get(key string, refresh bool) interface{} {
 	if time.Now().UnixNano() > cItem.expiration {
 		return nil
 	}
+
 	if refresh {
 		cItem.expiration = time.Now().Add(c.options.TTL).UnixNano()
 		c.valuesList.MoveToBack(cItem.valuesListElement)
 	}
+
 	return cItem.object
 }
 
@@ -91,11 +96,13 @@ func (c *LRUCache) Add(key string, val interface{}) bool {
 		c.valuesList.MoveToBack(cItem.valuesListElement)
 
 		c.mu.Unlock()
+
 		return false
 	}
 
 	c.set(key, val)
 	c.mu.Unlock()
+
 	return true
 }
 
@@ -108,6 +115,7 @@ func (c *LRUCache) Delete(key string) bool {
 	if ok {
 		return c.delete(curVal.(*Item).valuesListElement)
 	}
+
 	return false
 }
 
@@ -115,11 +123,14 @@ func (c *LRUCache) Delete(key string) bool {
 func (c *LRUCache) Reduce(f func(key string, val interface{}, total interface{}) interface{}) interface{} {
 	c.mu.Lock()
 	var total interface{}
+
 	for key, val := range c.valueMap {
 		cItem := val.(*Item)
 		total = f(key, cItem.object, total)
 	}
+
 	c.mu.Unlock()
+
 	return total
 }
 
@@ -134,5 +145,6 @@ func (c *LRUCache) Contains(key string) bool {
 	}
 
 	cItem := val.(*Item)
+
 	return time.Now().UnixNano() < cItem.expiration
 }

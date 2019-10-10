@@ -80,14 +80,15 @@ func (c *Cache) Init(options Options, deleteHandler DeleteHandler) {
 	if deleteHandler == nil {
 		deleteHandler = c.defaultDeleteHandler
 	}
+
 	c.deleteHandler = deleteHandler
 	c.valueMap = make(map[string]interface{})
 	c.valuesList = list.New()
-
 	c.janitor = &janitor{
 		interval: options.CleanupInterval,
 		stop:     make(chan struct{}),
 	}
+
 	go c.janitor.Run(c)
 }
 
@@ -110,6 +111,7 @@ func (c *Cache) StopJanitor() {
 func (c *Cache) Len() int {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
+
 	return c.valuesList.Len()
 }
 
@@ -126,6 +128,7 @@ func (c *Cache) OnValueEvicted(f EvictionHandler) {
 func (c *Cache) DeleteLRU() bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
 	return c.deleteLRU()
 }
 
@@ -134,6 +137,7 @@ func (c *Cache) deleteLRU() bool {
 	if e == nil {
 		return false
 	}
+
 	return c.delete(e)
 }
 
@@ -151,16 +155,20 @@ func (c *Cache) DeleteExpired() {
 // Calls onValueEvicted.
 func (c *Cache) DeleteByTime(now int64) {
 	var evictedValues []*keyValue
+
 	c.mu.Lock()
 
 	// Iterate through valuesList (list of valuesListItem) and delete underlying cacheItem if it has expired.
 	for e := c.valuesList.Front(); e != nil; {
 		nextE := e.Next()
+
 		valueEvicted := c.deleteValue(e, now)
 		if valueEvicted == nil {
 			break
 		}
+
 		e = nextE
+
 		evictedValues = append(evictedValues, valueEvicted)
 	}
 
@@ -186,8 +194,10 @@ func (c *Cache) delete(e *list.Element) bool {
 			c.onValueEvicted(v.key, v.value)
 		}
 		c.muHandler.RUnlock()
+
 		return true
 	}
+
 	return false
 }
 
@@ -203,7 +213,9 @@ func (c *Cache) deleteValue(e *list.Element, now int64) (valueEvicted *keyValue)
 	if _, ok := c.valueMap[item.key]; ok {
 		valueEvicted = c.deleteHandler(item)
 	}
+
 	c.valuesList.Remove(e)
+
 	return
 }
 
@@ -223,6 +235,7 @@ type janitor struct {
 
 func (j *janitor) Run(cache *Cache) {
 	ticker := time.NewTicker(j.interval)
+
 	for {
 		select {
 		case <-ticker.C:

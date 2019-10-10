@@ -14,6 +14,7 @@ type LRUSetCache struct {
 func NewLRUSetCache(options Options) *LRUSetCache {
 	cache := LRUSetCache{}
 	cache.Cache.Init(options, cache.deleteHandler)
+
 	return &cache
 }
 
@@ -32,12 +33,15 @@ func (c *LRUSetCache) get(key string) []interface{} {
 	}
 
 	var values []interface{}
+
 	cItemMap := val.(map[interface{}]*Item)
+
 	for _, cItem := range cItemMap {
 		if time.Now().UnixNano() < cItem.expiration {
 			values = append(values, cItem.object)
 		}
 	}
+
 	return values
 }
 
@@ -50,15 +54,19 @@ func (c *LRUSetCache) Refresh(key string, val interface{}) bool {
 	if !ok {
 		return false
 	}
+
 	cItem, ok := v.(map[interface{}]*Item)[val]
 	if !ok {
 		return false
 	}
+
 	if cItem.object == val && time.Now().UnixNano() < cItem.expiration {
 		cItem.expiration = time.Now().Add(c.options.TTL).UnixNano()
 		c.valuesList.MoveToBack(cItem.valuesListElement)
+
 		return true
 	}
+
 	return false
 }
 
@@ -77,6 +85,7 @@ func (c *LRUSetCache) Add(key string, val interface{}) bool {
 			cItem.expiration = time.Now().Add(c.options.TTL).UnixNano()
 			c.valuesList.MoveToBack(cItem.valuesListElement)
 			c.mu.Unlock()
+
 			return false
 		}
 	}
@@ -85,12 +94,15 @@ func (c *LRUSetCache) Add(key string, val interface{}) bool {
 	cItem := &Item{object: val, expiration: time.Now().Add(c.options.TTL).UnixNano()}
 	cItem.valuesListElement = c.valuesList.PushBack(&valuesItem{key: key, item: cItem})
 	c.checkLength()
+
 	if ok {
 		curVal.(map[interface{}]*Item)[val] = cItem
 	} else {
 		c.valueMap[key] = map[interface{}]*Item{val: cItem}
 	}
+
 	c.mu.Unlock()
+
 	return true
 }
 
@@ -104,6 +116,7 @@ func (c *LRUSetCache) Delete(key string, val interface{}) bool {
 			return c.delete(v.valuesListElement)
 		}
 	}
+
 	return false
 }
 
@@ -114,12 +127,15 @@ func (c *LRUSetCache) Reduce(f func(key string, val interface{}, total interface
 		total interface{}
 		item  *valuesItem
 	)
+
 	for e := c.valuesList.Front(); e != nil; {
 		item = e.Value.(*valuesItem)
 		total = f(item.key, item.item.object, total)
 		e = e.Next()
 	}
+
 	c.mu.Unlock()
+
 	return total
 }
 
@@ -137,6 +153,7 @@ func (c *LRUSetCache) Contains(key string, val interface{}) bool {
 	if !ok {
 		return false
 	}
+
 	return time.Now().UnixNano() < cItem.expiration
 }
 
@@ -149,8 +166,10 @@ func (c *LRUSetCache) deleteHandler(item *valuesItem) *keyValue {
 			} else {
 				delete(m, item.item.object)
 			}
+
 			return &keyValue{key: item.key, value: item.item.object}
 		}
 	}
+
 	return nil
 }

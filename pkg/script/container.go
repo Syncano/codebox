@@ -65,6 +65,7 @@ func (c *Container) Conn() (io.ReadWriteCloser, error) {
 	c.mu.Lock()
 	conn, err := c.conn()
 	c.mu.Unlock()
+
 	return conn, err
 }
 
@@ -83,15 +84,18 @@ func (c *Container) setupCodewrapper(conn io.Writer, constraints *docker.Constra
 	s := pkg.Setup{
 		Command: SupportedRuntimes[c.Runtime].Command(constraints),
 	}
+
 	data, err := json.Marshal(s)
 	if err != nil {
 		return err
 	}
+
 	for _, data := range [][]byte{data, {'\n'}} {
 		if _, err = conn.Write(data); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -103,16 +107,20 @@ func (c *Container) setupSocket(conn io.Writer, options *RunOptions) error {
 		Timeout:    options.Timeout,
 	}
 	setupBytes, err := json.Marshal(setup)
+
 	util.Must(err)
+
 	setupSize := len(setupBytes)
 
 	totalLen := make([]byte, 4)
 	binary.LittleEndian.PutUint32(totalLen, uint32(setupSize+4))
+
 	for _, data := range [][]byte{totalLen, setupBytes} {
 		if _, err = conn.Write(data); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -138,12 +146,15 @@ func (c *Container) Setup(options *RunOptions, constraints *docker.Constraints) 
 		if err != nil {
 			return nil, err
 		}
+
 		if c.session, err = yamux.Client(conn, nil); err != nil {
 			return nil, err
 		}
+
 		if c.stdout, err = c.session.Open(); err != nil {
 			return nil, err
 		}
+
 		if c.stderr, err = c.session.Open(); err != nil {
 			return nil, err
 		}
@@ -157,19 +168,25 @@ func (c *Container) Setup(options *RunOptions, constraints *docker.Constraints) 
 	if err != nil {
 		return nil, err
 	}
+
 	if err = c.setupSocket(conn, options); err != nil {
 		conn.Close()
 	}
+
 	return conn, err
 }
 
 // Run sends run packet to container.
 func (c *Container) Run(conn io.Writer, options *RunOptions) (string, error) {
 	// Prepare files for context.
-	var filesSize int
-	var files []contextFile
+	var (
+		filesSize int
+		files     []contextFile
+	)
+
 	for f, data := range options.Files {
 		flen := len(data.Data)
+
 		files = append(files, contextFile{
 			Name:        f,
 			Filename:    data.Filename,
@@ -188,17 +205,21 @@ func (c *Container) Run(conn io.Writer, options *RunOptions) (string, error) {
 		Files:  files,
 	}
 	scriptContextBytes, err := json.Marshal(context)
+
 	util.Must(err)
+
 	contextSize := len(scriptContextBytes)
 
 	// Send context.
 	totalLen := make([]byte, 4)
 	contextLen := make([]byte, 4)
+
 	binary.LittleEndian.PutUint32(totalLen, uint32(contextSize+filesSize+8))
 	binary.LittleEndian.PutUint32(contextLen, uint32(contextSize))
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
 	for _, data := range [][]byte{totalLen, contextLen, scriptContextBytes} {
 		if _, err = conn.Write(data); err != nil {
 			return "", err
@@ -211,6 +232,7 @@ func (c *Container) Run(conn io.Writer, options *RunOptions) (string, error) {
 			return "", err
 		}
 	}
+
 	return context.Delim, nil
 }
 
@@ -229,6 +251,7 @@ func (c *Container) ConnsNum() int {
 	c.mu.Lock()
 	l := len(c.conns)
 	c.mu.Unlock()
+
 	return l
 }
 
@@ -240,10 +263,13 @@ func (c *Container) Reserve(connID string, success func(numConns int) error) err
 	if c.conns == nil || len(c.conns) >= c.connLimit {
 		return ErrTooManyConnections
 	}
+
 	if _, ok := c.conns[connID]; ok {
 		return ErrConnectionNotFound
 	}
+
 	c.conns[connID] = struct{}{}
+
 	return success(len(c.conns))
 }
 
@@ -253,6 +279,7 @@ func (c *Container) Release(connID string, success func(numConns int) error) err
 	defer c.mu.Unlock()
 
 	delete(c.conns, connID)
+
 	return success(len(c.conns))
 }
 

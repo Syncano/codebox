@@ -29,11 +29,11 @@ var (
 
 // Exists checks if file was defined in file repo.
 func (s *Server) Exists(ctx context.Context, in *pb.ExistsRequest) (*pb.ExistsResponse, error) {
-	peerAddr := util.PeerAddr(ctx)
-	logrus.WithFields(logrus.Fields{"key": in.GetKey(), "peer": peerAddr}).Debug("grpc:filerepo:Exists")
+	logrus.WithFields(logrus.Fields{"key": in.GetKey(), "peer": util.PeerAddr(ctx)}).Debug("grpc:filerepo:Exists")
 
 	res := new(pb.ExistsResponse)
 	res.Ok = s.Repo.Get(in.GetKey()) != ""
+
 	return res, nil
 }
 
@@ -65,6 +65,7 @@ func (s *Server) Upload(stream pb.Repo_UploadServer) error {
 		if err == io.EOF {
 			break
 		}
+
 		if err != nil {
 			return err
 		}
@@ -73,17 +74,19 @@ func (s *Server) Upload(stream pb.Repo_UploadServer) error {
 		case *pb.UploadRequest_Meta:
 			meta = in.Meta
 			logger = logger.WithField("key", meta.GetKey())
+
 			if lockCh, storeKey = s.Repo.StoreLock(meta.GetKey()); lockCh == nil {
 				logger.Debug("grpc:filerepo:Upload Rejected")
 				return stream.Send(&pb.UploadResponse{})
 			}
+
 			logger.Debug("grpc:filerepo:Upload Accepted")
 			stream.Send(&pb.UploadResponse{Accepted: true}) // nolint - ignore error
-
 		case *pb.UploadRequest_Chunk:
 			if meta == nil {
 				return ErrMissingMeta
 			}
+
 			logger.WithFields(logrus.Fields{
 				"storeKey":  storeKey,
 				"chunkName": in.Chunk.GetName(),
@@ -94,11 +97,11 @@ func (s *Server) Upload(stream pb.Repo_UploadServer) error {
 			if err != nil {
 				return err
 			}
-
 		case *pb.UploadRequest_Done:
 			if chunkCh != nil {
 				close(chunkCh)
 				chunkCh = nil
+
 				if err := <-errCh; err != nil {
 					return err
 				}
@@ -108,11 +111,14 @@ func (s *Server) Upload(stream pb.Repo_UploadServer) error {
 				logger.Info("grpc:filerepo:Upload Done")
 				s.Repo.StoreUnlock(meta.GetKey(), storeKey, lockCh, true)
 				lockCh = nil
+
 				return stream.Send(&pb.UploadResponse{})
 			}
+
 			return ErrMissingMeta
 		}
 	}
+
 	return nil
 }
 
@@ -122,6 +128,7 @@ func (s *Server) processChunkUpload(key, storeKey, chunkName string, chunkCh cha
 	if chunkCh != nil && chunk.GetName() != chunkName {
 		close(chunkCh)
 		chunkCh = nil
+
 		if err := <-errCh; err != nil {
 			return chunkName, chunkCh, err
 		}
@@ -140,7 +147,9 @@ func (s *Server) processChunkUpload(key, storeKey, chunkName string, chunkCh cha
 			errCh <- err
 		}()
 	}
+
 	chunkCh <- chunk.GetData()
+
 	return chunkName, chunkCh, nil
 }
 
@@ -150,6 +159,6 @@ func (s *Server) ParseError(err error) error {
 	if err == ErrNotEnoughDiskSpace {
 		code = codes.ResourceExhausted
 	}
-	return status.Error(code, err.Error())
 
+	return status.Error(code, err.Error())
 }

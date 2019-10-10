@@ -24,15 +24,18 @@ type Channel struct {
 
 func (ac *Channel) connect(url string) error {
 	ac.ch = nil
+
 	connection, err := amqp.Dial(url)
 	if err != nil {
 		return err
 	}
+
 	ch, err := connection.Channel()
 	if err != nil {
 		connection.Close() // nolint: errcheck
 		return err
 	}
+
 	if err = ch.ExchangeDeclare(
 		"default", // name
 		"direct",  // type
@@ -44,10 +47,13 @@ func (ac *Channel) connect(url string) error {
 	); err != nil {
 		ch.Close()         // nolint: errcheck
 		connection.Close() // nolint: errcheck
+
 		return err
 	}
+
 	ac.ch = ch
 	ac.registeredQueues = make(map[string]struct{})
+
 	return nil
 }
 
@@ -129,6 +135,7 @@ func (ac *Channel) Publish(exchange, key string, mandatory, immediate bool, msg 
 		); err != nil {
 			return err
 		}
+
 		ac.registeredQueues[key] = struct{}{}
 	}
 
