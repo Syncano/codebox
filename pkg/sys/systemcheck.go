@@ -38,6 +38,7 @@ func (s *SigarChecker) GetMemory() (uint64, uint64) {
 	var mem sigar.Mem
 	err := mem.Get()
 	util.Must(err)
+
 	return mem.Total, mem.ActualFree
 }
 
@@ -47,6 +48,7 @@ func (s *SigarChecker) CheckFreeMemory(want uint64) error {
 	if actualFree < want {
 		return ErrNotEnoughMemory{Reserved: s.reservedMemory, Free: actualFree, Want: want}
 	}
+
 	return nil
 }
 
@@ -59,7 +61,9 @@ func (s *SigarChecker) ReserveMemory(want uint64) error {
 	if actualFree < s.reservedMemory+want {
 		return ErrNotEnoughMemory{Reserved: s.reservedMemory, Free: actualFree, Want: want}
 	}
+
 	s.reservedMemory += want
+
 	return nil
 }
 
@@ -69,6 +73,7 @@ func (s *SigarChecker) AvailableMemory() uint64 {
 	s.mu.RLock()
 	reserved := s.reservedMemory
 	s.mu.RUnlock()
+
 	return actualFree - reserved
 }
 
@@ -83,7 +88,10 @@ func (s *SigarChecker) FreeMemory(amount uint64) {
 // GetDiskUsage returns info about disk usage at path.
 func (s *SigarChecker) GetDiskUsage(path string) (float64, uint64) {
 	var fsu sigar.FileSystemUsage
+
 	err := fsu.Get(path)
+
 	util.Must(err)
+
 	return fsu.UsePercent(), fsu.Avail
 }

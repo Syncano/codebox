@@ -57,8 +57,10 @@ func NewScriptTrace(traceID uint64, result *scriptpb.RunResponse) *ScriptTrace {
 	status := blockedStatus
 
 	var scriptResult *ScriptTraceResult
+
 	if result != nil {
 		var ok bool
+
 		status, ok = codeToStatus[result.GetCode()]
 		if !ok {
 			status = failureStatus
@@ -66,6 +68,7 @@ func NewScriptTrace(traceID uint64, result *scriptpb.RunResponse) *ScriptTrace {
 
 		// Parse script response for celery JSON object.
 		var scriptResponse *ScriptTraceResultResponse
+
 		response := result.GetResponse()
 		if response != nil {
 			scriptResponse = &ScriptTraceResultResponse{

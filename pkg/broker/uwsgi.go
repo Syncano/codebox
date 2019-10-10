@@ -72,6 +72,7 @@ func createCacheKey(schema, endpointName, hash string) string {
 
 func httpError(w http.ResponseWriter, status int, error string) {
 	w.WriteHeader(status)
+
 	if status != 0 {
 		w.Header().Set("Content-Type", jsonContentType)
 		fmt.Fprintf(w, `{"detail":"%s"}`, error)
@@ -82,12 +83,15 @@ func writeTraceResponse(w http.ResponseWriter, trace *ScriptTrace) {
 	if trace.Result != nil && trace.Result.Response != nil {
 		resp := trace.Result.Response
 		headers := w.Header()
+
 		for k, v := range resp.Headers {
 			headers.Set(k, v)
 		}
+
 		headers.Set("Content-Type", resp.ContentType)
 		w.WriteHeader(int(resp.Status))
 		w.Write(resp.Content) // nolint - ignore error
+
 		return
 	}
 
@@ -101,6 +105,7 @@ func writeTraceResponse(w http.ResponseWriter, trace *ScriptTrace) {
 	if ok {
 		w.WriteHeader(httpCode)
 	}
+
 	w.Header().Set("Content-Type", jsonContentType)
 	w.Write(ret) // nolint - ignore error
 }
@@ -110,6 +115,7 @@ func (s *Server) RunHandler(w http.ResponseWriter, r *http.Request) {
 	// Process zipkin span.
 	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 	defer cancel()
+
 	spanCtx, err := opentracing.GlobalTracer().Extract(opentracing.HTTPHeaders, opentracing.HTTPHeadersCarrier(r.Header))
 	if err == nil {
 		span := opentracing.StartSpan("uwsgi run", opentracing.ChildOf(spanCtx))
@@ -119,6 +125,7 @@ func (s *Server) RunHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	logger := logrus.WithField("peer", r.RemoteAddr)
+
 	if r.Header.Get("HTTP_ORIGIN") != "" {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 	}
@@ -128,11 +135,13 @@ func (s *Server) RunHandler(w http.ResponseWriter, r *http.Request) {
 	if e != nil {
 		logger.WithError(e).Error("Loading payload failed")
 		httpError(w, http.StatusInternalServerError, "Loading payload failure.")
+
 		return
 	}
 
 	// Process cached response (if it exists).
 	cacheKey := createCacheKey(r.Header.Get(headerInstancePKKey), payload.EndpointName, payload.SourceHash)
+
 	if payload.Cache > 0 && r.URL.Query().Get(getSkipCache) != "1" {
 		if cacheData, err := s.redisCli.Get(cacheKey).Bytes(); err == nil {
 			var trace ScriptTrace
@@ -149,6 +158,7 @@ func (s *Server) RunHandler(w http.ResponseWriter, r *http.Request) {
 	if e != nil {
 		logger.WithError(e).Error("Parsing request failed")
 		httpError(w, http.StatusInternalServerError, "Parsing request failure.")
+
 		return
 	}
 
@@ -166,6 +176,7 @@ func (s *Server) RunHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	start := time.Now()
+
 	stream, e := s.processRun(ctx, logger, request)
 	if e != nil {
 		httpError(w, http.StatusBadGateway, "Processing script failure.")
@@ -174,6 +185,7 @@ func (s *Server) RunHandler(w http.ResponseWriter, r *http.Request) {
 
 	trace, _ := s.processResponse(logger, start, request.Meta, stream, nil)
 	took := time.Duration(trace.Duration) * time.Millisecond
+
 	logger.WithFields(logrus.Fields{
 		"lbMeta":        request.GetLbMeta(),
 		"runtime":       scriptMeta.Runtime,
@@ -198,6 +210,7 @@ func (s *Server) RunHandler(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) prepareRequest(r *http.Request, payload *uwsgiPayload) (*brokerpb.RunRequest, error) {
 	instancePK := r.Header.Get(headerInstancePKKey)
+
 	tracePK, err := strconv.ParseUint(r.Header.Get(headerTracePKKey), 10, 0)
 	if err != nil {
 		return nil, err
@@ -244,16 +257,21 @@ func (s *Server) loadPayload(r *http.Request) (*uwsgiPayload, error) {
 	if payloadKey == "" {
 		return nil, ErrMissingPayloadKey
 	}
+
 	payloadBytes, err := s.redisCli.Get(payloadKey).Bytes()
 	if err != nil {
 		return nil, err
 	}
-	s.redisCli.Del(payloadKey)
+
+	if err := s.redisCli.Del(payloadKey).Err(); err != nil {
+		return nil, err
+	}
 
 	var payload uwsgiPayload
 	if err := json.Unmarshal(payloadBytes, &payload); err != nil {
 		return nil, err
 	}
+
 	return &payload, nil
 }
 
@@ -265,11 +283,13 @@ func (s *Server) processRequestData(r *http.Request, request *brokerpb.RunReques
 	for k := range r.Form {
 		dataMap[k] = r.Form.Get(k)
 	}
+
 	if strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
 		jsonMap := make(map[string]interface{})
 		if err := json.NewDecoder(r.Body).Decode(&jsonMap); err != nil {
 			return ErrJSONParsingFailed
 		}
+
 		for k, v := range jsonMap {
 			dataMap[k] = v
 		}
@@ -288,7 +308,6 @@ func (s *Server) processRequestData(r *http.Request, request *brokerpb.RunReques
 
 	// Process files and append request there.
 	if parseErr == nil && r.MultipartForm != nil {
-
 		for name, files := range r.MultipartForm.File {
 			file := files[0]
 
@@ -308,5 +327,6 @@ func (s *Server) processRequestData(r *http.Request, request *brokerpb.RunReques
 			}
 		}
 	}
+
 	return nil
 }

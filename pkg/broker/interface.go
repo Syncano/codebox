@@ -8,7 +8,7 @@ import (
 )
 
 // RedisClient defines redis client methods we are using.
-//go:generate mockery -inpkg -testonly -name RedisClient
+//go:generate go run github.com/vektra/mockery/cmd/mockery -inpkg -testonly -name RedisClient
 type RedisClient interface {
 	Get(key string) *redis.StringCmd
 	Del(keys ...string) *redis.IntCmd
@@ -19,7 +19,7 @@ type RedisClient interface {
 var _ RedisClient = (*redis.Client)(nil)
 
 // Tracer defines opentracing tracer we are using.
-//go:generate mockery -name Tracer
+//go:generate go run github.com/vektra/mockery/cmd/mockery -name Tracer
 type Tracer interface {
 	StartSpan(operationName string, opts ...opentracing.StartSpanOption) opentracing.Span
 	Inject(sm opentracing.SpanContext, format interface{}, carrier interface{}) error

@@ -2,11 +2,10 @@ kind: Service
 apiVersion: v1
 metadata:
   name: codebox-lb-internal-{{ LB_NUM }}
-  annotations:
-    service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
 spec:
   type: ClusterIP
   clusterIP: None
+  publishNotReadyAddresses: true
   selector:
     name: codebox-lb-{{ LB_NUM }}
     buildtime: {{ BUILDTIME }}

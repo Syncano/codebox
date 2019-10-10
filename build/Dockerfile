@@ -34,7 +34,7 @@ RUN set -ex \
         fuse \
         ca-certificates
 
-COPY codebox-static /usr/local/bin/codebox
+COPY codebox /usr/local/bin/codebox
 COPY codewrapper ${WRAPPERPATH}
 
 WORKDIR /home/codebox

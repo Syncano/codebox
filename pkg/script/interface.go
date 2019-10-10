@@ -10,7 +10,7 @@ import (
 )
 
 // Runner provides methods to use to run user scripts securely.
-//go:generate mockery -name Runner
+//go:generate go run github.com/vektra/mockery/cmd/mockery -name Runner
 type Runner interface {
 	Options() Options
 	DownloadAllImages() error
@@ -28,7 +28,7 @@ type Runner interface {
 var _ Runner = (*DockerRunner)(nil)
 
 // YamuxSession provides methods to open new session connections.
-//go:generate mockery -inpkg -testonly -name YamuxSession
+//go:generate go run github.com/vektra/mockery/cmd/mockery -inpkg -testonly -name YamuxSession
 type YamuxSession interface {
 	Open() (net.Conn, error)
 	Close() error
@@ -38,7 +38,7 @@ type YamuxSession interface {
 var _ YamuxSession = (*yamux.Session)(nil)
 
 // RedisClient defines redis client methods we are using.
-//go:generate mockery -inpkg -testonly -name RedisClient
+//go:generate go run github.com/vektra/mockery/cmd/mockery -inpkg -testonly -name RedisClient
 type RedisClient interface {
 	Publish(channel string, message interface{}) *redis.IntCmd
 }

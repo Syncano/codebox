@@ -46,16 +46,19 @@ var (
 // New initializes new limiter.
 func New(options Options) *Limiter {
 	mergo.Merge(&options, DefaultOptions) // nolint - error not possible
+
 	channels := cache.NewLRUCache(cache.Options{}, cache.LRUOptions{})
 	l := &Limiter{
 		options:  options,
 		channels: channels,
 	}
+
 	return l
 }
 
 func (l *Limiter) createLock(key string, limit int) (lock *lockData) {
 	l.mu.Lock()
+
 	v := l.channels.Get(key)
 	if v == nil {
 		ch := make(chan struct{}, limit)
@@ -64,7 +67,9 @@ func (l *Limiter) createLock(key string, limit int) (lock *lockData) {
 	} else {
 		lock = v.(*lockData)
 	}
+
 	l.mu.Unlock()
+
 	return
 }
 
@@ -75,6 +80,7 @@ func (l *Limiter) Lock(ctx context.Context, key string, limit int) error {
 	}
 
 	var lock *lockData
+
 	key = fmt.Sprintf(lockTemplate, key, limit)
 
 	v := l.channels.Get(key)
@@ -85,6 +91,7 @@ func (l *Limiter) Lock(ctx context.Context, key string, limit int) error {
 	}
 
 	defer atomic.AddInt32(&lock.queue, -1)
+
 	if atomic.AddInt32(&lock.queue, 1) > l.options.Queue {
 		return ErrMaxQueueSizeReached
 	}
@@ -100,10 +107,12 @@ func (l *Limiter) Lock(ctx context.Context, key string, limit int) error {
 // Unlock returns lock to semaphore pool.
 func (l *Limiter) Unlock(key string, limit int) {
 	key = fmt.Sprintf(lockTemplate, key, limit)
+
 	v := l.channels.Get(key)
 	if v == nil {
 		return
 	}
+
 	<-v.(*lockData).ch
 }
 

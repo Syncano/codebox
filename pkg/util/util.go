@@ -21,6 +21,7 @@ func GenerateRandomString(n int) string {
 	for i := range b {
 		b[i] = letterBytes[rand.Intn(len(letterBytes))]
 	}
+
 	return string(b)
 }
 
@@ -43,6 +44,7 @@ func Retry(attempts int, sleep time.Duration, f func() error) (err error) {
 
 		time.Sleep(sleep)
 	}
+
 	return
 }
 
@@ -62,6 +64,7 @@ func RetryWithCritical(attempts int, sleep time.Duration, f func() (bool, error)
 
 		time.Sleep(sleep)
 	}
+
 	return err
 }
 
@@ -77,7 +80,9 @@ func Must(err error) {
 func Hash(s string) uint32 {
 	h := fnv.New32a()
 	_, e := h.Write([]byte(s))
+
 	Must(e)
+
 	return h.Sum32()
 }
 
@@ -87,6 +92,7 @@ func PeerAddr(ctx context.Context) net.Addr {
 	if p != nil {
 		return p.Addr
 	}
+
 	return &net.TCPAddr{}
 }
 
@@ -121,6 +127,7 @@ func (cr *ChannelReader) Read(p []byte) (n int, err error) {
 	if n == 0 {
 		err = io.EOF
 	}
+
 	return
 }
 
@@ -128,9 +135,10 @@ const lowerhex = "0123456789abcdef"
 
 // ToQuoteJSON converts source []byte to ASCII only quoted []byte.
 func ToQuoteJSON(s []byte) []byte { // nolint: gocyclo
+	var width int
+
 	buf := make([]byte, 0, 3*len(s)/2)
 	buf = append(buf, '"')
-	var width int
 
 	for ; len(s) > 0; s = s[width:] {
 		r := rune(s[0])
@@ -139,6 +147,7 @@ func ToQuoteJSON(s []byte) []byte { // nolint: gocyclo
 		if r == '"' || r == '\\' {
 			buf = append(buf, '\\')
 			buf = append(buf, byte(r))
+
 			continue
 		}
 
@@ -160,21 +169,24 @@ func ToQuoteJSON(s []byte) []byte { // nolint: gocyclo
 		case '\t':
 			buf = append(buf, `\t`...)
 		default:
+			buf = append(buf, `\u`...)
+
 			switch {
 			case r < 0x10000:
-				buf = append(buf, `\u`...)
 				for s := 12; s >= 0; s -= 4 {
 					buf = append(buf, lowerhex[r>>uint(s)&0xF])
 				}
 			default:
 				r -= 0x10000
-				buf = append(buf, `\u`...)
 				r = (r >> 10) + 0xd800
+
 				for s := 12; s >= 0; s -= 4 {
 					buf = append(buf, lowerhex[r>>uint(s)&0xF])
 				}
+
 				buf = append(buf, `\u`...)
 				r = (r & 0x3ff) + 0xdc00
+
 				for s := 12; s >= 0; s -= 4 {
 					buf = append(buf, lowerhex[r>>uint(s)&0xF])
 				}
@@ -183,5 +195,6 @@ func ToQuoteJSON(s []byte) []byte { // nolint: gocyclo
 	}
 
 	buf = append(buf, '"')
+
 	return buf
 }

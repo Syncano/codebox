@@ -286,7 +286,6 @@ func startServer(
 	runner script.Runner,
 	syschecker sys.SystemChecker,
 	stopCh chan struct{}) (bool, error) {
-
 	logger := logrus.WithField("pool", poolID)
 
 	// Create TCP socket on random port.
@@ -305,8 +304,9 @@ func startServer(
 			logger.WithError(err).Fatal("GRPC serve error")
 		}
 	}()
-	logger.WithField("port", lis.Addr().(*net.TCPAddr).Port).Info("Serving gRPC")
+
 	defer grpcServer.GracefulStop()
+	logger.WithField("port", lis.Addr().(*net.TCPAddr).Port).Info("Serving gRPC")
 
 	errCh := make(chan error, 1)
 
@@ -315,8 +315,9 @@ func startServer(
 	if err != nil {
 		return false, err
 	}
-	client := lbpb.NewWorkerPlugClient(conn)
+
 	defer conn.Close()
+	client := lbpb.NewWorkerPlugClient(conn)
 
 	// Setup script runner event handlers.
 	runner.OnContainerRemoved(func(cont *script.Container) {
@@ -335,7 +336,7 @@ func startServer(
 	})
 	runner.OnContainerReleased(func(cont *script.Container, options *script.RunOptions) {
 		ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
-		if _, e := client.ResourceRelease(ctx, &lbpb.ResourceReleaseRequest{Id: poolID, MCPU: options.MCPU, Memory: options.Memory}); err != nil {
+		if _, e := client.ResourceRelease(ctx, &lbpb.ResourceReleaseRequest{Id: poolID, MCPU: options.MCPU}); err != nil {
 			errCh <- e
 		}
 		cancel()
@@ -344,16 +345,20 @@ func startServer(
 	// Register with load balancer.
 	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 	defer cancel()
+
 	if _, err = client.Register(ctx,
 		&lbpb.RegisterRequest{
-			Id:     poolID,
-			Port:   uint32(lis.Addr().(*net.TCPAddr).Port),
-			MCPU:   uint32(scriptOptions.MCPU - uint(dockerOptions.ReservedCPU*1000)),
-			Memory: syschecker.AvailableMemory(),
+			Id:          poolID,
+			Port:        uint32(lis.Addr().(*net.TCPAddr).Port),
+			MCPU:        uint32(scriptOptions.MCPU - uint(dockerOptions.ReservedCPU*1000)),
+			Memory:      syschecker.AvailableMemory(),
+			DefaultMCPU: uint32(scriptOptions.Constraints.CPULimit / 1e6),
 		}); err != nil {
 		return false, err
 	}
+
 	logger.Info("Registered with load balancer")
+
 	// On quit call disconnect.
 	defer func() {
 		ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
@@ -363,6 +368,7 @@ func startServer(
 
 	// Select loop.
 	ticker := time.NewTicker(heartbeat)
+
 	for {
 		select {
 		case <-ticker.C:
@@ -373,17 +379,16 @@ func startServer(
 					Memory: syschecker.AvailableMemory(),
 				},
 				grpc_retry.WithMax(heartbeatRetry))
+
 			cancel()
 
 			if err != nil {
 				logger.WithError(err).Warn("Heartbeat failed")
 				return true, err
 			}
-
 		case err := <-errCh:
 			logger.WithError(err).Warn("RPC call failed")
 			return true, err
-
 		case <-stopCh:
 			return true, nil
 		}

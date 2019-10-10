@@ -12,7 +12,7 @@ import (
 )
 
 // Downloader defines file downloader interface.
-//go:generate mockery -name Downloader
+//go:generate go run github.com/vektra/mockery/cmd/mockery -name Downloader
 type Downloader interface {
 	Download(ctx context.Context, urls []string) <-chan *DownloadResult
 }
@@ -35,6 +35,7 @@ func (res *DownloadResult) String() string {
 	if res.Data != nil {
 		return fmt.Sprintf("{URL:%s, DataLen:%d}", res.URL, len(res.Data))
 	}
+
 	return fmt.Sprintf("{URL:%s, Error:%s}", res.URL, res.Error)
 }
 
@@ -80,10 +81,12 @@ func (d *HTTPDownloader) downloadURL(ctx context.Context, url string) ([]byte, e
 	if err != nil {
 		return nil, err
 	}
+
 	req = req.WithContext(ctx)
 
 	// Retry request if needed - stop when context error happens.
 	var data []byte
+
 	err = RetryWithCritical(d.options.RetryCount, d.options.RetrySleep, func() (bool, error) {
 		var e error
 		resp, e := d.client.Do(req)
@@ -130,5 +133,6 @@ func (d *HTTPDownloader) Download(ctx context.Context, urls []string) <-chan *Do
 		wg.Wait()
 		close(ch)
 	}()
+
 	return ch
 }

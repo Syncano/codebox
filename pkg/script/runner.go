@@ -152,7 +152,7 @@ var (
 	// ErrPoolAlreadyCreated signals pool being already created.
 	ErrPoolAlreadyCreated = errors.New("pool already created")
 	// ErrSemaphoreNotAcquired signals a non critical error occurring for context timeouts and similar cases.
-	ErrSemaphoreNotAcquired = errors.New("semaphore was not acquired succesfully")
+	ErrSemaphoreNotAcquired = errors.New("semaphore was not acquired successfully")
 )
 
 const (
@@ -188,6 +188,7 @@ func NewRunner(options Options, dockerMgr docker.Manager, checker sys.SystemChec
 				"requested": options.MCPU,
 				"available": dockerMCPU,
 			}).Warn("CPU defined higher than available CPU resources, using what we got instead")
+
 		options.MCPU = dockerMCPU
 	}
 
@@ -214,6 +215,7 @@ func NewRunner(options Options, dockerMgr docker.Manager, checker sys.SystemChec
 	}
 	r.containerCache.OnValueEvicted(r.onEvictedContainerHandler)
 	r.containerWait = make(map[string]chan struct{})
+
 	return r, nil
 }
 
@@ -227,15 +229,18 @@ func (r *DockerRunner) CleanupUnused() {
 	ctx, cancel := context.WithTimeout(context.Background(), dockerTimeout)
 	defer cancel()
 	logrus.Info("Cleaning up unused containers")
+
 	cl, err := r.dockerMgr.ListContainersByLabel(ctx, containerLabel)
 	if err != nil {
 		panic(err)
 	}
 
 	var wg sync.WaitGroup
+
 	for _, c := range cl {
 		if c.Labels[containerLabel] != r.poolID {
 			wg.Add(1)
+
 			go func(cID string) {
 				ctx, cancel := context.WithTimeout(context.Background(), dockerTimeout)
 				if e := r.dockerMgr.ContainerStop(ctx, cID); e != nil {
@@ -246,6 +251,7 @@ func (r *DockerRunner) CleanupUnused() {
 			}(c.ID)
 		}
 	}
+
 	wg.Wait()
 
 	logrus.Info("Cleaning up unused files")
@@ -255,6 +261,7 @@ func (r *DockerRunner) CleanupUnused() {
 		ctx, cancel := context.WithTimeout(context.Background(), dockerTimeout)
 		defer cancel()
 		logrus.Info("Cleaning up unused images")
+
 		_, err = r.dockerMgr.PruneImages(ctx)
 		if err != nil {
 			panic(err)
@@ -265,10 +272,12 @@ func (r *DockerRunner) CleanupUnused() {
 // DownloadAllImages downloads all docker images for supported runtimes.
 func (r *DockerRunner) DownloadAllImages() error {
 	logrus.Info("Downloading all docker images")
+
 	set := make(map[string]struct{})
 	for _, ri := range SupportedRuntimes {
 		set[ri.Image] = struct{}{}
 	}
+
 	for image := range set {
 		ctx, cancel := context.WithTimeout(context.Background(), dockerDownloadTimeout)
 		defer cancel()
@@ -278,17 +287,21 @@ func (r *DockerRunner) DownloadAllImages() error {
 			return err
 		}
 	}
+
 	return nil
 }
 
 func (r *DockerRunner) processRun(ctx context.Context, logger logrus.FieldLogger, runtime, requestID, sourceHash, environment, userID string, options *RunOptions) (*Result, *Container, bool, error) {
 	start := time.Now()
+
 	conn, cont, newContainer, err := r.getContainer(ctx, runtime, requestID, sourceHash, environment, userID, options)
 	if err != nil {
 		return nil, cont, newContainer, err
 	}
-	logger = logger.WithFields(logrus.Fields{"runtime": runtime, "options": options, "containerHash": cont.Hash})
+
 	defer conn.Close()
+
+	logger = logger.WithFields(logrus.Fields{"runtime": runtime, "options": options, "containerHash": cont.Hash})
 
 	// Run.
 	logger = logger.WithFields(logrus.Fields{"new": newContainer, "container": cont})
@@ -302,13 +315,15 @@ func (r *DockerRunner) processRun(ctx context.Context, logger logrus.FieldLogger
 	// Return processed response.
 	ctx, cancel := context.WithTimeout(ctx, options.Timeout+graceTimeout)
 	defer cancel()
-	limit := int(options.OutputLimit)
 
-	var output []byte
+	limit := int(options.OutputLimit)
 	ret := &Result{
 		ContainerID: cont.ID,
 		Weight:      options.Weight,
 	}
+
+	var output []byte
+
 	if options.Async <= 1 {
 		output, ret.Stdout, ret.Stderr, err = r.processOutput(ctx, conn, cont.Stdout(), cont.Stderr(), delim, limit)
 	} else {
@@ -316,21 +331,25 @@ func (r *DockerRunner) processRun(ctx context.Context, logger logrus.FieldLogger
 	}
 
 	// Parse result.
-	var parseErr error
 	ret.Took = time.Since(start)
-	parseErr = ret.Parse(output, r.options.StreamMaxLength, err)
+	parseErr := ret.Parse(output, r.options.StreamMaxLength, err)
+
 	if err == nil {
 		err = parseErr
 	}
+
 	return ret, cont, newContainer, err
 }
 
 func (r *DockerRunner) processOutput(ctx context.Context, conn, stdout, stderr io.Reader, delim string, limit int) ([]byte, []byte, []byte, error) {
-	var wg sync.WaitGroup
+	var (
+		wg                       sync.WaitGroup
+		e1, e2                   error
+		stdoutBytes, stderrBytes []byte
+	)
+
 	// In non async mode simply read stdout and stderr.
 	wg.Add(2)
-	var e1, e2 error
-	var stdoutBytes, stderrBytes []byte
 
 	go func() {
 		stdoutBytes, e1 = util.ReadLimitedUntil(ctx, stdout, delim, r.options.StreamMaxLength)
@@ -343,6 +362,7 @@ func (r *DockerRunner) processOutput(ctx context.Context, conn, stdout, stderr i
 	}()
 
 	output, err := util.ReadLimited(ctx, conn, limit)
+
 	wg.Wait()
 
 	if err == nil {
@@ -352,6 +372,7 @@ func (r *DockerRunner) processOutput(ctx context.Context, conn, stdout, stderr i
 			err = e2
 		}
 	}
+
 	return output, stdoutBytes, stderrBytes, err
 }
 
@@ -364,15 +385,19 @@ func (r *DockerRunner) Run(ctx context.Context, logger logrus.FieldLogger, runti
 	if _, ok := SupportedRuntimes[runtime]; !ok {
 		return nil, ErrUnsupportedRuntime
 	}
+
 	if options.EntryPoint == "" {
 		options.EntryPoint = SupportedRuntimes[runtime].DefaultEntryPoint
 	}
+
 	if options.Timeout <= 0 {
 		options.Timeout = defaultTimeout
 	}
+
 	if options.MCPU == 0 {
 		options.MCPU = uint32(r.options.Constraints.CPULimit / 1e6)
 	}
+
 	if options.Weight == 0 {
 		options.Weight = uint(math.Ceil(float64(options.MCPU) * 1e6 / float64(r.options.Constraints.CPULimit)))
 	}
@@ -391,15 +416,19 @@ func (r *DockerRunner) Run(ctx context.Context, logger logrus.FieldLogger, runti
 		logger.WithError(ErrPoolNotRunning).Error("Run failed - pool is not running")
 		return nil, ErrPoolNotRunning
 	}
+
 	start := time.Now()
-	r.taskWaitGroup.Add(1)
 	requestID := util.GenerateKey()
+
+	r.taskWaitGroup.Add(1)
+
 	ret, cont, newContainer, err := r.processRun(ctx, logger, runtime, requestID, sourceHash, environment, userID, options)
 	took := time.Since(start)
 
 	if err != nil {
 		logger = logger.WithError(err)
 	}
+
 	if ret != nil {
 		ret.Cached = newContainer
 		ret.Overhead = took - ret.Took
@@ -413,6 +442,7 @@ func (r *DockerRunner) Run(ctx context.Context, logger logrus.FieldLogger, runti
 
 	// Cleanup only if it's the last connection.
 	go r.afterRun(runtime, cont, requestID, options, newContainer, err)
+
 	return ret, err
 }
 
@@ -422,16 +452,15 @@ func (r *DockerRunner) processContainerDone(runtime string, cont *Container, req
 	recreate := newContainer
 
 	switch {
-	// If we encountered missing resource - reuse container.
 	case err == filerepo.ErrResourceNotFound:
+		// If we encountered missing resource - reuse container.
 		// If cleanup volume fails - cleanup whole container and recreate in next block. Otherwise - return it to pool.
 		if err = r.fileRepo.CleanupVolume(cont.volumeKey); err == nil {
 			r.containerPool[runtime] <- cont
 			return
 		}
-
-	// If semaphore was not acquired for new container, simply return it to pool.
 	case err == ErrSemaphoreNotAcquired:
+		// If semaphore was not acquired for new container, simply return it to pool.
 		r.containerPool[runtime] <- cont
 		return
 	}
@@ -448,6 +477,7 @@ func (r *DockerRunner) processContainerDone(runtime string, cont *Container, req
 		if err != util.ErrLimitReached && err != io.EOF && err != context.DeadlineExceeded {
 			logFunc = logger.Error
 		}
+
 		logFunc("Recovering from container error")
 		cont.StopAcceptingConnections()
 		r.containerCache.Delete(cont.Hash, cont)
@@ -511,12 +541,14 @@ func (r *DockerRunner) CreatePool() (string, error) {
 	if r.IsRunning() {
 		return "", ErrPoolAlreadyCreated
 	}
+
 	r.poolID = util.GenerateKey()
 
 	logrus.WithField("concurrency", r.options.Concurrency).Info("Creating pool")
 
 	// Reset reserved memory and reserve memory margin.
 	r.sys.Reset()
+
 	if err := r.sys.ReserveMemory(r.options.MemoryMargin); err != nil {
 		return "", err
 	}
@@ -539,6 +571,7 @@ func (r *DockerRunner) CreatePool() (string, error) {
 	// Store codewrapper in repo.
 	f, err := os.Open(os.Getenv(wrapperPathEnv)) // nolint: gosec
 	util.Must(err)
+
 	if _, err := r.fileRepo.PermStore(wrapperName, bufio.NewReader(f), wrapperName, os.ModePerm); err != nil {
 		return "", err
 	}
@@ -577,6 +610,7 @@ func (r *DockerRunner) CreatePool() (string, error) {
 	}
 
 	r.setRunning(true)
+
 	return r.poolID, nil
 }
 
@@ -600,6 +634,7 @@ func (r *DockerRunner) StopPool() {
 
 	if r.containerPool != nil {
 		var wg sync.WaitGroup
+
 		for _, ch := range r.containerPool {
 		Loop:
 			for {
@@ -615,6 +650,7 @@ func (r *DockerRunner) StopPool() {
 				}
 			}
 		}
+
 		wg.Wait()
 	}
 
@@ -632,7 +668,6 @@ func (r *DockerRunner) Shutdown() {
 }
 
 func (r *DockerRunner) reserveContainer(ctx context.Context, cont *Container, connID string, new bool, options *RunOptions, constraints *docker.Constraints) error {
-
 	a := cont.Reserve(connID, func(numConns int) error {
 		if numConns == 1 {
 			// If it's the first concurrent connection, acquire semaphore and adapt docker container if needed.
@@ -652,11 +687,13 @@ func (r *DockerRunner) reserveContainer(ctx context.Context, cont *Container, co
 		}
 		return nil
 	})
+
 	return a
 }
 
 func (r *DockerRunner) releaseContainer(cont *Container, requestID string, options *RunOptions) error {
 	released := false
+
 	if err := cont.Release(requestID, func(numConns int) error {
 		if numConns == 0 {
 			released = true
@@ -688,6 +725,7 @@ func (r *DockerRunner) releaseContainer(cont *Container, requestID string, optio
 		}
 		r.muHandler.RUnlock()
 	}
+
 	return nil
 }
 
@@ -700,6 +738,7 @@ func (r *DockerRunner) getContainer(ctx context.Context, runtime, requestID, sou
 	// Try to get a container from cache.
 	containerHash := fmt.Sprintf("%s/%s/%s/%x", sourceHash, userID, environment, util.Hash(options.EntryPoint))
 	cacheVal := r.containerCache.Get(containerHash)
+
 	for _, c := range cacheVal {
 		cont = c.(*Container)
 
@@ -709,9 +748,12 @@ func (r *DockerRunner) getContainer(ctx context.Context, runtime, requestID, sou
 				if err == ErrTooManyConnections || !cont.IsAcceptingConnections() {
 					continue
 				}
+
 				return conn, cont, false, err
 			}
+
 			conn, err = cont.Conn()
+
 			return conn, cont, false, err
 		}
 	}
@@ -722,10 +764,13 @@ func (r *DockerRunner) getContainer(ctx context.Context, runtime, requestID, sou
 		if ch, ok := r.containerWait[containerHash]; ok {
 			r.containerWaitLock.Lock()
 			<-ch
+
 			return r.getContainer(ctx, runtime, requestID, sourceHash, environment, userID, options)
 		}
+
 		ch := make(chan struct{})
 		r.containerWait[containerHash] = ch
+
 		r.containerWaitLock.Unlock()
 
 		defer func() {
@@ -743,12 +788,14 @@ func (r *DockerRunner) getContainer(ctx context.Context, runtime, requestID, sou
 	cont.Environment = environment
 	cont.UserID = userID
 	cont.Hash = containerHash
+
 	if err = r.reserveContainer(ctx, cont, requestID, true, options, constraints); err != nil {
 		return conn, cont, true, err
 	}
 
 	// Linking sources.
 	logger := logrus.WithFields(logrus.Fields{"container": cont, "runtime": runtime})
+
 	if err = r.fileRepo.Link(cont.volumeKey, sourceHash, userMount); err != nil {
 		logger.WithError(err).WithField("sourceHash", sourceHash).Error("Linking error")
 		return conn, cont, true, err
@@ -771,7 +818,9 @@ func (r *DockerRunner) getContainer(ctx context.Context, runtime, requestID, sou
 	if options.Async > 1 {
 		lim := ratelimit.NewBucketWithQuantum(time.Minute, 5<<20, 1<<20)
 		lim.TakeMaxDuration(1, 0)
+
 		ch := fmt.Sprintf(containerLogFormat, userID, sourceHash)
+
 		util.SubscribeRateLimited(cont.stdout,
 			lim,
 			func(message []byte) {
@@ -799,11 +848,13 @@ func (r *DockerRunner) getContainer(ctx context.Context, runtime, requestID, sou
 
 	// Add container to cache.
 	r.containerCache.Add(containerHash, cont)
+
 	return conn, cont, true, err
 }
 
 func (r *DockerRunner) createFreshContainer(ctx context.Context, runtime string) (*Container, error) {
 	var err error
+
 	cont := NewContainer(runtime)
 	logger := logrus.WithField("runtime", runtime)
 	start := time.Now()
@@ -811,6 +862,7 @@ func (r *DockerRunner) createFreshContainer(ctx context.Context, runtime string)
 
 	// Create new volume and link wrapper.
 	var volHostPath string
+
 	cont.volumeKey, volHostPath, err = r.createWrapperVolume(runtime)
 	if err != nil {
 		return cont, err
@@ -827,6 +879,7 @@ func (r *DockerRunner) createFreshContainer(ctx context.Context, runtime string)
 	if err != nil {
 		return cont, err
 	}
+
 	logger = logger.WithField("container", cont)
 
 	// Start and attach to container (wrapper mode).
@@ -834,6 +887,7 @@ func (r *DockerRunner) createFreshContainer(ctx context.Context, runtime string)
 	if err != nil {
 		return cont, err
 	}
+
 	err = r.dockerMgr.ContainerStart(ctx, cont.ID)
 	if err != nil {
 		return cont, err
@@ -841,6 +895,7 @@ func (r *DockerRunner) createFreshContainer(ctx context.Context, runtime string)
 
 	// Make sure container wrapper is ready.
 	retCh := make(chan string)
+
 	go func() {
 		l, _, _ := cont.resp.Reader.ReadLine()
 		if len(l) > stdWriterPrefixLen {
@@ -849,6 +904,7 @@ func (r *DockerRunner) createFreshContainer(ctx context.Context, runtime string)
 		retCh <- string(l)
 		cont.resp.Close()
 	}()
+
 	select {
 	case cont.addr = <-retCh:
 	case <-ctx.Done():
@@ -856,6 +912,7 @@ func (r *DockerRunner) createFreshContainer(ctx context.Context, runtime string)
 	}
 
 	logger.WithField("took", time.Since(start)).Info("Container created and reported as ready")
+
 	return cont, err
 }
 
@@ -865,11 +922,13 @@ func (r *DockerRunner) cleanupContainer(cont *Container) {
 
 	// Stop the container.
 	cont.Stop()
+
 	if cont.ID != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), dockerTimeout)
 		if err := r.dockerMgr.ContainerStop(ctx, cont.ID); err != nil {
 			logger.WithError(err).Warn("Stopping container failed")
 		}
+
 		cancel()
 	}
 
@@ -892,7 +951,9 @@ func (r *DockerRunner) onEvictedContainerHandler(key string, val interface{}) {
 	if !cont.IsAcceptingConnections() {
 		return
 	}
+
 	cont.StopAcceptingConnections()
+
 	if cont.ConnsNum() == 0 {
 		r.cleanupContainer(cont)
 	}
@@ -932,13 +993,18 @@ func (r *DockerRunner) createWrapperVolume(runtime string) (string, string, erro
 	if err != nil {
 		return "", "", err
 	}
+
 	for _, resKey := range []string{wrapperName, runtime} {
 		if err = r.fileRepo.Link(volKey, resKey, wrapperMount); err != nil {
 			return "", "", err
 		}
 	}
+
 	volRelPath, err := r.fileRepo.RelativePath(volPath)
+
 	util.Must(err)
+
 	volHostPath := filepath.Join(r.options.HostStoragePath, volRelPath)
+
 	return volKey, volHostPath, nil
 }

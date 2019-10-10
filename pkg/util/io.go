@@ -26,10 +26,12 @@ func ContextReader(ctx context.Context, r io.Reader) io.Reader {
 		type deadliner interface {
 			SetReadDeadline(time.Time) error
 		}
+
 		if d, ok := r.(deadliner); ok {
 			d.SetReadDeadline(deadline) // nolint: errcheck
 		}
 	}
+
 	return reader{ctx, r}
 }
 
@@ -42,6 +44,7 @@ func (r reader) Read(p []byte) (n int, err error) {
 	if err = r.ctx.Err(); err != nil {
 		return
 	}
+
 	if n, err = r.r.Read(p); err != nil {
 		if e := r.ctx.Err(); e != nil {
 			err = e
@@ -50,9 +53,12 @@ func (r reader) Read(p []byte) (n int, err error) {
 		} else if err == yamux.ErrTimeout {
 			err = context.DeadlineExceeded
 		}
+
 		return
 	}
+
 	err = r.ctx.Err()
+
 	return
 }
 
@@ -60,6 +66,7 @@ func (r reader) Read(p []byte) (n int, err error) {
 func ReadLimitedUntil(ctx context.Context, r io.Reader, delim string, limit int) ([]byte, error) {
 	delimLen := len(delim)
 	r = ContextReader(ctx, r)
+
 	if limit > 0 {
 		r = io.LimitReader(r, int64(limit))
 	}
@@ -76,10 +83,12 @@ func ReadLimitedUntil(ctx context.Context, r io.Reader, delim string, limit int)
 		if limit > 0 && b.Len() == limit && err != io.EOF {
 			err = ErrLimitReached
 		}
+
 		if n >= delimLen && string(buf[n-delimLen:n]) == delim {
 			b.Truncate(b.Len() - delimLen)
 			return b.Bytes(), err
 		}
+
 		if err != nil {
 			return b.Bytes(), err
 		}
@@ -97,16 +106,19 @@ func ReadLimited(ctx context.Context, r io.Reader, limit int) ([]byte, error) {
 	if limit > 0 && len(ret) == limit {
 		err = ErrLimitReached
 	}
+
 	return ret, err
 }
 
 // SubscribeRateLimited subscribes to reader with bandwidth rate limiter and publishes data received through publish function.
 func SubscribeRateLimited(r io.Reader, bucket *ratelimit.Bucket, publish func(message []byte), errorFunc func(err error)) {
-	buf := make([]byte, 64*1024)
 	var (
 		n   int
 		err error
 	)
+
+	buf := make([]byte, 64*1024)
+
 	for {
 		n, err = r.Read(buf)
 		if err != nil {

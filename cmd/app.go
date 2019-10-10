@@ -52,12 +52,12 @@ func initializeLogging(c *cli.Context) error {
 	if c.Bool("debug") {
 		level = logrus.DebugLevel
 	}
+
 	logrus.SetLevel(level)
 
 	// Use JSON formatter if there is no terminal detected.
 	if os.Getenv("FORCE_COLORS") == "1" {
 		logrus.StandardLogger().Formatter.(*logrus.TextFormatter).ForceColors = true
-
 	} else if !terminal.IsTerminal(int(os.Stdout.Fd())) {
 		logrus.SetFormatter(new(logrusltsv.Formatter))
 	}
@@ -82,16 +82,19 @@ func initializeLogging(c *cli.Context) error {
 		if err != nil {
 			return err
 		}
+
 		hook.StacktraceConfiguration.Enable = true
 		hook.StacktraceConfiguration.Context = 7
 		hook.StacktraceConfiguration.InAppPrefixes = []string{"github.com/Syncano/codebox"}
 		hook.Timeout = 5 * time.Second
+
 		logrus.AddHook(hook)
 	}
 
 	// Set grpc logger.
 	log := logrus.StandardLogger()
 	grpclog.SetLoggerV2(logrusWrapper{log})
+
 	return nil
 }
 
@@ -143,6 +146,7 @@ func init() {
 
 		// Serve expvar and checks.
 		logrus.WithField("port", c.Int("port")).Info("Serving http for expvar and checks")
+
 		go func() {
 			if err := http.ListenAndServe(fmt.Sprintf(":%d", c.Int("port")), nil); err != nil && err != http.ErrServerClosed {
 				logrus.WithError(err).Fatal("Serve error")
@@ -164,6 +168,7 @@ func init() {
 		if err != nil {
 			return err
 		}
+
 		opentracing.SetGlobalTracer(tracer)
 
 		return nil

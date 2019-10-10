@@ -36,6 +36,7 @@ func main() {
 	must(err)
 
 	var ip net.IP
+
 	for _, addr := range addrs {
 		if v, ok := addr.(*net.IPNet); ok {
 			ip = v.IP
@@ -77,17 +78,24 @@ func main() {
 	if len(s.Command) > 1 {
 		args = s.Command[1:]
 	}
+
 	subProcess := exec.Command(s.Command[0], args...) // nolint: gosec
 	stdoutP, err := subProcess.StdoutPipe()
+
 	must(err)
+
 	stderrP, err := subProcess.StderrPipe()
+
 	must(err)
+
 	err = subProcess.Start()
+
 	must(err)
 
 	// Read app wrapper address from stdout.
 	line, _, err = bufio.NewReader(stdoutP).ReadLine()
 	must(err)
+
 	appAddr := string(line)
 
 	// Set up stream copying job.
@@ -101,6 +109,7 @@ func main() {
 		if connS, err := session.Accept(); err == nil {
 			if connP, err := net.Dial("unix", appAddr); err == nil {
 				go copyStreams(connP, connS)
+
 				go copyStreams(connS, connP)
 			} else {
 				connS.Close()

@@ -24,7 +24,7 @@ import (
 )
 
 // Server defines a Broker server.
-//go:generate mockery -dir proto -all
+//go:generate go run github.com/vektra/mockery/cmd/mockery -dir proto -all
 type Server struct {
 	redisCli  RedisClient
 	lbServers []*loadBalancer
@@ -151,9 +151,10 @@ func (s *Server) Run(request *brokerpb.RunRequest, stream brokerpb.ScriptRunner_
 		logger.Error("grpc:broker:Run error parsing input")
 		return ErrInvalidArgument
 	}
-	scriptMeta := request.GetRequest()[0].GetMeta()
 
+	scriptMeta := request.GetRequest()[0].GetMeta()
 	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+
 	runStream, err := s.processRun(ctx, logger, request)
 	if err != nil {
 		cancel()
@@ -164,9 +165,11 @@ func (s *Server) Run(request *brokerpb.RunRequest, stream brokerpb.ScriptRunner_
 
 	processFunc := func() error {
 		trace, err := s.processResponse(logger, start, request.GetMeta(), runStream, retStream)
+
 		cancel()
 
 		took := time.Duration(trace.Duration) * time.Millisecond
+
 		logger.WithFields(logrus.Fields{
 			"lbMeta":     request.GetLbMeta(),
 			"runtime":    scriptMeta.Runtime,
@@ -175,6 +178,7 @@ func (s *Server) Run(request *brokerpb.RunRequest, stream brokerpb.ScriptRunner_
 			"took":       took,
 			"overhead":   time.Since(start) - took,
 		}).Info("grpc:broker:Run")
+
 		return err
 	}
 
@@ -186,6 +190,7 @@ func (s *Server) Run(request *brokerpb.RunRequest, stream brokerpb.ScriptRunner_
 
 	// Process response asynchronously.
 	go processFunc() // nolint: errcheck
+
 	return nil
 }
 
@@ -197,6 +202,7 @@ func (s *Server) processRun(ctx context.Context, logger logrus.FieldLogger, requ
 	lbID := util.Hash(lbMeta.GetConcurrencyKey()) % uint32(len(s.lbServers))
 	lb := s.lbServers[lbID]
 	logger = logger.WithField("lb", lb)
+
 	var stream lbpb.ScriptRunner_RunClient
 
 	// Start processing and retry in case of network error.
@@ -250,6 +256,7 @@ func (s *Server) processRun(ctx context.Context, logger logrus.FieldLogger, requ
 	if err := s.updateTrace(meta.GetTraceID(), meta.GetTrace()); err != nil {
 		logger.WithError(err).Warn("UpdateTrace failed")
 	}
+
 	return stream, nil
 }
 
@@ -267,13 +274,16 @@ func uploadChunks(stream repopb.Repo_UploadClient, key string, resCh <-chan *uti
 
 	// Wait for response to see if upload was accepted or not.
 	var r *repopb.UploadResponse
+
 	if r, err = stream.Recv(); err != nil {
 		return err
 	}
+
 	if !r.Accepted {
 		logrus.WithField("key", key).Debug("Upload Rejected")
 		return nil
 	}
+
 	logrus.WithField("key", key).Debug("Upload Accepted")
 
 	for res := range resCh {
@@ -281,6 +291,7 @@ func uploadChunks(stream repopb.Repo_UploadClient, key string, resCh <-chan *uti
 			"key": key,
 			"res": res,
 		}).Debug("Sending Download result")
+
 		if res.Error != nil {
 			return res.Error
 		}
@@ -315,6 +326,7 @@ func uploadChunks(stream repopb.Repo_UploadClient, key string, resCh <-chan *uti
 	}
 	// Wait for response as a confirmation of finished upload.
 	_, err = stream.Recv()
+
 	return err
 }
 
@@ -323,6 +335,7 @@ func (s *Server) uploadFiles(ctx context.Context, lb *loadBalancer, key string, 
 	if err != nil {
 		return err
 	}
+
 	if exists.Ok {
 		return nil
 	}
@@ -334,16 +347,21 @@ func (s *Server) uploadFiles(ctx context.Context, lb *loadBalancer, key string, 
 
 	// Check first if there is a concurrent download going on.
 	uploadKey := fmt.Sprintf("%s;%s", lb.addr, key)
+
 	s.mu.Lock()
+
 	doneCh, ok := s.uploads[uploadKey]
 	// And if there is one - wait for it to be done.
 	if ok {
 		s.mu.Unlock()
 		<-doneCh
+
 		return nil
 	}
+
 	doneCh = make(chan struct{})
 	s.uploads[uploadKey] = doneCh
+
 	s.mu.Unlock()
 
 	// Download and once done, close channel.
@@ -367,6 +385,7 @@ func (s *Server) uploadFiles(ctx context.Context, lb *loadBalancer, key string, 
 	// Start a separate timeout so we cancel downloads when needed.
 	ctx, cancel := context.WithTimeout(ctx, downloadTimeout)
 	defer cancel()
+
 	resCh := s.downloader.Download(ctx, fileURLs)
 
 	// Iterate through download results and upload them.
@@ -375,17 +394,18 @@ func (s *Server) uploadFiles(ctx context.Context, lb *loadBalancer, key string, 
 			return nil
 		}
 	}
+
 	return err
 }
 
 func (s *Server) processResponse(logger logrus.FieldLogger, start time.Time, meta *brokerpb.RunRequest_MetaMessage,
 	stream lbpb.ScriptRunner_RunClient, retStream brokerpb.ScriptRunner_RunServer) (*ScriptTrace, error) {
-
 	retSend := func(r *scriptpb.RunResponse) {
 		if retStream != nil {
 			e := retStream.Send(r)
 			if e != nil {
 				logger.WithError(e).Warn("LB grpc:broker:Send error")
+
 				retStream = nil
 			}
 		}
@@ -418,6 +438,7 @@ func (s *Server) processResponse(logger logrus.FieldLogger, start time.Time, met
 
 	// Update prometheus stats.
 	executionCounter.WithLabelValues(updatedTrace.Status).Inc()
+
 	if result != nil {
 		durationSeconds := float64(updatedTrace.Duration) / 1e3
 		executionDurationsHistogram.Observe(durationSeconds)
@@ -433,6 +454,7 @@ func (s *Server) saveTrace(trace []byte, updatedTrace *ScriptTrace) error {
 	}
 
 	traceID := updatedTrace.ID
+
 	defer func() {
 		updatedTrace.ID = traceID
 	}()
@@ -444,5 +466,6 @@ func (s *Server) updateTrace(traceID uint64, trace []byte) error {
 	if traceID == 0 || trace == nil {
 		return nil
 	}
+
 	return NewCeleryUpdateTask(trace).Publish()
 }

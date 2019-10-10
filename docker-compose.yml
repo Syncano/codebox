@@ -6,14 +6,13 @@ services:
     build: .
     image: codebox_app
     volumes:
-      - .:/go/src/github.com/Syncano/codebox
+      - .:/opt/build
       - varrun:/var/run
       - /tmp/storage:/home/codebox/storage:rshared
-      - /go/src/github.com/Syncano/codebox/vendor
     depends_on:
       - dind
     environment:
-      - WRAPPERPATH=/go/src/github.com/Syncano/codebox/build/codewrapper
+      - WRAPPERPATH=/opt/build/build/codewrapper
 
   dind:
     privileged: true

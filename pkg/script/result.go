@@ -51,6 +51,7 @@ func (ret *Result) Parse(data []byte, streamMaxLength int, processErr error) err
 		if processErr == util.ErrLimitReached {
 			ret.Stderr = LimitReachedText
 		}
+
 		ret.Code = 1
 	}
 
@@ -59,6 +60,7 @@ func (ret *Result) Parse(data []byte, streamMaxLength int, processErr error) err
 		if len(ret.Stdout) > streamMaxLength {
 			ret.Stdout = ret.Stdout[:streamMaxLength]
 		}
+
 		ret.Stderr = LimitReachedText
 		ret.Code = 1
 	}
@@ -84,8 +86,10 @@ func (ret *Result) Parse(data []byte, streamMaxLength int, processErr error) err
 		if err := json.Unmarshal(data[4:jsonLen+4], res); err != nil {
 			ret.Stderr = LimitReachedText
 			ret.Code = 1
+
 			return ErrIncorrectCustomResponse
 		}
+
 		res.Content = data[jsonLen+4:]
 
 		if err := validate.Struct(res); err != nil {
@@ -94,6 +98,7 @@ func (ret *Result) Parse(data []byte, streamMaxLength int, processErr error) err
 			// Return nil as we already handled this error.
 			return nil
 		}
+
 		ret.Response = res
 	}
 

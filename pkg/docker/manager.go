@@ -77,6 +77,7 @@ func NewManager(options Options, cli Client) (*StdManager, error) {
 	// Get and save Info from docker.
 	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 	defer cancel()
+
 	info, err := cli.Info(ctx)
 	if err != nil {
 		return nil, err
@@ -103,6 +104,7 @@ func NewManager(options Options, cli Client) (*StdManager, error) {
 
 	if _, ok := info.Runtimes[gvisorRuntime]; !ok {
 		logrus.Warn("Docker does not support gVisor runtime, disabling")
+
 		m.runtime = ""
 	}
 
@@ -129,6 +131,7 @@ func NewManager(options Options, cli Client) (*StdManager, error) {
 			return nil, err
 		}
 	}
+
 	return &m, nil
 }
 
@@ -149,6 +152,7 @@ func (m *StdManager) DownloadImage(ctx context.Context, image string, check bool
 			return nil
 		}
 	}
+
 	resp, err := m.client.ImagePull(ctx, image, types.ImagePullOptions{})
 	if err != nil {
 		return err
@@ -157,9 +161,11 @@ func (m *StdManager) DownloadImage(ctx context.Context, image string, check bool
 	if _, err := io.Copy(ioutil.Discard, resp); err != nil {
 		return err
 	}
+
 	if err := resp.Close(); err != nil {
 		return err
 	}
+
 	return nil
 }
 
@@ -167,6 +173,7 @@ func (m *StdManager) DownloadImage(ctx context.Context, image string, check bool
 func (m *StdManager) PruneImages(ctx context.Context) (types.ImagesPruneReport, error) {
 	filterArgs := filters.NewArgs()
 	filterArgs.Add("dangling", "false")
+
 	return m.client.ImagesPrune(ctx, filterArgs)
 }
 
@@ -174,13 +181,13 @@ func (m *StdManager) PruneImages(ctx context.Context) (types.ImagesPruneReport, 
 func (m *StdManager) ListContainersByLabel(ctx context.Context, label string) ([]types.Container, error) {
 	filterArgs := filters.NewArgs()
 	filterArgs.Add("label", label)
+
 	return m.client.ContainerList(ctx, types.ContainerListOptions{Filters: filterArgs})
 }
 
 // ContainerCreate creates docker container for given image and command.
 func (m *StdManager) ContainerCreate(ctx context.Context, image, user string, cmd []string, env []string,
 	labels map[string]string, constraints *Constraints, binds []string) (string, error) {
-
 	stopTimeout := 0
 	containerConfig := container.Config{
 		AttachStdout: true,
@@ -201,6 +208,7 @@ func (m *StdManager) ContainerCreate(ctx context.Context, image, user string, cm
 			Hard: constraints.NofileUlimit,
 		}}
 	}
+
 	blkioThrottle := []*blkiodev.ThrottleDevice{
 		{
 			Path: m.options.BlkioDevice,
@@ -232,6 +240,7 @@ func (m *StdManager) ContainerCreate(ctx context.Context, image, user string, cm
 	if err != nil {
 		return "", err
 	}
+
 	return resp.ID, nil
 }
 
@@ -264,5 +273,6 @@ func (m *StdManager) ContainerUpdate(ctx context.Context, containerID string, co
 			Memory:    constraints.MemoryLimit,
 		},
 	})
+
 	return err
 }

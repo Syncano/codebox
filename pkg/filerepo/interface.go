@@ -8,7 +8,7 @@ import (
 )
 
 // Repo provides methods to store files and manipulate volumes.
-//go:generate mockery -name Repo
+//go:generate go run github.com/vektra/mockery/cmd/mockery -name Repo
 type Repo interface {
 	Options() Options
 	StoragePath() string
@@ -34,7 +34,7 @@ type Repo interface {
 var _ Repo = (*FsRepo)(nil)
 
 // Fs provides afero.Fs methods and extends it with Link.
-//go:generate mockery -inpkg -testonly -name Fs
+//go:generate go run github.com/vektra/mockery/cmd/mockery -inpkg -testonly -name Fs
 type Fs interface {
 	afero.Fs
 	Link(oldname, newname string) error
@@ -44,7 +44,7 @@ type Fs interface {
 var _ Fs = (*LinkFs)(nil)
 
 // Commander provides methods for running subprocesses.
-//go:generate mockery -inpkg -testonly -name Commander
+//go:generate go run github.com/vektra/mockery/cmd/mockery -inpkg -testonly -name Commander
 type Commander interface {
 	Run(string, ...string) error
 }

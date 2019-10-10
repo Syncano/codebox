@@ -9,11 +9,6 @@ type isUploadRequest_Value struct {
 	mock.Mock
 }
 
-// isUploadRequest_Value provides a mock function with given fields:
-func (_m *isUploadRequest_Value) isUploadRequest_Value() {
-	_m.Called()
-}
-
 // MarshalTo provides a mock function with given fields: _a0
 func (_m *isUploadRequest_Value) MarshalTo(_a0 []byte) (int, error) {
 	ret := _m.Called(_a0)
@@ -47,4 +42,9 @@ func (_m *isUploadRequest_Value) Size() int {
 	}
 
 	return r0
+}
+
+// isUploadRequest_Value provides a mock function with given fields:
+func (_m *isUploadRequest_Value) isUploadRequest_Value() {
+	_m.Called()
 }
