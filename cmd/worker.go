@@ -384,7 +384,7 @@ func startServer(
 
 			if err != nil {
 				logger.WithError(err).Warn("Heartbeat failed")
-				return true, err
+				return true, nil
 			}
 		case err := <-errCh:
 			logger.WithError(err).Warn("RPC call failed")
