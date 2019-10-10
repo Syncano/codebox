@@ -112,10 +112,10 @@ proto-python: ## Run protobuf compiler on all .proto files and generate python f
 	done
 
 build: ## Build
-	go build -ldflags "$(LDFLAGS)" -o ./build/$(EXECNAME)
+	CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o ./build/$(EXECNAME)
 
-build-wrapper: ## Build wrapper
-	cd codewrapper; go build -ldflags "$(LDFLAGS)" -o ../build/$(WRAPPERNAME)
+build-wrapper: ## Build static version of wrapper
+	cd codewrapper; CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o ../build/$(WRAPPERNAME)
 
 build-in-docker: require-docker-compose ## Build in docker environment
 	docker-compose run --no-deps --rm app make build build-wrapper
