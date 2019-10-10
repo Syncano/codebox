@@ -148,7 +148,11 @@ class ScriptContext {
       jsonLen.writeUInt32LE(Buffer.byteLength(json))
       this.socket.write(jsonLen)
       this.socket.write(json)
-      this.socket.write(this.outputResponse.content)
+      let content = this.outputResponse.content
+      if (typeof (content) !== 'string' && !(content instanceof HttpResponse)) {
+        content = JSON.stringify(content)
+      }
+      this.socket.write(content)
     }
     this.socket.end()
   }

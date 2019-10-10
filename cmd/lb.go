@@ -29,7 +29,7 @@ var (
 var lbCmd = cli.Command{
 	Name:  "lb",
 	Usage: "Starts load balancer responsible for controlling workers.",
-	Description: `Load balancer orchestrates workers and distributes work among them. 
+	Description: `Load balancer orchestrates workers and distributes work among them.
 As there is no authentication, always run it in a private network.`,
 	Flags: []cli.Flag{
 		cli.IntFlag{

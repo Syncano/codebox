@@ -14,7 +14,7 @@ import (
 )
 
 // Manager provides methods to use docker more easily.
-//go:generate mockery -name Manager
+//go:generate go run github.com/vektra/mockery/cmd/mockery -name Manager
 type Manager interface {
 	Options() Options
 	Info() types.Info
@@ -33,7 +33,7 @@ type Manager interface {
 var _ Manager = (*StdManager)(nil)
 
 // Client defines docker client methods we are using
-//go:generate mockery -inpkg -testonly -name Client
+//go:generate go run github.com/vektra/mockery/cmd/mockery -inpkg -testonly -name Client
 type Client interface {
 	Info(ctx context.Context) (types.Info, error)
 	NetworkInspect(ctx context.Context, networkID string, options types.NetworkInspectOptions) (types.NetworkResource, error)

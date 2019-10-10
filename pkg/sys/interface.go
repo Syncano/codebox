@@ -1,7 +1,7 @@
 package sys
 
 // SystemChecker provides methods for getting info about the system.
-//go:generate mockery -name SystemChecker
+//go:generate go run github.com/vektra/mockery/cmd/mockery -name SystemChecker
 type SystemChecker interface {
 	Reset()
 	GetMemory() (uint64, uint64)

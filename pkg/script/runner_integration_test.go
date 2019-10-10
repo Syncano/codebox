@@ -68,7 +68,9 @@ func TestRunnerIntegration(t *testing.T) {
 		syschecker := new(sys.SigarChecker)
 
 		// Initialize file repo.
-		repo := filerepo.New(filerepo.Options{}, syschecker, new(filerepo.LinkFs), new(filerepo.Command))
+		repo := filerepo.New(filerepo.Options{
+			BasePath: os.Getenv("REPO_PATH"),
+		}, syschecker, new(filerepo.LinkFs), new(filerepo.Command))
 
 		redisCli := new(script.MockRedisClient)
 

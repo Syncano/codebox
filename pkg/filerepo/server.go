@@ -14,7 +14,7 @@ import (
 )
 
 // Server defines a File Repo server.
-//go:generate mockery -dir proto -all
+//go:generate go run github.com/vektra/mockery/cmd/mockery -dir proto -all
 type Server struct {
 	Repo Repo
 }

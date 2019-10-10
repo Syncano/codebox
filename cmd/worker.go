@@ -335,7 +335,7 @@ func startServer(
 	})
 	runner.OnContainerReleased(func(cont *script.Container, options *script.RunOptions) {
 		ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
-		if _, e := client.ResourceRelease(ctx, &lbpb.ResourceReleaseRequest{Id: poolID, MCPU: options.MCPU, Memory: options.Memory}); err != nil {
+		if _, e := client.ResourceRelease(ctx, &lbpb.ResourceReleaseRequest{Id: poolID, MCPU: options.MCPU}); err != nil {
 			errCh <- e
 		}
 		cancel()
@@ -346,10 +346,11 @@ func startServer(
 	defer cancel()
 	if _, err = client.Register(ctx,
 		&lbpb.RegisterRequest{
-			Id:     poolID,
-			Port:   uint32(lis.Addr().(*net.TCPAddr).Port),
-			MCPU:   uint32(scriptOptions.MCPU - uint(dockerOptions.ReservedCPU*1000)),
-			Memory: syschecker.AvailableMemory(),
+			Id:          poolID,
+			Port:        uint32(lis.Addr().(*net.TCPAddr).Port),
+			MCPU:        uint32(scriptOptions.MCPU - uint(dockerOptions.ReservedCPU*1000)),
+			Memory:      syschecker.AvailableMemory(),
+			DefaultMCPU: uint32(scriptOptions.Constraints.CPULimit / 1e6),
 		}); err != nil {
 		return false, err
 	}

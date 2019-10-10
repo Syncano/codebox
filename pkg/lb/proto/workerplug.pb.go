@@ -3,30 +3,66 @@
 
 package proto
 
-import proto1 "github.com/golang/protobuf/proto"
-import fmt "fmt"
-import math "math"
-
-import context "golang.org/x/net/context"
-import grpc "google.golang.org/grpc"
-
-import io "io"
+import (
+	context "context"
+	fmt "fmt"
+	proto "github.com/golang/protobuf/proto"
+	grpc "google.golang.org/grpc"
+	io "io"
+	math "math"
+)
 
 // Reference imports to suppress errors if they are not otherwise used.
-var _ = proto1.Marshal
+var _ = proto.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
 
+// This is a compile-time assertion to ensure that this generated file
+// is compatible with the proto package it is being compiled against.
+// A compilation error at this line likely means your copy of the
+// proto package needs to be updated.
+const _ = proto.ProtoPackageIsVersion2 // please upgrade the proto package
+
 type ResourceReleaseRequest struct {
-	Id     string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	MCPU   uint32 `protobuf:"varint,2,opt,name=mCPU,proto3" json:"mCPU,omitempty"`
-	Memory uint64 `protobuf:"varint,3,opt,name=memory,proto3" json:"memory,omitempty"`
+	Id                   string   `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	MCPU                 uint32   `protobuf:"varint,2,opt,name=mCPU,proto3" json:"mCPU,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *ResourceReleaseRequest) Reset()                    { *m = ResourceReleaseRequest{} }
-func (m *ResourceReleaseRequest) String() string            { return proto1.CompactTextString(m) }
-func (*ResourceReleaseRequest) ProtoMessage()               {}
-func (*ResourceReleaseRequest) Descriptor() ([]byte, []int) { return fileDescriptorWorkerplug, []int{0} }
+func (m *ResourceReleaseRequest) Reset()         { *m = ResourceReleaseRequest{} }
+func (m *ResourceReleaseRequest) String() string { return proto.CompactTextString(m) }
+func (*ResourceReleaseRequest) ProtoMessage()    {}
+func (*ResourceReleaseRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_d80785c52d53ac98, []int{0}
+}
+func (m *ResourceReleaseRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ResourceReleaseRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_ResourceReleaseRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalTo(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *ResourceReleaseRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ResourceReleaseRequest.Merge(m, src)
+}
+func (m *ResourceReleaseRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *ResourceReleaseRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_ResourceReleaseRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ResourceReleaseRequest proto.InternalMessageInfo
 
 func (m *ResourceReleaseRequest) GetId() string {
 	if m != nil {
@@ -42,37 +78,88 @@ func (m *ResourceReleaseRequest) GetMCPU() uint32 {
 	return 0
 }
 
-func (m *ResourceReleaseRequest) GetMemory() uint64 {
-	if m != nil {
-		return m.Memory
-	}
-	return 0
-}
-
 type ResourceReleaseResponse struct {
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *ResourceReleaseResponse) Reset()         { *m = ResourceReleaseResponse{} }
-func (m *ResourceReleaseResponse) String() string { return proto1.CompactTextString(m) }
+func (m *ResourceReleaseResponse) String() string { return proto.CompactTextString(m) }
 func (*ResourceReleaseResponse) ProtoMessage()    {}
 func (*ResourceReleaseResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptorWorkerplug, []int{1}
+	return fileDescriptor_d80785c52d53ac98, []int{1}
+}
+func (m *ResourceReleaseResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ResourceReleaseResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_ResourceReleaseResponse.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalTo(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *ResourceReleaseResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ResourceReleaseResponse.Merge(m, src)
+}
+func (m *ResourceReleaseResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *ResourceReleaseResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_ResourceReleaseResponse.DiscardUnknown(m)
 }
 
+var xxx_messageInfo_ResourceReleaseResponse proto.InternalMessageInfo
+
 type ContainerRemovedRequest struct {
-	Id          string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	ContainerID string `protobuf:"bytes,5,opt,name=containerID,proto3" json:"containerID,omitempty"`
-	SourceHash  string `protobuf:"bytes,2,opt,name=sourceHash,proto3" json:"sourceHash,omitempty"`
-	Environment string `protobuf:"bytes,3,opt,name=environment,proto3" json:"environment,omitempty"`
-	UserID      string `protobuf:"bytes,4,opt,name=userID,proto3" json:"userID,omitempty"`
+	Id                   string   `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	ContainerID          string   `protobuf:"bytes,5,opt,name=containerID,proto3" json:"containerID,omitempty"`
+	SourceHash           string   `protobuf:"bytes,2,opt,name=sourceHash,proto3" json:"sourceHash,omitempty"`
+	Environment          string   `protobuf:"bytes,3,opt,name=environment,proto3" json:"environment,omitempty"`
+	UserID               string   `protobuf:"bytes,4,opt,name=userID,proto3" json:"userID,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *ContainerRemovedRequest) Reset()         { *m = ContainerRemovedRequest{} }
-func (m *ContainerRemovedRequest) String() string { return proto1.CompactTextString(m) }
+func (m *ContainerRemovedRequest) String() string { return proto.CompactTextString(m) }
 func (*ContainerRemovedRequest) ProtoMessage()    {}
 func (*ContainerRemovedRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptorWorkerplug, []int{2}
+	return fileDescriptor_d80785c52d53ac98, []int{2}
 }
+func (m *ContainerRemovedRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ContainerRemovedRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_ContainerRemovedRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalTo(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *ContainerRemovedRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ContainerRemovedRequest.Merge(m, src)
+}
+func (m *ContainerRemovedRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *ContainerRemovedRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_ContainerRemovedRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ContainerRemovedRequest proto.InternalMessageInfo
 
 func (m *ContainerRemovedRequest) GetId() string {
 	if m != nil {
@@ -110,26 +197,87 @@ func (m *ContainerRemovedRequest) GetUserID() string {
 }
 
 type ContainerRemovedResponse struct {
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *ContainerRemovedResponse) Reset()         { *m = ContainerRemovedResponse{} }
-func (m *ContainerRemovedResponse) String() string { return proto1.CompactTextString(m) }
+func (m *ContainerRemovedResponse) String() string { return proto.CompactTextString(m) }
 func (*ContainerRemovedResponse) ProtoMessage()    {}
 func (*ContainerRemovedResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptorWorkerplug, []int{3}
+	return fileDescriptor_d80785c52d53ac98, []int{3}
 }
+func (m *ContainerRemovedResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ContainerRemovedResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_ContainerRemovedResponse.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalTo(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *ContainerRemovedResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ContainerRemovedResponse.Merge(m, src)
+}
+func (m *ContainerRemovedResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *ContainerRemovedResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_ContainerRemovedResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ContainerRemovedResponse proto.InternalMessageInfo
 
 type RegisterRequest struct {
-	Id     string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Port   uint32 `protobuf:"varint,2,opt,name=port,proto3" json:"port,omitempty"`
-	MCPU   uint32 `protobuf:"varint,3,opt,name=mCPU,proto3" json:"mCPU,omitempty"`
-	Memory uint64 `protobuf:"varint,4,opt,name=memory,proto3" json:"memory,omitempty"`
+	Id                   string   `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Port                 uint32   `protobuf:"varint,2,opt,name=port,proto3" json:"port,omitempty"`
+	MCPU                 uint32   `protobuf:"varint,3,opt,name=mCPU,proto3" json:"mCPU,omitempty"`
+	Memory               uint64   `protobuf:"varint,4,opt,name=memory,proto3" json:"memory,omitempty"`
+	DefaultMCPU          uint32   `protobuf:"varint,5,opt,name=defaultMCPU,proto3" json:"defaultMCPU,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *RegisterRequest) Reset()                    { *m = RegisterRequest{} }
-func (m *RegisterRequest) String() string            { return proto1.CompactTextString(m) }
-func (*RegisterRequest) ProtoMessage()               {}
-func (*RegisterRequest) Descriptor() ([]byte, []int) { return fileDescriptorWorkerplug, []int{4} }
+func (m *RegisterRequest) Reset()         { *m = RegisterRequest{} }
+func (m *RegisterRequest) String() string { return proto.CompactTextString(m) }
+func (*RegisterRequest) ProtoMessage()    {}
+func (*RegisterRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_d80785c52d53ac98, []int{4}
+}
+func (m *RegisterRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *RegisterRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_RegisterRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalTo(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *RegisterRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RegisterRequest.Merge(m, src)
+}
+func (m *RegisterRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *RegisterRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_RegisterRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_RegisterRequest proto.InternalMessageInfo
 
 func (m *RegisterRequest) GetId() string {
 	if m != nil {
@@ -159,23 +307,92 @@ func (m *RegisterRequest) GetMemory() uint64 {
 	return 0
 }
 
-type RegisterResponse struct {
+func (m *RegisterRequest) GetDefaultMCPU() uint32 {
+	if m != nil {
+		return m.DefaultMCPU
+	}
+	return 0
 }
 
-func (m *RegisterResponse) Reset()                    { *m = RegisterResponse{} }
-func (m *RegisterResponse) String() string            { return proto1.CompactTextString(m) }
-func (*RegisterResponse) ProtoMessage()               {}
-func (*RegisterResponse) Descriptor() ([]byte, []int) { return fileDescriptorWorkerplug, []int{5} }
+type RegisterResponse struct {
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *RegisterResponse) Reset()         { *m = RegisterResponse{} }
+func (m *RegisterResponse) String() string { return proto.CompactTextString(m) }
+func (*RegisterResponse) ProtoMessage()    {}
+func (*RegisterResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_d80785c52d53ac98, []int{5}
+}
+func (m *RegisterResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *RegisterResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_RegisterResponse.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalTo(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *RegisterResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RegisterResponse.Merge(m, src)
+}
+func (m *RegisterResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *RegisterResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_RegisterResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_RegisterResponse proto.InternalMessageInfo
 
 type HeartbeatRequest struct {
-	Id     string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Memory uint64 `protobuf:"varint,2,opt,name=memory,proto3" json:"memory,omitempty"`
+	Id                   string   `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Memory               uint64   `protobuf:"varint,2,opt,name=memory,proto3" json:"memory,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *HeartbeatRequest) Reset()                    { *m = HeartbeatRequest{} }
-func (m *HeartbeatRequest) String() string            { return proto1.CompactTextString(m) }
-func (*HeartbeatRequest) ProtoMessage()               {}
-func (*HeartbeatRequest) Descriptor() ([]byte, []int) { return fileDescriptorWorkerplug, []int{6} }
+func (m *HeartbeatRequest) Reset()         { *m = HeartbeatRequest{} }
+func (m *HeartbeatRequest) String() string { return proto.CompactTextString(m) }
+func (*HeartbeatRequest) ProtoMessage()    {}
+func (*HeartbeatRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_d80785c52d53ac98, []int{6}
+}
+func (m *HeartbeatRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *HeartbeatRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_HeartbeatRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalTo(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *HeartbeatRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_HeartbeatRequest.Merge(m, src)
+}
+func (m *HeartbeatRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *HeartbeatRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_HeartbeatRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_HeartbeatRequest proto.InternalMessageInfo
 
 func (m *HeartbeatRequest) GetId() string {
 	if m != nil {
@@ -192,21 +409,83 @@ func (m *HeartbeatRequest) GetMemory() uint64 {
 }
 
 type HeartbeatResponse struct {
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *HeartbeatResponse) Reset()                    { *m = HeartbeatResponse{} }
-func (m *HeartbeatResponse) String() string            { return proto1.CompactTextString(m) }
-func (*HeartbeatResponse) ProtoMessage()               {}
-func (*HeartbeatResponse) Descriptor() ([]byte, []int) { return fileDescriptorWorkerplug, []int{7} }
+func (m *HeartbeatResponse) Reset()         { *m = HeartbeatResponse{} }
+func (m *HeartbeatResponse) String() string { return proto.CompactTextString(m) }
+func (*HeartbeatResponse) ProtoMessage()    {}
+func (*HeartbeatResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_d80785c52d53ac98, []int{7}
+}
+func (m *HeartbeatResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *HeartbeatResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_HeartbeatResponse.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalTo(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *HeartbeatResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_HeartbeatResponse.Merge(m, src)
+}
+func (m *HeartbeatResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *HeartbeatResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_HeartbeatResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_HeartbeatResponse proto.InternalMessageInfo
 
 type DisconnectRequest struct {
-	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Id                   string   `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *DisconnectRequest) Reset()                    { *m = DisconnectRequest{} }
-func (m *DisconnectRequest) String() string            { return proto1.CompactTextString(m) }
-func (*DisconnectRequest) ProtoMessage()               {}
-func (*DisconnectRequest) Descriptor() ([]byte, []int) { return fileDescriptorWorkerplug, []int{8} }
+func (m *DisconnectRequest) Reset()         { *m = DisconnectRequest{} }
+func (m *DisconnectRequest) String() string { return proto.CompactTextString(m) }
+func (*DisconnectRequest) ProtoMessage()    {}
+func (*DisconnectRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_d80785c52d53ac98, []int{8}
+}
+func (m *DisconnectRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *DisconnectRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_DisconnectRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalTo(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *DisconnectRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_DisconnectRequest.Merge(m, src)
+}
+func (m *DisconnectRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *DisconnectRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_DisconnectRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_DisconnectRequest proto.InternalMessageInfo
 
 func (m *DisconnectRequest) GetId() string {
 	if m != nil {
@@ -216,24 +495,91 @@ func (m *DisconnectRequest) GetId() string {
 }
 
 type DisconnectResponse struct {
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *DisconnectResponse) Reset()                    { *m = DisconnectResponse{} }
-func (m *DisconnectResponse) String() string            { return proto1.CompactTextString(m) }
-func (*DisconnectResponse) ProtoMessage()               {}
-func (*DisconnectResponse) Descriptor() ([]byte, []int) { return fileDescriptorWorkerplug, []int{9} }
+func (m *DisconnectResponse) Reset()         { *m = DisconnectResponse{} }
+func (m *DisconnectResponse) String() string { return proto.CompactTextString(m) }
+func (*DisconnectResponse) ProtoMessage()    {}
+func (*DisconnectResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_d80785c52d53ac98, []int{9}
+}
+func (m *DisconnectResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *DisconnectResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_DisconnectResponse.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalTo(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *DisconnectResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_DisconnectResponse.Merge(m, src)
+}
+func (m *DisconnectResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *DisconnectResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_DisconnectResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_DisconnectResponse proto.InternalMessageInfo
 
 func init() {
-	proto1.RegisterType((*ResourceReleaseRequest)(nil), "lb.ResourceReleaseRequest")
-	proto1.RegisterType((*ResourceReleaseResponse)(nil), "lb.ResourceReleaseResponse")
-	proto1.RegisterType((*ContainerRemovedRequest)(nil), "lb.ContainerRemovedRequest")
-	proto1.RegisterType((*ContainerRemovedResponse)(nil), "lb.ContainerRemovedResponse")
-	proto1.RegisterType((*RegisterRequest)(nil), "lb.RegisterRequest")
-	proto1.RegisterType((*RegisterResponse)(nil), "lb.RegisterResponse")
-	proto1.RegisterType((*HeartbeatRequest)(nil), "lb.HeartbeatRequest")
-	proto1.RegisterType((*HeartbeatResponse)(nil), "lb.HeartbeatResponse")
-	proto1.RegisterType((*DisconnectRequest)(nil), "lb.DisconnectRequest")
-	proto1.RegisterType((*DisconnectResponse)(nil), "lb.DisconnectResponse")
+	proto.RegisterType((*ResourceReleaseRequest)(nil), "lb.ResourceReleaseRequest")
+	proto.RegisterType((*ResourceReleaseResponse)(nil), "lb.ResourceReleaseResponse")
+	proto.RegisterType((*ContainerRemovedRequest)(nil), "lb.ContainerRemovedRequest")
+	proto.RegisterType((*ContainerRemovedResponse)(nil), "lb.ContainerRemovedResponse")
+	proto.RegisterType((*RegisterRequest)(nil), "lb.RegisterRequest")
+	proto.RegisterType((*RegisterResponse)(nil), "lb.RegisterResponse")
+	proto.RegisterType((*HeartbeatRequest)(nil), "lb.HeartbeatRequest")
+	proto.RegisterType((*HeartbeatResponse)(nil), "lb.HeartbeatResponse")
+	proto.RegisterType((*DisconnectRequest)(nil), "lb.DisconnectRequest")
+	proto.RegisterType((*DisconnectResponse)(nil), "lb.DisconnectResponse")
+}
+
+func init() { proto.RegisterFile("pkg/lb/proto/workerplug.proto", fileDescriptor_d80785c52d53ac98) }
+
+var fileDescriptor_d80785c52d53ac98 = []byte{
+	// 475 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x74, 0x53, 0x4d, 0x6f, 0xd3, 0x40,
+	0x10, 0xc5, 0x6e, 0x5a, 0x91, 0x41, 0x40, 0xba, 0x2d, 0xa9, 0x31, 0x60, 0x45, 0xe6, 0x40, 0x4f,
+	0xb1, 0x04, 0x42, 0xe2, 0xeb, 0x44, 0x7b, 0x28, 0x48, 0x95, 0xaa, 0x45, 0x08, 0x89, 0x9b, 0x3f,
+	0x06, 0xd7, 0xaa, 0xbd, 0x6b, 0x76, 0xd7, 0x85, 0x9e, 0xf9, 0x13, 0xfc, 0x01, 0xfe, 0x0b, 0x47,
+	0x2e, 0xdc, 0x51, 0xf8, 0x23, 0x95, 0xd7, 0x4e, 0xb2, 0x71, 0xe2, 0x53, 0x76, 0xdf, 0xcc, 0x7b,
+	0xf3, 0xf2, 0x76, 0x0c, 0x8f, 0xca, 0x8b, 0x34, 0xc8, 0xa3, 0xa0, 0x14, 0x5c, 0xf1, 0xe0, 0x1b,
+	0x17, 0x17, 0x28, 0xca, 0xbc, 0x4a, 0xa7, 0x1a, 0x20, 0x76, 0x1e, 0xf9, 0x6f, 0x60, 0x4c, 0x51,
+	0xf2, 0x4a, 0xc4, 0x48, 0x31, 0xc7, 0x50, 0x22, 0xc5, 0xaf, 0x15, 0x4a, 0x45, 0xee, 0x80, 0x9d,
+	0x25, 0x8e, 0x35, 0xb1, 0x0e, 0x87, 0xd4, 0xce, 0x12, 0x42, 0x60, 0x50, 0x1c, 0x9d, 0x7d, 0x74,
+	0xec, 0x89, 0x75, 0x78, 0x9b, 0xea, 0xb3, 0x7f, 0x1f, 0x0e, 0xd6, 0xd8, 0xb2, 0xe4, 0x4c, 0xa2,
+	0xff, 0xcb, 0x82, 0x83, 0x23, 0xce, 0x54, 0x98, 0x31, 0x14, 0x14, 0x0b, 0x7e, 0x89, 0x49, 0x9f,
+	0xf4, 0x04, 0x6e, 0xc5, 0xf3, 0xd6, 0x77, 0xc7, 0xce, 0xb6, 0x2e, 0x98, 0x10, 0xf1, 0x00, 0x9a,
+	0x31, 0x27, 0xa1, 0x3c, 0xd7, 0x16, 0x86, 0xd4, 0x40, 0x6a, 0x05, 0x64, 0x97, 0x99, 0xe0, 0xac,
+	0x40, 0xa6, 0x9c, 0xad, 0x46, 0xc1, 0x80, 0xc8, 0x18, 0x76, 0x2a, 0xa9, 0xe5, 0x07, 0xba, 0xd8,
+	0xde, 0x7c, 0x17, 0x9c, 0x75, 0x9b, 0xed, 0x7f, 0xf8, 0x61, 0xc1, 0x5d, 0x8a, 0x69, 0x26, 0x55,
+	0x5d, 0xeb, 0x8d, 0xa5, 0xe4, 0x42, 0xcd, 0x63, 0xa9, 0xcf, 0x8b, 0xa8, 0xb6, 0x96, 0x51, 0xd5,
+	0xf3, 0x0b, 0x2c, 0xb8, 0xb8, 0xd2, 0xf3, 0x07, 0xb4, 0xbd, 0xd5, 0xce, 0x13, 0xfc, 0x12, 0x56,
+	0xb9, 0x3a, 0xad, 0x29, 0xdb, 0x9a, 0x62, 0x42, 0x3e, 0x81, 0xd1, 0xd2, 0x44, 0xeb, 0xec, 0x15,
+	0x8c, 0x4e, 0x30, 0x14, 0x2a, 0xc2, 0x50, 0xf5, 0x39, 0x5b, 0x4e, 0xb4, 0xcd, 0x89, 0xfe, 0x1e,
+	0xec, 0x1a, 0xdc, 0x56, 0xf0, 0x31, 0xec, 0x1e, 0x67, 0x32, 0xe6, 0x8c, 0x61, 0xdc, 0xa7, 0xe8,
+	0xef, 0x03, 0x31, 0x9b, 0x1a, 0xea, 0xd3, 0xbf, 0x36, 0xc0, 0x27, 0xbd, 0x5b, 0x67, 0x79, 0x95,
+	0x92, 0xf7, 0x75, 0x66, 0x2b, 0x3b, 0x41, 0xdc, 0x69, 0x1e, 0x4d, 0x37, 0xaf, 0x99, 0xfb, 0x60,
+	0x63, 0xad, 0x91, 0x26, 0xa7, 0x30, 0xea, 0x3e, 0x0e, 0xd1, 0x84, 0x9e, 0xcd, 0x72, 0x1f, 0x6e,
+	0x2e, 0xb6, 0x72, 0xcf, 0xe1, 0xe6, 0x3c, 0x49, 0xb2, 0xd7, 0xcc, 0x5d, 0x79, 0x5c, 0x77, 0x7f,
+	0x15, 0x6c, 0x69, 0x2f, 0x60, 0xb8, 0x08, 0x8c, 0xe8, 0x96, 0x6e, 0xf6, 0xee, 0xbd, 0x0e, 0xda,
+	0x32, 0x5f, 0x03, 0x2c, 0x03, 0x23, 0xba, 0x69, 0x2d, 0x65, 0x77, 0xdc, 0x85, 0x1b, 0xf2, 0xdb,
+	0x97, 0xbf, 0x67, 0x9e, 0xf5, 0x67, 0xe6, 0x59, 0xff, 0x66, 0x9e, 0xf5, 0xf3, 0xbf, 0x77, 0xe3,
+	0xf3, 0x93, 0x34, 0x53, 0xe7, 0x55, 0x34, 0x8d, 0x79, 0x11, 0x7c, 0xb8, 0x62, 0x71, 0xc8, 0x78,
+	0x10, 0xf3, 0x04, 0x23, 0xfe, 0x3d, 0x30, 0x3f, 0xf5, 0x68, 0x47, 0xff, 0x3c, 0xbb, 0x0e, 0x00,
+	0x00, 0xff, 0xff, 0xbe, 0x2f, 0x01, 0xf4, 0x01, 0x04, 0x00, 0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -244,8 +590,9 @@ var _ grpc.ClientConn
 // is compatible with the grpc package it is being compiled against.
 const _ = grpc.SupportPackageIsVersion4
 
-// Client API for WorkerPlug service
-
+// WorkerPlugClient is the client API for WorkerPlug service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
 type WorkerPlugClient interface {
 	// ResourceRelease handles notifications sent by client whenever a run has finished.
 	ResourceRelease(ctx context.Context, in *ResourceReleaseRequest, opts ...grpc.CallOption) (*ResourceReleaseResponse, error)
@@ -269,7 +616,7 @@ func NewWorkerPlugClient(cc *grpc.ClientConn) WorkerPlugClient {
 
 func (c *workerPlugClient) ResourceRelease(ctx context.Context, in *ResourceReleaseRequest, opts ...grpc.CallOption) (*ResourceReleaseResponse, error) {
 	out := new(ResourceReleaseResponse)
-	err := grpc.Invoke(ctx, "/lb.WorkerPlug/ResourceRelease", in, out, c.cc, opts...)
+	err := c.cc.Invoke(ctx, "/lb.WorkerPlug/ResourceRelease", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -278,7 +625,7 @@ func (c *workerPlugClient) ResourceRelease(ctx context.Context, in *ResourceRele
 
 func (c *workerPlugClient) ContainerRemoved(ctx context.Context, in *ContainerRemovedRequest, opts ...grpc.CallOption) (*ContainerRemovedResponse, error) {
 	out := new(ContainerRemovedResponse)
-	err := grpc.Invoke(ctx, "/lb.WorkerPlug/ContainerRemoved", in, out, c.cc, opts...)
+	err := c.cc.Invoke(ctx, "/lb.WorkerPlug/ContainerRemoved", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -287,7 +634,7 @@ func (c *workerPlugClient) ContainerRemoved(ctx context.Context, in *ContainerRe
 
 func (c *workerPlugClient) Register(ctx context.Context, in *RegisterRequest, opts ...grpc.CallOption) (*RegisterResponse, error) {
 	out := new(RegisterResponse)
-	err := grpc.Invoke(ctx, "/lb.WorkerPlug/Register", in, out, c.cc, opts...)
+	err := c.cc.Invoke(ctx, "/lb.WorkerPlug/Register", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -296,7 +643,7 @@ func (c *workerPlugClient) Register(ctx context.Context, in *RegisterRequest, op
 
 func (c *workerPlugClient) Heartbeat(ctx context.Context, in *HeartbeatRequest, opts ...grpc.CallOption) (*HeartbeatResponse, error) {
 	out := new(HeartbeatResponse)
-	err := grpc.Invoke(ctx, "/lb.WorkerPlug/Heartbeat", in, out, c.cc, opts...)
+	err := c.cc.Invoke(ctx, "/lb.WorkerPlug/Heartbeat", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -305,15 +652,14 @@ func (c *workerPlugClient) Heartbeat(ctx context.Context, in *HeartbeatRequest, 
 
 func (c *workerPlugClient) Disconnect(ctx context.Context, in *DisconnectRequest, opts ...grpc.CallOption) (*DisconnectResponse, error) {
 	out := new(DisconnectResponse)
-	err := grpc.Invoke(ctx, "/lb.WorkerPlug/Disconnect", in, out, c.cc, opts...)
+	err := c.cc.Invoke(ctx, "/lb.WorkerPlug/Disconnect", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-// Server API for WorkerPlug service
-
+// WorkerPlugServer is the server API for WorkerPlug service.
 type WorkerPlugServer interface {
 	// ResourceRelease handles notifications sent by client whenever a run has finished.
 	ResourceRelease(context.Context, *ResourceReleaseRequest) (*ResourceReleaseResponse, error)
@@ -476,10 +822,8 @@ func (m *ResourceReleaseRequest) MarshalTo(dAtA []byte) (int, error) {
 		i++
 		i = encodeVarintWorkerplug(dAtA, i, uint64(m.MCPU))
 	}
-	if m.Memory != 0 {
-		dAtA[i] = 0x18
-		i++
-		i = encodeVarintWorkerplug(dAtA, i, uint64(m.Memory))
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
 	}
 	return i, nil
 }
@@ -499,6 +843,9 @@ func (m *ResourceReleaseResponse) MarshalTo(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	return i, nil
 }
 
@@ -547,6 +894,9 @@ func (m *ContainerRemovedRequest) MarshalTo(dAtA []byte) (int, error) {
 		i = encodeVarintWorkerplug(dAtA, i, uint64(len(m.ContainerID)))
 		i += copy(dAtA[i:], m.ContainerID)
 	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	return i, nil
 }
 
@@ -565,6 +915,9 @@ func (m *ContainerRemovedResponse) MarshalTo(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	return i, nil
 }
 
@@ -604,6 +957,14 @@ func (m *RegisterRequest) MarshalTo(dAtA []byte) (int, error) {
 		i++
 		i = encodeVarintWorkerplug(dAtA, i, uint64(m.Memory))
 	}
+	if m.DefaultMCPU != 0 {
+		dAtA[i] = 0x28
+		i++
+		i = encodeVarintWorkerplug(dAtA, i, uint64(m.DefaultMCPU))
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	return i, nil
 }
 
@@ -622,6 +983,9 @@ func (m *RegisterResponse) MarshalTo(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	return i, nil
 }
 
@@ -651,6 +1015,9 @@ func (m *HeartbeatRequest) MarshalTo(dAtA []byte) (int, error) {
 		i++
 		i = encodeVarintWorkerplug(dAtA, i, uint64(m.Memory))
 	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	return i, nil
 }
 
@@ -669,6 +1036,9 @@ func (m *HeartbeatResponse) MarshalTo(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	return i, nil
 }
 
@@ -693,6 +1063,9 @@ func (m *DisconnectRequest) MarshalTo(dAtA []byte) (int, error) {
 		i = encodeVarintWorkerplug(dAtA, i, uint64(len(m.Id)))
 		i += copy(dAtA[i:], m.Id)
 	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	return i, nil
 }
 
@@ -711,6 +1084,9 @@ func (m *DisconnectResponse) MarshalTo(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	return i, nil
 }
 
@@ -724,6 +1100,9 @@ func encodeVarintWorkerplug(dAtA []byte, offset int, v uint64) int {
 	return offset + 1
 }
 func (m *ResourceReleaseRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.Id)
@@ -733,19 +1112,28 @@ func (m *ResourceReleaseRequest) Size() (n int) {
 	if m.MCPU != 0 {
 		n += 1 + sovWorkerplug(uint64(m.MCPU))
 	}
-	if m.Memory != 0 {
-		n += 1 + sovWorkerplug(uint64(m.Memory))
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
 
 func (m *ResourceReleaseResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
 	return n
 }
 
 func (m *ContainerRemovedRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.Id)
@@ -768,16 +1156,28 @@ func (m *ContainerRemovedRequest) Size() (n int) {
 	if l > 0 {
 		n += 1 + l + sovWorkerplug(uint64(l))
 	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
 	return n
 }
 
 func (m *ContainerRemovedResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
 	return n
 }
 
 func (m *RegisterRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.Id)
@@ -793,16 +1193,31 @@ func (m *RegisterRequest) Size() (n int) {
 	if m.Memory != 0 {
 		n += 1 + sovWorkerplug(uint64(m.Memory))
 	}
+	if m.DefaultMCPU != 0 {
+		n += 1 + sovWorkerplug(uint64(m.DefaultMCPU))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
 	return n
 }
 
 func (m *RegisterResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
 	return n
 }
 
 func (m *HeartbeatRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.Id)
@@ -812,28 +1227,49 @@ func (m *HeartbeatRequest) Size() (n int) {
 	if m.Memory != 0 {
 		n += 1 + sovWorkerplug(uint64(m.Memory))
 	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
 	return n
 }
 
 func (m *HeartbeatResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
 	return n
 }
 
 func (m *DisconnectRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.Id)
 	if l > 0 {
 		n += 1 + l + sovWorkerplug(uint64(l))
 	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
 	return n
 }
 
 func (m *DisconnectResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
 	return n
 }
 
@@ -865,7 +1301,7 @@ func (m *ResourceReleaseRequest) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -893,7 +1329,7 @@ func (m *ResourceReleaseRequest) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -903,6 +1339,9 @@ func (m *ResourceReleaseRequest) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthWorkerplug
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthWorkerplug
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -922,26 +1361,7 @@ func (m *ResourceReleaseRequest) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.MCPU |= (uint32(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 3:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Memory", wireType)
-			}
-			m.Memory = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowWorkerplug
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.Memory |= (uint64(b) & 0x7F) << shift
+				m.MCPU |= uint32(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -955,9 +1375,13 @@ func (m *ResourceReleaseRequest) Unmarshal(dAtA []byte) error {
 			if skippy < 0 {
 				return ErrInvalidLengthWorkerplug
 			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthWorkerplug
+			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -982,7 +1406,7 @@ func (m *ResourceReleaseResponse) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -1005,9 +1429,13 @@ func (m *ResourceReleaseResponse) Unmarshal(dAtA []byte) error {
 			if skippy < 0 {
 				return ErrInvalidLengthWorkerplug
 			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthWorkerplug
+			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1032,7 +1460,7 @@ func (m *ContainerRemovedRequest) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -1060,7 +1488,7 @@ func (m *ContainerRemovedRequest) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1070,6 +1498,9 @@ func (m *ContainerRemovedRequest) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthWorkerplug
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthWorkerplug
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1089,7 +1520,7 @@ func (m *ContainerRemovedRequest) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1099,6 +1530,9 @@ func (m *ContainerRemovedRequest) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthWorkerplug
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthWorkerplug
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1118,7 +1552,7 @@ func (m *ContainerRemovedRequest) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1128,6 +1562,9 @@ func (m *ContainerRemovedRequest) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthWorkerplug
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthWorkerplug
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1147,7 +1584,7 @@ func (m *ContainerRemovedRequest) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1157,6 +1594,9 @@ func (m *ContainerRemovedRequest) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthWorkerplug
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthWorkerplug
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1176,7 +1616,7 @@ func (m *ContainerRemovedRequest) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1186,6 +1626,9 @@ func (m *ContainerRemovedRequest) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthWorkerplug
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthWorkerplug
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1200,9 +1643,13 @@ func (m *ContainerRemovedRequest) Unmarshal(dAtA []byte) error {
 			if skippy < 0 {
 				return ErrInvalidLengthWorkerplug
 			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthWorkerplug
+			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1227,7 +1674,7 @@ func (m *ContainerRemovedResponse) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -1250,9 +1697,13 @@ func (m *ContainerRemovedResponse) Unmarshal(dAtA []byte) error {
 			if skippy < 0 {
 				return ErrInvalidLengthWorkerplug
 			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthWorkerplug
+			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1277,7 +1728,7 @@ func (m *RegisterRequest) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -1305,7 +1756,7 @@ func (m *RegisterRequest) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1315,6 +1766,9 @@ func (m *RegisterRequest) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthWorkerplug
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthWorkerplug
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1334,7 +1788,7 @@ func (m *RegisterRequest) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.Port |= (uint32(b) & 0x7F) << shift
+				m.Port |= uint32(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1353,7 +1807,7 @@ func (m *RegisterRequest) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.MCPU |= (uint32(b) & 0x7F) << shift
+				m.MCPU |= uint32(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1372,7 +1826,26 @@ func (m *RegisterRequest) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.Memory |= (uint64(b) & 0x7F) << shift
+				m.Memory |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 5:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field DefaultMCPU", wireType)
+			}
+			m.DefaultMCPU = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowWorkerplug
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.DefaultMCPU |= uint32(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1386,9 +1859,13 @@ func (m *RegisterRequest) Unmarshal(dAtA []byte) error {
 			if skippy < 0 {
 				return ErrInvalidLengthWorkerplug
 			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthWorkerplug
+			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1413,7 +1890,7 @@ func (m *RegisterResponse) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -1436,9 +1913,13 @@ func (m *RegisterResponse) Unmarshal(dAtA []byte) error {
 			if skippy < 0 {
 				return ErrInvalidLengthWorkerplug
 			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthWorkerplug
+			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1463,7 +1944,7 @@ func (m *HeartbeatRequest) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -1491,7 +1972,7 @@ func (m *HeartbeatRequest) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1501,6 +1982,9 @@ func (m *HeartbeatRequest) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthWorkerplug
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthWorkerplug
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1520,7 +2004,7 @@ func (m *HeartbeatRequest) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.Memory |= (uint64(b) & 0x7F) << shift
+				m.Memory |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1534,9 +2018,13 @@ func (m *HeartbeatRequest) Unmarshal(dAtA []byte) error {
 			if skippy < 0 {
 				return ErrInvalidLengthWorkerplug
 			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthWorkerplug
+			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1561,7 +2049,7 @@ func (m *HeartbeatResponse) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -1584,9 +2072,13 @@ func (m *HeartbeatResponse) Unmarshal(dAtA []byte) error {
 			if skippy < 0 {
 				return ErrInvalidLengthWorkerplug
 			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthWorkerplug
+			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1611,7 +2103,7 @@ func (m *DisconnectRequest) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -1639,7 +2131,7 @@ func (m *DisconnectRequest) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1649,6 +2141,9 @@ func (m *DisconnectRequest) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthWorkerplug
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthWorkerplug
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1663,9 +2158,13 @@ func (m *DisconnectRequest) Unmarshal(dAtA []byte) error {
 			if skippy < 0 {
 				return ErrInvalidLengthWorkerplug
 			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthWorkerplug
+			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1690,7 +2189,7 @@ func (m *DisconnectResponse) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -1713,9 +2212,13 @@ func (m *DisconnectResponse) Unmarshal(dAtA []byte) error {
 			if skippy < 0 {
 				return ErrInvalidLengthWorkerplug
 			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthWorkerplug
+			}
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1779,8 +2282,11 @@ func skipWorkerplug(dAtA []byte) (n int, err error) {
 					break
 				}
 			}
-			iNdEx += length
 			if length < 0 {
+				return 0, ErrInvalidLengthWorkerplug
+			}
+			iNdEx += length
+			if iNdEx < 0 {
 				return 0, ErrInvalidLengthWorkerplug
 			}
 			return iNdEx, nil
@@ -1811,6 +2317,9 @@ func skipWorkerplug(dAtA []byte) (n int, err error) {
 					return 0, err
 				}
 				iNdEx = start + next
+				if iNdEx < 0 {
+					return 0, ErrInvalidLengthWorkerplug
+				}
 			}
 			return iNdEx, nil
 		case 4:
@@ -1829,39 +2338,3 @@ var (
 	ErrInvalidLengthWorkerplug = fmt.Errorf("proto: negative length found during unmarshaling")
 	ErrIntOverflowWorkerplug   = fmt.Errorf("proto: integer overflow")
 )
-
-func init() { proto1.RegisterFile("pkg/lb/proto/workerplug.proto", fileDescriptorWorkerplug) }
-
-var fileDescriptorWorkerplug = []byte{
-	// 465 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x74, 0x93, 0x4f, 0x6f, 0xd3, 0x30,
-	0x18, 0xc6, 0x49, 0x56, 0x26, 0xfa, 0x22, 0xa0, 0xf3, 0x46, 0x17, 0x02, 0x44, 0x55, 0x38, 0xd0,
-	0x53, 0x23, 0x81, 0x90, 0xf8, 0x73, 0x63, 0x3d, 0x6c, 0x48, 0x48, 0x93, 0x01, 0x21, 0x71, 0x4b,
-	0xd2, 0x57, 0x59, 0xb4, 0xc4, 0x0e, 0xb6, 0x33, 0xd8, 0x37, 0xe1, 0x0b, 0xf0, 0x5d, 0x38, 0x72,
-	0xe1, 0x8e, 0xca, 0x17, 0x41, 0x71, 0xdc, 0x36, 0x69, 0x93, 0x53, 0xed, 0xe7, 0xf5, 0xf3, 0xbc,
-	0x6f, 0x7f, 0x76, 0xe0, 0x71, 0x71, 0x99, 0x04, 0x59, 0x14, 0x14, 0x82, 0x2b, 0x1e, 0x7c, 0xe3,
-	0xe2, 0x12, 0x45, 0x91, 0x95, 0xc9, 0x4c, 0x0b, 0xc4, 0xce, 0x22, 0xff, 0x23, 0x8c, 0x29, 0x4a,
-	0x5e, 0x8a, 0x18, 0x29, 0x66, 0x18, 0x4a, 0xa4, 0xf8, 0xb5, 0x44, 0xa9, 0xc8, 0x5d, 0xb0, 0xd3,
-	0x85, 0x63, 0x4d, 0xac, 0xe9, 0x90, 0xda, 0xe9, 0x82, 0x10, 0x18, 0xe4, 0x27, 0xe7, 0x9f, 0x1c,
-	0x7b, 0x62, 0x4d, 0xef, 0x50, 0xbd, 0x26, 0x63, 0xd8, 0xcf, 0x31, 0xe7, 0xe2, 0xda, 0xd9, 0x9b,
-	0x58, 0xd3, 0x01, 0x35, 0x3b, 0xff, 0x01, 0x1c, 0xef, 0xa4, 0xca, 0x82, 0x33, 0x89, 0xfe, 0x4f,
-	0x0b, 0x8e, 0x4f, 0x38, 0x53, 0x61, 0xca, 0x50, 0x50, 0xcc, 0xf9, 0x15, 0x2e, 0xfa, 0x5a, 0x7a,
-	0x00, 0x75, 0xc8, 0x69, 0x28, 0x2f, 0x74, 0xe3, 0x21, 0x6d, 0x28, 0x64, 0x02, 0xb7, 0x91, 0x5d,
-	0xa5, 0x82, 0xb3, 0x1c, 0x99, 0xd2, 0x33, 0x0c, 0x69, 0x53, 0xaa, 0x06, 0x2c, 0x25, 0x8a, 0xb3,
-	0xb9, 0x33, 0xd0, 0x45, 0xb3, 0xab, 0x9c, 0xf1, 0x6a, 0x88, 0xb3, 0xb9, 0x73, 0xb3, 0x76, 0x36,
-	0x24, 0xdf, 0x05, 0x67, 0x77, 0x4c, 0xf3, 0x1f, 0x42, 0xb8, 0x47, 0x31, 0x49, 0xa5, 0xaa, 0x4a,
-	0xbd, 0xb4, 0x0a, 0x2e, 0xd4, 0x8a, 0x56, 0xb5, 0x5e, 0x13, 0xdc, 0xeb, 0x24, 0x38, 0x68, 0x11,
-	0x24, 0x30, 0xda, 0xb4, 0x30, 0x6d, 0x5f, 0xc3, 0xe8, 0x14, 0x43, 0xa1, 0x22, 0x0c, 0x55, 0x5f,
-	0xdf, 0x4d, 0x9e, 0xdd, 0xca, 0x3b, 0x84, 0x83, 0x86, 0xd7, 0x04, 0x3e, 0x81, 0x83, 0x79, 0x2a,
-	0x63, 0xce, 0x18, 0xc6, 0x7d, 0x89, 0xfe, 0x11, 0x90, 0xe6, 0xa1, 0xda, 0xfa, 0xec, 0x8f, 0x0d,
-	0xf0, 0x59, 0x3f, 0xa8, 0xf3, 0xac, 0x4c, 0xc8, 0xbb, 0x8a, 0x48, 0xeb, 0xc2, 0x89, 0x3b, 0xcb,
-	0xa2, 0x59, 0xf7, 0xdb, 0x72, 0x1f, 0x76, 0xd6, 0xea, 0x68, 0xf2, 0x1e, 0x46, 0xdb, 0xe4, 0x89,
-	0x36, 0xf4, 0x3c, 0x1b, 0xf7, 0x51, 0x77, 0xd1, 0xc4, 0xbd, 0x80, 0x5b, 0x2b, 0x92, 0xe4, 0xb0,
-	0xee, 0xdb, 0xba, 0x3a, 0xf7, 0xa8, 0x2d, 0x1a, 0xdb, 0x4b, 0x18, 0xae, 0x81, 0x11, 0x7d, 0x64,
-	0x9b, 0xbd, 0x7b, 0x7f, 0x4b, 0x35, 0xce, 0x37, 0x00, 0x1b, 0x60, 0x44, 0x1f, 0xda, 0xa1, 0xec,
-	0x8e, 0xb7, 0xe5, 0xda, 0xfc, 0xf6, 0xd5, 0xaf, 0xa5, 0x67, 0xfd, 0x5e, 0x7a, 0xd6, 0xdf, 0xa5,
-	0x67, 0xfd, 0xf8, 0xe7, 0xdd, 0xf8, 0xf2, 0x34, 0x49, 0xd5, 0x45, 0x19, 0xcd, 0x62, 0x9e, 0x07,
-	0x1f, 0xae, 0x59, 0x1c, 0x32, 0x1e, 0xc4, 0x7c, 0x81, 0x11, 0xff, 0x1e, 0x34, 0xbf, 0xef, 0x68,
-	0x5f, 0xff, 0x3c, 0xff, 0x1f, 0x00, 0x00, 0xff, 0xff, 0x51, 0xbb, 0x09, 0x5b, 0xf6, 0x03, 0x00,
-	0x00,
-}

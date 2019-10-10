@@ -338,7 +338,7 @@ func TestServerMethods(t *testing.T) {
 				req.Header.Set("TRACE_PK", "-1")
 				req.Header.Set("PAYLOAD_KEY", payloadKey)
 				redisCli.On("Get", payloadKey).Return(redis.NewStringResult("{}", nil))
-				redisCli.On("Del", payloadKey).Return(nil)
+				redisCli.On("Del", payloadKey).Return(redis.NewIntCmd(0, nil))
 				handler.ServeHTTP(rr, req)
 				So(rr.Code, ShouldEqual, http.StatusInternalServerError)
 			})
@@ -355,7 +355,7 @@ func TestServerMethods(t *testing.T) {
 				})
 				Convey("on redis success with invalid payload, propagates unmarshal error", func() {
 					redisCli.On("Get", payloadKey).Return(redis.NewStringResult("", nil))
-					redisCli.On("Del", payloadKey).Return(nil)
+					redisCli.On("Del", payloadKey).Return(redis.NewIntCmd(0, nil))
 					handler.ServeHTTP(rr, req)
 				})
 				Convey("on redis success, processes and runs request", func() {
@@ -366,7 +366,7 @@ func TestServerMethods(t *testing.T) {
 					"run": {"additional_args": "\"args\"", "config": "\"cfg\"", "meta": "\"meta\"", "runtime_name": "\"runtime\"", "timeout": 30.125}}`
 
 					redisCli.On("Get", payloadKey).Return(redis.NewStringResult(payload, nil))
-					redisCli.On("Del", payloadKey).Return(nil)
+					redisCli.On("Del", payloadKey).Return(redis.NewIntCmd(0, nil))
 
 					Convey("propagates prepareRequest json error", func() {
 						req.Body = ioutil.NopCloser(bytes.NewBufferString("[123]"))
@@ -549,7 +549,7 @@ func TestServerMethods(t *testing.T) {
 					cacheKey := createCacheKey("1", "endpoint/name", "sourcehash")
 
 					redisCli.On("Get", payloadKey).Return(redis.NewStringResult(payload, nil))
-					redisCli.On("Del", payloadKey).Return(nil)
+					redisCli.On("Del", payloadKey).Return(redis.NewIntCmd(0, nil))
 					repoCli.On("Exists", mock.Anything, mock.Anything, mock.Anything).Return(&repopb.ExistsResponse{Ok: true}, nil)
 
 					redisCli.On("Get", cacheKey).Return(redis.NewStringResult("", err)).Once()
@@ -605,7 +605,7 @@ func TestServerMethods(t *testing.T) {
 					cacheKey := createCacheKey("1", "endpoint/name", "sourcehash")
 
 					redisCli.On("Get", payloadKey).Return(redis.NewStringResult(payload, nil))
-					redisCli.On("Del", payloadKey).Return(nil)
+					redisCli.On("Del", payloadKey).Return(redis.NewIntCmd(0, nil))
 					redisCli.On("Get", cacheKey).Return(redis.NewStringResult(string(traceBytes), nil)).Once()
 
 					handler.ServeHTTP(rr, req)

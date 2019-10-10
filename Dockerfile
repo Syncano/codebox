@@ -1,5 +1,7 @@
-FROM golang:1.12
-ENV SQUASHFUSE_VERSION 0.1.103
+FROM golang:1.13
+ENV SQUASHFUSE_VERSION=0.1.103 \
+    GOPROXY=https://proxy.golang.org
+WORKDIR /opt/build
 
 RUN set -ex \
     && apt-get update \
@@ -30,6 +32,5 @@ RUN set -ex \
         fuse \
     && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-COPY ./Gopkg.* ./Makefile /go/src/github.com/Syncano/codebox/
-WORKDIR /go/src/github.com/Syncano/codebox
-RUN make testdeps
+COPY go.mod go.sum ./
+RUN go mod download

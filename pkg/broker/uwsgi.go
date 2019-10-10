@@ -248,7 +248,9 @@ func (s *Server) loadPayload(r *http.Request) (*uwsgiPayload, error) {
 	if err != nil {
 		return nil, err
 	}
-	s.redisCli.Del(payloadKey)
+	if err := s.redisCli.Del(payloadKey).Err(); err != nil {
+		return nil, err
+	}
 
 	var payload uwsgiPayload
 	if err := json.Unmarshal(payloadBytes, &payload); err != nil {

@@ -12,7 +12,7 @@ import (
 )
 
 // Downloader defines file downloader interface.
-//go:generate mockery -name Downloader
+//go:generate go run github.com/vektra/mockery/cmd/mockery -name Downloader
 type Downloader interface {
 	Download(ctx context.Context, urls []string) <-chan *DownloadResult
 }

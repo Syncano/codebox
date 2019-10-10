@@ -48,15 +48,15 @@ func TestWorker(t *testing.T) {
 
 		Convey("Reserve returns false for dead worker", func() {
 			worker.alive = false
-			So(worker.Reserve(100, 100, false), ShouldBeFalse)
-			So(cont.Reserve(100, 100, false), ShouldBeFalse)
+			So(worker.Reserve(100, false), ShouldBeFalse)
+			So(cont.Reserve(100), ShouldBeFalse)
 			So(worker.FreeCPU(), ShouldEqual, 2000)
 		})
 		Convey("Reserve returns false when requireSlots is true and there are < 0 slots", func() {
-			So(worker.Reserve(2000, 100, true), ShouldBeTrue)
-			So(worker.Reserve(2000, 100, true), ShouldBeFalse)
+			So(worker.Reserve(2000, true), ShouldBeTrue)
+			So(worker.Reserve(2000, true), ShouldBeFalse)
 			So(worker.FreeCPU(), ShouldEqual, 0)
-			So(worker.Reserve(2000, 100, false), ShouldBeTrue)
+			So(worker.Reserve(2000, false), ShouldBeTrue)
 			So(worker.FreeCPU(), ShouldEqual, -2000)
 		})
 

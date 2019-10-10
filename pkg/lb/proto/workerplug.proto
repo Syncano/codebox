@@ -22,7 +22,6 @@ service WorkerPlug {
 message ResourceReleaseRequest {
   string id = 1;
   uint32 mCPU = 2;
-  uint64 memory = 3;
 }
 message ResourceReleaseResponse {}
 
@@ -40,6 +39,7 @@ message RegisterRequest {
   uint32 port = 2;
   uint32 mCPU = 3;
   uint64 memory = 4;
+  uint32 defaultMCPU = 5;
 }
 message RegisterResponse {}
 

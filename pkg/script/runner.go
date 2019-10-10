@@ -152,7 +152,7 @@ var (
 	// ErrPoolAlreadyCreated signals pool being already created.
 	ErrPoolAlreadyCreated = errors.New("pool already created")
 	// ErrSemaphoreNotAcquired signals a non critical error occurring for context timeouts and similar cases.
-	ErrSemaphoreNotAcquired = errors.New("semaphore was not acquired succesfully")
+	ErrSemaphoreNotAcquired = errors.New("semaphore was not acquired successfully")
 )
 
 const (

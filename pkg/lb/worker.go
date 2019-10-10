@@ -24,13 +24,14 @@ type Worker struct {
 	ID   string
 	Addr net.TCPAddr
 
-	conn      *grpc.ClientConn
-	waitGroup sync.WaitGroup
-	mCPU      uint32
-	memory    uint64
+	conn        *grpc.ClientConn
+	waitGroup   sync.WaitGroup
+	mCPU        uint32
+	defaultMCPU uint32
+	memory      uint64
 
 	freeCPU    int32
-	freeMemory int64
+	freeMemory uint64
 	mu         sync.RWMutex
 	alive      bool
 	repoCli    repopb.RepoClient
@@ -49,7 +50,7 @@ const (
 )
 
 // NewWorker initializes new worker info along with worker connection.
-func NewWorker(id string, addr net.TCPAddr, mCPU uint32, memory uint64) *Worker {
+func NewWorker(id string, addr net.TCPAddr, mCPU uint32, defaultMCPU uint32, memory uint64) *Worker {
 	conn, err := grpc.Dial(addr.String(), sys.DefaultGRPCDialOptions...)
 	util.Must(err)
 
@@ -57,20 +58,19 @@ func NewWorker(id string, addr net.TCPAddr, mCPU uint32, memory uint64) *Worker 
 		ID:   id,
 		Addr: addr,
 
-		alive:      true,
-		scripts:    make(map[ScriptInfo]int),
-		conn:       conn,
-		mCPU:       mCPU,
-		memory:     memory,
-		freeCPU:    int32(mCPU),
-		freeMemory: int64(memory),
+		alive:       true,
+		scripts:     make(map[ScriptInfo]int),
+		conn:        conn,
+		mCPU:        mCPU,
+		defaultMCPU: defaultMCPU,
+		freeMemory:  memory,
+		freeCPU:     int32(mCPU),
 
 		repoCli:   repopb.NewRepoClient(conn),
 		scriptCli: scriptpb.NewScriptRunnerClient(conn),
 	}
 
 	freeCPUCounter.Add(int64(mCPU))
-	freeMemoryCounter.Add(int64(memory))
 	return &w
 }
 
@@ -84,8 +84,8 @@ func (w *Worker) FreeCPU() int32 {
 }
 
 // FreeMemory returns free worker memory.
-func (w *Worker) FreeMemory() int64 {
-	return atomic.LoadInt64(&w.freeMemory)
+func (w *Worker) FreeMemory() uint64 {
+	return atomic.LoadUint64(&w.freeMemory)
 }
 
 // Alive returns true if worker is alive.
@@ -97,7 +97,7 @@ func (w *Worker) Alive() bool {
 
 // Reserve checks if worker is alive, decreases resources and increases waitgroup.
 // If require is true, returns true only if resources are available.
-func (w *Worker) Reserve(mCPU uint32, memory uint64, require bool) bool {
+func (w *Worker) Reserve(mCPU uint32, require bool) bool {
 	w.mu.Lock()
 	if !w.alive || (require && w.freeCPU < int32(mCPU)) {
 		w.mu.Unlock()
@@ -105,24 +105,20 @@ func (w *Worker) Reserve(mCPU uint32, memory uint64, require bool) bool {
 	}
 
 	w.freeCPU -= int32(mCPU)
-	w.freeMemory -= int64(memory)
 	w.waitGroup.Add(1)
 	w.mu.Unlock()
 
 	freeCPUCounter.Add(-int64(mCPU))
-	freeMemoryCounter.Add(-int64(memory))
 	return true
 }
 
 // Release resources reserved.
-func (w *Worker) Release(mCPU uint32, memory uint64) {
+func (w *Worker) Release(mCPU uint32) {
 	w.mu.Lock()
 	w.freeCPU += int32(mCPU)
-	w.freeMemory += int64(memory)
 	w.mu.Unlock()
 
 	freeCPUCounter.Add(int64(mCPU))
-	freeMemoryCounter.Add(int64(memory))
 }
 
 // IncreaseErrorCount increases error count of worker.
@@ -269,7 +265,6 @@ func (w *Worker) Shutdown(cache ContainerWorkerCache) {
 		w.conn.Close() // nolint
 
 		freeCPUCounter.Add(-int64(w.FreeCPU()))
-		freeMemoryCounter.Add(-w.FreeMemory())
 	}()
 }
 
@@ -354,8 +349,15 @@ func (w *WorkerContainer) Run(ctx context.Context, meta *scriptpb.RunRequest_Met
 }
 
 // Reserve calls reserve on worker and increases connection count if successful.
-func (w *WorkerContainer) Reserve(mCPU uint32, memory uint64, require bool) bool {
-	if w.Worker.Reserve(mCPU, memory, require) {
+func (w *WorkerContainer) Reserve(mCPU uint32) bool {
+	if mCPU == 0 {
+		mCPU = w.defaultMCPU
+	}
+
+	// If CPU requirements are met, require reservation to be successful.
+	require := w.FreeCPU() > int32(mCPU)
+
+	if w.Worker.Reserve(mCPU, require) {
 		atomic.AddUint64(&w.conns, 1)
 		return true
 	}
@@ -363,8 +365,8 @@ func (w *WorkerContainer) Reserve(mCPU uint32, memory uint64, require bool) bool
 }
 
 // Release resources reserved.
-func (w *WorkerContainer) Release(mCPU uint32, memory uint64) {
-	w.Worker.Release(mCPU, memory)
+func (w *WorkerContainer) Release(mCPU uint32) {
+	w.Worker.Release(mCPU)
 	w.waitGroup.Done()
 	atomic.AddUint64(&w.conns, ^uint64(0))
 }
@@ -375,7 +377,6 @@ type ScriptInfo struct {
 	Environment string
 	UserID      string
 	MCPU        uint32
-	Memory      uint64
 	Async       bool
 }
 

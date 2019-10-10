@@ -1,9 +1,10 @@
 build/codebox*
 build/codewrapper*
-vendor/
 coverage*.out
 dev/
 debug*
 *.swagger.json
 *.unenc
 python/
+.env*
+_storage/
