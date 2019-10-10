@@ -30,8 +30,11 @@ spec:
             - "broker"
           resources:
             requests:
-              memory: "500Mi"
-              cpu: 0.5
+              memory: "128Mi"
+              cpu: 250m
+            limits:
+              memory: "512Mi"
+              cpu: 1000m
           ports:
             - name: uwsgi
               containerPort: 8080
