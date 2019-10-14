@@ -15,7 +15,7 @@ type Runner interface {
 	Options() Options
 	DownloadAllImages() error
 	CleanupUnused()
-	Run(ctx context.Context, logger logrus.FieldLogger, runtime, sourceHash, environment, userID string, options *RunOptions) (*Result, error)
+	Run(ctx context.Context, logger logrus.FieldLogger, runtime, requestID, sourceHash, environment, userID string, options *RunOptions) (*Result, error)
 	CreatePool() (string, error)
 	StopPool()
 	Shutdown()

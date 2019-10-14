@@ -94,6 +94,7 @@ func TestServerMethods(t *testing.T) {
 			envURL := "http://google.com"
 
 			runReq := brokerpb.RunRequest{
+				LbMeta: &lbpb.RunRequest_MetaMessage{},
 				Meta: &brokerpb.RunRequest_MetaMessage{
 					EnvironmentURL: envURL,
 					Trace:          []byte("\"trace\""),
@@ -362,7 +363,7 @@ func TestServerMethods(t *testing.T) {
 					stdout := "stdout"
 					stderr := "stderr"
 					took := int64(50)
-					payload := `{"name": "endpoint/name", "output_limit": 10, "files": {"a": "b"}, "source_hash": "sourcehash", "entrypoint": "entry", "environment": "env", "environment_url": "env_url", "trace": "trace_raw", 
+					payload := `{"name": "endpoint/name", "output_limit": 10, "files": {"a": "b"}, "source_hash": "sourcehash", "entrypoint": "entry", "environment": "env", "environment_url": "env_url", "trace": "trace_raw",
 					"run": {"additional_args": "\"args\"", "config": "\"cfg\"", "meta": "\"meta\"", "runtime_name": "\"runtime\"", "timeout": 30.125}}`
 
 					redisCli.On("Get", payloadKey).Return(redis.NewStringResult(payload, nil))
@@ -544,7 +545,7 @@ func TestServerMethods(t *testing.T) {
 					stdout := "stdout"
 					stderr := "stderr"
 					t := int64(50)
-					payload := `{"cache": 2.5, "name": "endpoint/name", "output_limit": 10, "files": {"a": "b"}, "source_hash": "sourcehash", "entrypoint": "entry", "environment": "env", "environment_url": "env_url", "trace": "trace_raw", 
+					payload := `{"cache": 2.5, "name": "endpoint/name", "output_limit": 10, "files": {"a": "b"}, "source_hash": "sourcehash", "entrypoint": "entry", "environment": "env", "environment_url": "env_url", "trace": "trace_raw",
 					"run": {"additional_args": "\"args\"", "config": "\"cfg\"", "meta": "\"meta\"", "runtime_name": "\"runtime\"", "timeout": 30}}`
 					cacheKey := createCacheKey("1", "endpoint/name", "sourcehash")
 
@@ -600,7 +601,7 @@ func TestServerMethods(t *testing.T) {
 					traceBytes, e := msgpack.Marshal(&trace1)
 					So(e, ShouldBeNil)
 
-					payload := `{"cache": 2.5, "name": "endpoint/name", "output_limit": 10, "files": {"a": "b"}, "source_hash": "sourcehash", "entrypoint": "entry", "environment": "env", "environment_url": "env_url", "trace": "trace_raw", 
+					payload := `{"cache": 2.5, "name": "endpoint/name", "output_limit": 10, "files": {"a": "b"}, "source_hash": "sourcehash", "entrypoint": "entry", "environment": "env", "environment_url": "env_url", "trace": "trace_raw",
 					"run": {"additional_args": "\"args\"", "config": "\"cfg\"", "meta": "\"meta\"", "runtime_name": "\"runtime\"", "timeout": 30}}`
 					cacheKey := createCacheKey("1", "endpoint/name", "sourcehash")
 

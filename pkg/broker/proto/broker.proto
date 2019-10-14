@@ -10,10 +10,10 @@ service ScriptRunner {
   rpc Run (RunRequest) returns (stream script.RunResponse);
 }
 
-// RunRequest represents either a Meta message or a Chunk message. 
+// RunRequest represents either a Meta message or a Chunk message.
 // It should always consist of exactly 1 Meta and optionally repeated Chunk messages.
 message RunRequest {
-  // Meta message specifies fields to describe what is being run. 
+  // Meta message specifies fields to describe what is being run.
   message MetaMessage {
     map<string, string> files = 1; // Map of script file URL->Name.
     string environmentURL = 2; // Environment file URL.
@@ -22,7 +22,7 @@ message RunRequest {
     bool sync = 5;
   }
 
-  MetaMessage meta = 1;  
+  MetaMessage meta = 1;
   lb.RunRequest.MetaMessage lbMeta = 2;
   repeated script.RunRequest request = 3;
 }

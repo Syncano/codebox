@@ -205,6 +205,16 @@ func (s *Server) Run(stream pb.ScriptRunner_RunServer) error {
 		return nil
 	}
 
+	if runMeta == nil {
+		runMeta = &pb.RunRequest_MetaMessage{}
+	}
+
+	if runMeta.RequestID == "" {
+		runMeta.RequestID = util.GenerateKey()
+	}
+
+	scriptMeta.RequestID = runMeta.RequestID
+
 	return s.processRun(stream, runMeta, scriptMeta, scriptChunk)
 }
 
@@ -213,6 +223,7 @@ func (s *Server) processRun(stream pb.ScriptRunner_RunServer, runMeta *pb.RunReq
 	ctx := stream.Context()
 	peerAddr := util.PeerAddr(ctx)
 	logger := logrus.WithFields(logrus.Fields{
+		"reqID":      runMeta.RequestID,
 		"peer":       peerAddr,
 		"meta":       runMeta,
 		"runtime":    scriptMeta.Runtime,
@@ -223,7 +234,7 @@ func (s *Server) processRun(stream pb.ScriptRunner_RunServer, runMeta *pb.RunReq
 
 	logger.Debug("grpc:lb:Run start")
 
-	if runMeta != nil && runMeta.ConcurrencyLimit >= 0 {
+	if runMeta != nil && runMeta.ConcurrencyLimit > 0 {
 		if err := s.limiter.Lock(ctx, runMeta.ConcurrencyKey, int(runMeta.ConcurrencyLimit)); err != nil {
 			logger.WithError(err).Warn("Lock error")
 			return status.Error(codes.ResourceExhausted, err.Error())
@@ -248,6 +259,7 @@ func (s *Server) processRun(stream pb.ScriptRunner_RunServer, runMeta *pb.RunReq
 		if cont == nil {
 			return true, ErrNoWorkersAvailable
 		}
+
 		logger = logger.WithFields(logrus.Fields{"container": cont, "script": &script, "try": retry, "fromCache": fromCache})
 
 		resCh, err := s.processWorkerRun(ctx, logger, cont, scriptMeta, scriptChunk)

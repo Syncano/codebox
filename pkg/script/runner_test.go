@@ -128,11 +128,11 @@ func TestNewRunner(t *testing.T) {
 
 			Convey("Run runs script in container", func() {
 				Convey("fails when pool is not running", func() {
-					_, e := r.Run(context.Background(), logrus.StandardLogger(), defaultRuntime, "hash", "", "user", &RunOptions{})
+					_, e := r.Run(context.Background(), logrus.StandardLogger(), defaultRuntime, "reqID", "hash", "", "user", &RunOptions{})
 					So(e, ShouldEqual, ErrPoolNotRunning)
 				})
 				Convey("fails on unsupported runtime", func() {
-					_, e := r.Run(context.Background(), logrus.StandardLogger(), "runtime", "hash", "", "user", &RunOptions{})
+					_, e := r.Run(context.Background(), logrus.StandardLogger(), "runtime", "reqID", "hash", "", "user", &RunOptions{})
 					So(e, ShouldEqual, ErrUnsupportedRuntime)
 				})
 				Convey("given fake running pool", func() {
@@ -168,21 +168,21 @@ func TestNewRunner(t *testing.T) {
 								dockerMgr.On("ContainerStart", mock.Anything, cID2).Return(nil).Once()
 								dockerMgr.On("ContainerAttach", mock.Anything, cID2).Return(cont.resp, nil).Once()
 
-								_, e := r.Run(context.Background(), logrus.StandardLogger(), defaultRuntime, "hash", envKey, "user", &RunOptions{})
+								_, e := r.Run(context.Background(), logrus.StandardLogger(), defaultRuntime, "reqID", "hash", envKey, "user", &RunOptions{})
 								So(e, ShouldEqual, io.EOF)
 								cont2 := <-r.containerPool[defaultRuntime]
 								So(cont2.ID, ShouldEqual, cID2)
 							})
 							Convey("from cache", func() {
 								r.containerCache.Set(fmt.Sprintf("hash/user//%x", util.Hash("main.js")), cont)
-								_, e := r.Run(context.Background(), logrus.StandardLogger(), defaultRuntime, "hash", "", "user", &RunOptions{})
+								_, e := r.Run(context.Background(), logrus.StandardLogger(), defaultRuntime, "reqID", "hash", "", "user", &RunOptions{})
 								So(e, ShouldEqual, io.EOF)
 							})
 						})
 						Convey("with files", func() {
 							files := map[string]File{"file": {Data: []byte("content")}}
 							r.containerCache.Set(fmt.Sprintf("hash/user//%x", util.Hash("main.js")), cont)
-							_, e := r.Run(context.Background(), logrus.StandardLogger(), defaultRuntime, "hash", "", "user", &RunOptions{Files: files})
+							_, e := r.Run(context.Background(), logrus.StandardLogger(), defaultRuntime, "reqID", "hash", "", "user", &RunOptions{Files: files})
 							So(e, ShouldEqual, io.EOF)
 						})
 
@@ -193,7 +193,7 @@ func TestNewRunner(t *testing.T) {
 						r.containerPool[defaultRuntime] <- cont
 						ctx, cancel := context.WithCancel(context.Background())
 						cancel()
-						_, e := r.Run(ctx, logrus.StandardLogger(), defaultRuntime, "hash", "", "run", &RunOptions{MCPU: 10000})
+						_, e := r.Run(ctx, logrus.StandardLogger(), defaultRuntime, "reqID", "hash", "", "run", &RunOptions{MCPU: 10000})
 						So(e, ShouldResemble, ErrSemaphoreNotAcquired)
 						cont2 := <-r.containerPool[defaultRuntime]
 						So(cont2.ID, ShouldEqual, cID)
@@ -247,7 +247,7 @@ func TestNewRunner(t *testing.T) {
 							doneCh <- true
 						})
 
-						_, e := r.Run(ctx, logrus.StandardLogger(), defaultRuntime, "hash", env, "run", opts)
+						_, e := r.Run(ctx, logrus.StandardLogger(), defaultRuntime, "reqID", "hash", env, "run", opts)
 						So(e, ShouldResemble, expectedErr)
 						cont2 := <-r.containerPool[defaultRuntime]
 						So(cont2.ID, ShouldEqual, cID2)

@@ -19,6 +19,7 @@ import (
 	lbpb "github.com/Syncano/codebox/pkg/lb/proto"
 	"github.com/Syncano/codebox/pkg/script"
 	scriptpb "github.com/Syncano/codebox/pkg/script/proto"
+	"github.com/Syncano/codebox/pkg/util"
 )
 
 var (
@@ -224,6 +225,7 @@ func (s *Server) prepareRequest(r *http.Request, payload *uwsgiPayload) (*broker
 			TraceID:        tracePK,
 		},
 		LbMeta: &lbpb.RunRequest_MetaMessage{
+			RequestID:        util.GenerateKey(),
 			ConcurrencyKey:   instancePK,
 			ConcurrencyLimit: payload.Run.ConcurrencyLimit,
 		},

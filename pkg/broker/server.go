@@ -147,7 +147,7 @@ func (s *Server) Run(request *brokerpb.RunRequest, stream brokerpb.ScriptRunner_
 	start := time.Now()
 	logger := logrus.WithField("peer", peerAddr)
 
-	if len(request.GetRequest()) < 1 || request.GetRequest()[0].GetMeta() == nil {
+	if len(request.GetRequest()) < 1 || request.GetRequest()[0].GetMeta() == nil || request.LbMeta == nil {
 		logger.Error("grpc:broker:Run error parsing input")
 		return ErrInvalidArgument
 	}
@@ -163,6 +163,14 @@ func (s *Server) Run(request *brokerpb.RunRequest, stream brokerpb.ScriptRunner_
 
 	var retStream brokerpb.ScriptRunner_RunServer
 
+	if request.LbMeta == nil {
+		request.LbMeta = &lbpb.RunRequest_MetaMessage{}
+	}
+
+	if request.LbMeta.RequestID == "" {
+		request.LbMeta.RequestID = util.GenerateKey()
+	}
+
 	processFunc := func() error {
 		trace, err := s.processResponse(logger, start, request.GetMeta(), runStream, retStream)
 
@@ -171,12 +179,15 @@ func (s *Server) Run(request *brokerpb.RunRequest, stream brokerpb.ScriptRunner_
 		took := time.Duration(trace.Duration) * time.Millisecond
 
 		logger.WithFields(logrus.Fields{
-			"lbMeta":     request.GetLbMeta(),
-			"runtime":    scriptMeta.Runtime,
-			"sourceHash": scriptMeta.SourceHash,
-			"userID":     scriptMeta.UserID,
-			"took":       took,
-			"overhead":   time.Since(start) - took,
+			"reqID":            request.LbMeta.RequestID,
+			"concurrencyKey":   request.LbMeta.ConcurrencyKey,
+			"concurrencyLimit": request.LbMeta.ConcurrencyLimit,
+			"runtime":          scriptMeta.Runtime,
+			"sourceHash":       scriptMeta.SourceHash,
+			"entrypoint":       scriptMeta.GetOptions().GetEntryPoint(),
+			"userID":           scriptMeta.UserID,
+			"took":             took,
+			"overhead":         time.Since(start) - took,
 		}).Info("grpc:broker:Run")
 
 		return err

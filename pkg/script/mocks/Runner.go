@@ -90,13 +90,13 @@ func (_m *Runner) Options() script.Options {
 	return r0
 }
 
-// Run provides a mock function with given fields: ctx, logger, runtime, sourceHash, environment, userID, options
-func (_m *Runner) Run(ctx context.Context, logger logrus.FieldLogger, runtime string, sourceHash string, environment string, userID string, options *script.RunOptions) (*script.Result, error) {
-	ret := _m.Called(ctx, logger, runtime, sourceHash, environment, userID, options)
+// Run provides a mock function with given fields: ctx, logger, runtime, requestID, sourceHash, environment, userID, options
+func (_m *Runner) Run(ctx context.Context, logger logrus.FieldLogger, runtime string, requestID string, sourceHash string, environment string, userID string, options *script.RunOptions) (*script.Result, error) {
+	ret := _m.Called(ctx, logger, runtime, requestID, sourceHash, environment, userID, options)
 
 	var r0 *script.Result
-	if rf, ok := ret.Get(0).(func(context.Context, logrus.FieldLogger, string, string, string, string, *script.RunOptions) *script.Result); ok {
-		r0 = rf(ctx, logger, runtime, sourceHash, environment, userID, options)
+	if rf, ok := ret.Get(0).(func(context.Context, logrus.FieldLogger, string, string, string, string, string, *script.RunOptions) *script.Result); ok {
+		r0 = rf(ctx, logger, runtime, requestID, sourceHash, environment, userID, options)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*script.Result)
@@ -104,8 +104,8 @@ func (_m *Runner) Run(ctx context.Context, logger logrus.FieldLogger, runtime st
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(context.Context, logrus.FieldLogger, string, string, string, string, *script.RunOptions) error); ok {
-		r1 = rf(ctx, logger, runtime, sourceHash, environment, userID, options)
+	if rf, ok := ret.Get(1).(func(context.Context, logrus.FieldLogger, string, string, string, string, string, *script.RunOptions) error); ok {
+		r1 = rf(ctx, logger, runtime, requestID, sourceHash, environment, userID, options)
 	} else {
 		r1 = ret.Error(1)
 	}

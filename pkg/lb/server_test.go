@@ -60,10 +60,18 @@ func TestServerMethods(t *testing.T) {
 				defer cancel()
 				stream.On("Context").Return(ctx)
 				validReq1 := &pb.RunRequest{
+					Value: &pb.RunRequest_Meta{
+						Meta: &pb.RunRequest_MetaMessage{
+							RequestID: "reqID",
+						},
+					},
+				}
+				validReq2 := &pb.RunRequest{
 					Value: &pb.RunRequest_Request{
 						Request: &scriptpb.RunRequest{
 							Value: &scriptpb.RunRequest_Meta{
 								Meta: &scriptpb.RunRequest_MetaMessage{
+									RequestID:  "reqID",
 									Runtime:    "runtime",
 									SourceHash: "hash",
 								},
@@ -71,7 +79,7 @@ func TestServerMethods(t *testing.T) {
 						},
 					},
 				}
-				validReq2 := &pb.RunRequest{
+				validReq3 := &pb.RunRequest{
 					Value: &pb.RunRequest_Request{
 						Request: &scriptpb.RunRequest{
 							Value: &scriptpb.RunRequest_Chunk{
@@ -87,6 +95,7 @@ func TestServerMethods(t *testing.T) {
 				Convey("returns error when no workers are available", func() {
 					stream.On("Recv").Return(validReq1, nil).Once()
 					stream.On("Recv").Return(validReq2, nil).Once()
+					stream.On("Recv").Return(validReq3, nil).Once()
 					stream.On("Recv").Return(nil, io.EOF).Once()
 					repo.On("Get", "hash").Return("/path")
 
@@ -115,13 +124,14 @@ func TestServerMethods(t *testing.T) {
 						stream.On("Recv").Return(&pb.RunRequest{
 							Value: &pb.RunRequest_Meta{
 								Meta: &pb.RunRequest_MetaMessage{
+									RequestID:        "reqID",
 									ConcurrencyKey:   "ckey",
 									ConcurrencyLimit: 1,
 								},
 							},
 						}, nil).Once()
-						stream.On("Recv").Return(validReq1, nil).Once()
 						stream.On("Recv").Return(validReq2, nil).Once()
+						stream.On("Recv").Return(validReq3, nil).Once()
 						stream.On("Recv").Return(nil, io.EOF).Once()
 						e := s.Run(stream)
 						So(e, ShouldResemble, status.Error(codes.ResourceExhausted, context.Canceled.Error()))
@@ -135,8 +145,8 @@ func TestServerMethods(t *testing.T) {
 								},
 							},
 						}, nil).Once()
-						stream.On("Recv").Return(validReq1, nil).Once()
 						stream.On("Recv").Return(validReq2, nil).Once()
+						stream.On("Recv").Return(validReq3, nil).Once()
 						stream.On("Recv").Return(nil, io.EOF).Once()
 						repo.On("Get", "hash").Return("/path")
 						repoCli.On("Exists", mock.Anything, mock.Anything).Return(nil, err)
@@ -147,6 +157,7 @@ func TestServerMethods(t *testing.T) {
 					Convey("given simple valid request", func() {
 						stream.On("Recv").Return(validReq1, nil).Once()
 						stream.On("Recv").Return(validReq2, nil).Once()
+						stream.On("Recv").Return(validReq3, nil).Once()
 						stream.On("Recv").Return(nil, io.EOF).Once()
 
 						Convey("given successful repo Get", func() {
