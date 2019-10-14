@@ -9,11 +9,12 @@ service ScriptRunner {
   rpc Run (stream RunRequest) returns (stream script.RunResponse);
 }
 
-// RunRequest represents either a Meta message or a Chunk message. 
+// RunRequest represents either a Meta message or a Chunk message.
 // It should always consist of exactly 1 Meta and optionally repeated Chunk messages.
 message RunRequest {
-  // Meta message specifies fields to describe what is being run. 
+  // Meta message specifies fields to describe what is being run.
   message MetaMessage {
+    string requestID = 3; // Unique request ID.
     string concurrencyKey = 1; // Key on which concurrency limiting will take place.
     int32 concurrencyLimit = 2; // Max concurrency allowed for key.
   }

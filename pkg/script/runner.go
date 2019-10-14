@@ -301,10 +301,12 @@ func (r *DockerRunner) processRun(ctx context.Context, logger logrus.FieldLogger
 
 	defer conn.Close()
 
-	logger = logger.WithFields(logrus.Fields{"runtime": runtime, "options": options, "containerHash": cont.Hash})
-
 	// Run.
-	logger = logger.WithFields(logrus.Fields{"new": newContainer, "container": cont})
+	logger = logger.WithFields(logrus.Fields{
+		"containerHash": cont.Hash,
+		"new":           newContainer,
+		"container":     cont,
+	})
 	logger.Info("Running in container")
 
 	delim, err := cont.Run(conn, options)
@@ -337,6 +339,8 @@ func (r *DockerRunner) processRun(ctx context.Context, logger logrus.FieldLogger
 	if err == nil {
 		err = parseErr
 	}
+
+	logger.WithField("ret", ret).Info("Run finished")
 
 	return ret, cont, newContainer, err
 }
@@ -381,7 +385,7 @@ func (r *DockerRunner) processOutputAsync(ctx context.Context, conn io.Reader, l
 }
 
 // Run executes given script in a docker container.
-func (r *DockerRunner) Run(ctx context.Context, logger logrus.FieldLogger, runtime, sourceHash, environment, userID string, options *RunOptions) (*Result, error) {
+func (r *DockerRunner) Run(ctx context.Context, logger logrus.FieldLogger, runtime, requestID, sourceHash, environment, userID string, options *RunOptions) (*Result, error) {
 	if _, ok := SupportedRuntimes[runtime]; !ok {
 		return nil, ErrUnsupportedRuntime
 	}
@@ -403,6 +407,7 @@ func (r *DockerRunner) Run(ctx context.Context, logger logrus.FieldLogger, runti
 	}
 
 	logger = logger.WithFields(logrus.Fields{
+		"reqID":       requestID,
 		"runtime":     runtime,
 		"options":     options,
 		"sourceHash":  sourceHash,
@@ -418,7 +423,6 @@ func (r *DockerRunner) Run(ctx context.Context, logger logrus.FieldLogger, runti
 	}
 
 	start := time.Now()
-	requestID := util.GenerateKey()
 
 	r.taskWaitGroup.Add(1)
 
@@ -433,12 +437,6 @@ func (r *DockerRunner) Run(ctx context.Context, logger logrus.FieldLogger, runti
 		ret.Cached = newContainer
 		ret.Overhead = took - ret.Took
 	}
-
-	logger.WithFields(logrus.Fields{
-		"took":        took,
-		"ret":         ret,
-		"containerID": cont.ID,
-	}).Info("Run finished")
 
 	// Cleanup only if it's the last connection.
 	go r.afterRun(runtime, cont, requestID, options, newContainer, err)

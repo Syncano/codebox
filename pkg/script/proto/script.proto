@@ -7,14 +7,15 @@ service ScriptRunner {
   rpc Run (stream RunRequest) returns (stream RunResponse);
 }
 
-// RunRequest represents either a Meta message or a Chunk message. 
+// RunRequest represents either a Meta message or a Chunk message.
 // It should always consist of exactly 1 Meta and optionally repeated Chunk messages.
 message RunRequest {
-  // Meta message specifies fields to describe what is being run. 
+  // Meta message specifies fields to describe what is being run.
   message MetaMessage {
+    string requestID = 7; // Unique request ID.
     string runtime = 1; // Runtime name.
     string sourceHash = 2; // Unique hash describing script sources.
-    string userID = 3; // Unique key relevant for user context. 
+    string userID = 3; // Unique key relevant for user context.
 
     message OptionsMessage {
       string entryPoint = 1; // If empty, uses default entrypoint for specified runtime.

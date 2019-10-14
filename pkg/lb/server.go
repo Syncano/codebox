@@ -213,6 +213,7 @@ func (s *Server) processRun(stream pb.ScriptRunner_RunServer, runMeta *pb.RunReq
 	ctx := stream.Context()
 	peerAddr := util.PeerAddr(ctx)
 	logger := logrus.WithFields(logrus.Fields{
+		"reqID":      runMeta.RequestID,
 		"peer":       peerAddr,
 		"meta":       runMeta,
 		"runtime":    scriptMeta.Runtime,
@@ -248,6 +249,7 @@ func (s *Server) processRun(stream pb.ScriptRunner_RunServer, runMeta *pb.RunReq
 		if cont == nil {
 			return true, ErrNoWorkersAvailable
 		}
+
 		logger = logger.WithFields(logrus.Fields{"container": cont, "script": &script, "try": retry, "fromCache": fromCache})
 
 		resCh, err := s.processWorkerRun(ctx, logger, cont, scriptMeta, scriptChunk)
