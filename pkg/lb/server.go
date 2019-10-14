@@ -201,9 +201,11 @@ func (s *Server) Run(stream pb.ScriptRunner_RunServer) error {
 		}
 	}
 
-	if scriptMeta == nil {
+	if runMeta == nil || scriptMeta == nil {
 		return nil
 	}
+
+	scriptMeta.RequestID = runMeta.RequestID
 
 	return s.processRun(stream, runMeta, scriptMeta, scriptChunk)
 }
@@ -224,7 +226,7 @@ func (s *Server) processRun(stream pb.ScriptRunner_RunServer, runMeta *pb.RunReq
 
 	logger.Debug("grpc:lb:Run start")
 
-	if runMeta != nil && runMeta.ConcurrencyLimit >= 0 {
+	if runMeta != nil && runMeta.ConcurrencyLimit > 0 {
 		if err := s.limiter.Lock(ctx, runMeta.ConcurrencyKey, int(runMeta.ConcurrencyLimit)); err != nil {
 			logger.WithError(err).Warn("Lock error")
 			return status.Error(codes.ResourceExhausted, err.Error())
