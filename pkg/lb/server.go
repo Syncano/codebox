@@ -201,8 +201,16 @@ func (s *Server) Run(stream pb.ScriptRunner_RunServer) error {
 		}
 	}
 
-	if runMeta == nil || scriptMeta == nil {
+	if scriptMeta == nil {
 		return nil
+	}
+
+	if runMeta == nil {
+		runMeta = &pb.RunRequest_MetaMessage{}
+	}
+
+	if runMeta.RequestID == "" {
+		runMeta.RequestID = util.GenerateKey()
 	}
 
 	scriptMeta.RequestID = runMeta.RequestID

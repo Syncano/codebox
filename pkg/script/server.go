@@ -97,6 +97,10 @@ func (s *Server) Run(stream pb.ScriptRunner_RunServer) error {
 		return nil
 	}
 
+	if meta.RequestID == "" {
+		meta.RequestID = util.GenerateKey()
+	}
+
 	peerAddr := util.PeerAddr(stream.Context())
 	logger := logrus.WithField("peer", peerAddr)
 	logger.WithFields(logrus.Fields{
