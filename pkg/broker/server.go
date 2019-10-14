@@ -163,9 +163,21 @@ func (s *Server) Run(request *brokerpb.RunRequest, stream brokerpb.ScriptRunner_
 		request.LbMeta.RequestID = util.GenerateKey()
 	}
 
+	logger = logger.WithFields(logrus.Fields{
+		"reqID":            request.LbMeta.RequestID,
+		"concurrencyKey":   request.LbMeta.ConcurrencyKey,
+		"concurrencyLimit": request.LbMeta.ConcurrencyLimit,
+		"runtime":          scriptMeta.Runtime,
+		"sourceHash":       scriptMeta.SourceHash,
+		"entrypoint":       scriptMeta.GetOptions().GetEntryPoint(),
+		"userID":           scriptMeta.UserID,
+	})
+
 	runStream, err := s.processRun(ctx, logger, request)
 	if err != nil {
+		logger.WithError(err).Warn("grpc:broker:Run")
 		cancel()
+
 		return err
 	}
 
@@ -177,18 +189,16 @@ func (s *Server) Run(request *brokerpb.RunRequest, stream brokerpb.ScriptRunner_
 		cancel()
 
 		took := time.Duration(trace.Duration) * time.Millisecond
+		logger = logger.WithFields(logrus.Fields{
+			"took":     took,
+			"overhead": time.Since(start) - took,
+		})
 
-		logger.WithFields(logrus.Fields{
-			"reqID":            request.LbMeta.RequestID,
-			"concurrencyKey":   request.LbMeta.ConcurrencyKey,
-			"concurrencyLimit": request.LbMeta.ConcurrencyLimit,
-			"runtime":          scriptMeta.Runtime,
-			"sourceHash":       scriptMeta.SourceHash,
-			"entrypoint":       scriptMeta.GetOptions().GetEntryPoint(),
-			"userID":           scriptMeta.UserID,
-			"took":             took,
-			"overhead":         time.Since(start) - took,
-		}).Info("grpc:broker:Run")
+		if err != nil {
+			logger.WithError(err).Warn("grpc:broker:Run")
+		} else {
+			logger.Info("grpc:broker:Run")
+		}
 
 		return err
 	}
