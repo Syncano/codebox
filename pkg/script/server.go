@@ -102,13 +102,15 @@ func (s *Server) Run(stream pb.ScriptRunner_RunServer) error {
 	}
 
 	peerAddr := util.PeerAddr(stream.Context())
-	logger := logrus.WithField("peer", peerAddr)
-	logger.WithFields(logrus.Fields{
+	logger := logrus.WithFields(logrus.Fields{
+		"peer":       peerAddr,
 		"reqID":      meta.RequestID,
 		"runtime":    meta.Runtime,
 		"sourceHash": meta.SourceHash,
 		"userID":     meta.UserID,
-	}).Debug("grpc:script:Run start")
+	})
+
+	logger.Debug("grpc:script:Run start")
 
 	// Call Run with given options.
 	opts := meta.GetOptions()
@@ -141,6 +143,7 @@ func (s *Server) Run(stream pb.ScriptRunner_RunServer) error {
 		})
 
 	if ret == nil && err != nil {
+		logger.WithError(err).Warn("grpc:script:Run error")
 		return s.ParseError(err)
 	}
 
@@ -150,8 +153,11 @@ func (s *Server) Run(stream pb.ScriptRunner_RunServer) error {
 
 	// Send response if we got any.
 	if ret != nil {
+		logger.WithField("ret", ret).Info("grpc:script:Run")
+
 		e := s.sendResponse(stream, ret)
 		if e != nil {
+			logger.WithError(err).Warn("grpc:script:Run send response error")
 			return e
 		}
 	}
