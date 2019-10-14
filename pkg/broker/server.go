@@ -163,6 +163,10 @@ func (s *Server) Run(request *brokerpb.RunRequest, stream brokerpb.ScriptRunner_
 
 	var retStream brokerpb.ScriptRunner_RunServer
 
+	if request.LbMeta == nil {
+		request.LbMeta = &lbpb.RunRequest_MetaMessage{}
+	}
+
 	if request.LbMeta.RequestID == "" {
 		request.LbMeta.RequestID = util.GenerateKey()
 	}
