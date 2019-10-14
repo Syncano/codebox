@@ -104,6 +104,7 @@ func (s *Server) Run(stream pb.ScriptRunner_RunServer) error {
 	peerAddr := util.PeerAddr(stream.Context())
 	logger := logrus.WithField("peer", peerAddr)
 	logger.WithFields(logrus.Fields{
+		"reqID":      meta.RequestID,
 		"runtime":    meta.Runtime,
 		"sourceHash": meta.SourceHash,
 		"userID":     meta.UserID,

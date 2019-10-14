@@ -155,14 +155,6 @@ func (s *Server) Run(request *brokerpb.RunRequest, stream brokerpb.ScriptRunner_
 	scriptMeta := request.GetRequest()[0].GetMeta()
 	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 
-	runStream, err := s.processRun(ctx, logger, request)
-	if err != nil {
-		cancel()
-		return err
-	}
-
-	var retStream brokerpb.ScriptRunner_RunServer
-
 	if request.LbMeta == nil {
 		request.LbMeta = &lbpb.RunRequest_MetaMessage{}
 	}
@@ -170,6 +162,14 @@ func (s *Server) Run(request *brokerpb.RunRequest, stream brokerpb.ScriptRunner_
 	if request.LbMeta.RequestID == "" {
 		request.LbMeta.RequestID = util.GenerateKey()
 	}
+
+	runStream, err := s.processRun(ctx, logger, request)
+	if err != nil {
+		cancel()
+		return err
+	}
+
+	var retStream brokerpb.ScriptRunner_RunServer
 
 	processFunc := func() error {
 		trace, err := s.processResponse(logger, start, request.GetMeta(), runStream, retStream)
