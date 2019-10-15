@@ -46,9 +46,5 @@ var (
 		grpc.WithStreamInterceptor(
 			grpc_opentracing.StreamClientInterceptor(grpc_opentracing.WithFilterFunc(otgrpc.FilterFunc)),
 		),
-		grpc.WithKeepaliveParams(keepalive.ClientParameters{
-			Time:    KeepaliveParamsTime,
-			Timeout: KeepaliveParamsTimeout,
-		}),
 	}
 )

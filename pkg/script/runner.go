@@ -472,8 +472,12 @@ func (r *DockerRunner) processContainerDone(runtime string, cont *Container, req
 	if err != nil {
 		// Check for non critical errors.
 		logFunc := logger.Warn
-		if err != util.ErrLimitReached && err != io.EOF && err != context.DeadlineExceeded {
+		if err != util.ErrLimitReached && err != io.EOF && err != context.DeadlineExceeded && err != context.Canceled {
 			logFunc = logger.Error
+		}
+
+		if err == context.Canceled {
+			recreate = false
 		}
 
 		logFunc("Recovering from container error")
