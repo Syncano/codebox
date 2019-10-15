@@ -56,7 +56,10 @@ type ScriptTraceResultResponse struct {
 func NewScriptTrace(traceID uint64, result *scriptpb.RunResponse) *ScriptTrace {
 	status := blockedStatus
 
-	var scriptResult *ScriptTraceResult
+	var (
+		scriptResult *ScriptTraceResult
+		executed     time.Time
+	)
 
 	if result != nil {
 		var ok bool
@@ -85,11 +88,14 @@ func NewScriptTrace(traceID uint64, result *scriptpb.RunResponse) *ScriptTrace {
 			Stderr:   json.RawMessage(util.ToQuoteJSON(result.GetStderr())),
 			Response: scriptResponse,
 		}
+		executed = time.Unix(0, result.GetTime())
+	} else {
+		executed = time.Now()
 	}
 
 	return &ScriptTrace{
 		ID:         traceID,
-		ExecutedAt: time.Unix(0, result.GetTime()).Format("2006-01-02T15:04:05.999999Z"),
+		ExecutedAt: executed.Format("2006-01-02T15:04:05.999999Z"),
 		Status:     status,
 		Duration:   result.GetTook(),
 		Result:     scriptResult,
