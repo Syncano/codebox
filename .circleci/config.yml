@@ -14,22 +14,22 @@ jobs:
           name: Build application Docker image
           command: docker-compose build
 
-      - run: 
+      - run:
           name: Download images
           command: |
-            make download-images 
+            make download-images
 
-      - run: 
+      - run:
           name: Lint
           command: |
             sudo mount --make-rshared /
             make lint-in-docker
 
-      - run: 
+      - run:
           name: Test
           command: |
             make test-in-docker
-            
+
   deploy:
     machine: true
     steps:
@@ -66,16 +66,16 @@ jobs:
             sudo /opt/google-cloud-sdk/bin/gcloud --quiet components install kubectl
             sudo chown circleci:circleci ~/.config/gcloud/ -R
 
-      - run: 
+      - run:
           name: Build and deploy
           command: |
             make decrypt
 
-            if [ "$CIRCLE_BRANCH" == "devel" ]; then 
+            if [ "$CIRCLE_BRANCH" == "master" ]; then
               kops export kubecfg --name=k8s.syncano.rocks --state=s3://k8s-syncano-rocks-state-store
               make deploy-staging
 
-            elif [ "$CIRCLE_BRANCH" == "master" ]; then
+            elif [ "$CIRCLE_BRANCH" == "stable" ]; then
               kops export kubecfg --name=k8s.syncano.io --state=s3://k8s-syncano-io-state-store
               echo $GCLOUD_EU1_SERVICE_KEY > gcloud-service-key.json
               gcloud auth activate-service-account --key-file=gcloud-service-key.json
@@ -95,7 +95,7 @@ workflows:
             branches:
               ignore:
                 - master
-                - devel
+                - stable
 
   deploy:
     jobs:
@@ -104,4 +104,4 @@ workflows:
             branches:
               only:
                 - master
-                - devel
+                - stable
