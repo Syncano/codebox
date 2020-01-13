@@ -59,8 +59,10 @@ deploy_broker() {
 echo "* Starting deployment for $TARGET at $VERSION."
 
 # Setup environment variables.
-# shellcheck disable=SC2046
-export $(xargs < deploy/env/"${TARGET}".env)
+set -a
+# shellcheck disable=SC1090
+source deploy/env/"${TARGET}".env
+set +a
 BUILDTIME=$(date +%Y-%m-%dt%H%M)
 export BUILDTIME
 
