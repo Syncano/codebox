@@ -47,7 +47,7 @@ type Autoscaler struct {
 	client  *http.Client
 	url     string
 	token   string
-	options *Options
+	options Options
 }
 
 const (
@@ -109,7 +109,7 @@ func New(options *Options) (*Autoscaler, error) {
 		},
 		url:     u.String(),
 		token:   string(token),
-		options: options,
+		options: *options,
 	}, nil
 }
 
