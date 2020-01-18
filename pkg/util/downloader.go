@@ -55,8 +55,8 @@ var defaultDownloaderOptions = DownloaderOptions{
 }
 
 // NewDownloader initializes a new downloader.
-func NewDownloader(options DownloaderOptions) *HTTPDownloader {
-	mergo.Merge(&options, defaultDownloaderOptions) // nolint - error not possible
+func NewDownloader(options *DownloaderOptions) *HTTPDownloader {
+	mergo.Merge(options, defaultDownloaderOptions) // nolint - error not possible
 
 	sem := make(chan bool, options.Concurrency)
 	client := &http.Client{
@@ -64,7 +64,7 @@ func NewDownloader(options DownloaderOptions) *HTTPDownloader {
 	}
 
 	return &HTTPDownloader{
-		options: options,
+		options: *options,
 		sem:     sem,
 		client:  client,
 	}
@@ -116,6 +116,7 @@ func (d *HTTPDownloader) Download(ctx context.Context, urls []string) <-chan *Do
 
 			go func(url string) {
 				d.sem <- true
+
 				defer func() {
 					<-d.sem
 					wg.Done()

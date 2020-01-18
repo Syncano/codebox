@@ -10,7 +10,7 @@ import (
 
 func TestLRUCache(t *testing.T) {
 	Convey("Given new LRU cache with auto refresh", t, func() {
-		c := NewLRUCache(Options{Capacity: 3, CleanupInterval: 1 * time.Millisecond}, LRUOptions{})
+		c := NewLRUCache(&Options{Capacity: 3, CleanupInterval: 1 * time.Millisecond}, &LRUOptions{})
 
 		So(c.janitor, ShouldNotBeNil)
 		So(c.deleteHandler, ShouldEqual, c.defaultDeleteHandler)

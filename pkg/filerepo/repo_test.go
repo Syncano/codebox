@@ -29,7 +29,7 @@ func TestRepo(t *testing.T) {
 		sc := new(mocks.SystemChecker)
 		dir, _ := ioutil.TempDir("", "test")
 		opts := Options{CleanupInterval: time.Minute, Capacity: 12, TTL: time.Second, BasePath: dir}
-		repo := New(opts, sc, new(LinkFs), new(Command))
+		repo := New(&opts, sc, new(LinkFs), new(Command))
 
 		Convey("related options are properly set up", func() {
 			cacheOpts := repo.fileCache.Options()
@@ -346,7 +346,7 @@ func TestRepoWithMocks(t *testing.T) {
 		fs := new(MockFs)
 		commander := new(MockCommander)
 		dir, _ := ioutil.TempDir("", "test")
-		opts := Options{CleanupInterval: time.Minute, Capacity: 12, TTL: time.Second, BasePath: dir}
+		opts := &Options{CleanupInterval: time.Minute, Capacity: 12, TTL: time.Second, BasePath: dir}
 		fs.On("MkdirAll", dir, os.ModePerm).Return(nil)
 		repo := New(opts, sc, fs, commander)
 		err := errors.New("some err")

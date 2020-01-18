@@ -80,7 +80,7 @@ type Options struct {
 }
 
 // DefaultOptions holds default options values for script runner.
-var DefaultOptions = Options{
+var DefaultOptions = &Options{
 	Concurrency:     2,
 	MCPU:            2000,
 	NodeIOPS:        150,
@@ -137,7 +137,7 @@ type File struct {
 	Data        []byte
 }
 
-func (ro RunOptions) String() string {
+func (ro *RunOptions) String() string {
 	return fmt.Sprintf("{EntryPoint:%.25s, OutputLimit:%d, Timeout:%v}", ro.EntryPoint, ro.OutputLimit, ro.Timeout)
 }
 
@@ -174,11 +174,11 @@ const (
 )
 
 // NewRunner initializes a new script runner.
-func NewRunner(options Options, dockerMgr docker.Manager, checker sys.SystemChecker, repo filerepo.Repo, redisClient RedisClient) (*DockerRunner, error) {
+func NewRunner(options *Options, dockerMgr docker.Manager, checker sys.SystemChecker, repo filerepo.Repo, redisClient RedisClient) (*DockerRunner, error) {
 	initOnceRunner.Do(func() {
 		freeCPUCounter = expvar.NewInt("cpu")
 	})
-	mergo.Merge(&options, DefaultOptions) // nolint - error not possible
+	mergo.Merge(options, DefaultOptions) // nolint - error not possible
 
 	// Set concurrency limits on docker.
 	dockerMCPU := uint(dockerMgr.Info().NCPU * 1000)
@@ -201,7 +201,7 @@ func NewRunner(options Options, dockerMgr docker.Manager, checker sys.SystemChec
 		return nil, err
 	}
 
-	containerCache := cache.NewLRUSetCache(cache.Options{
+	containerCache := cache.NewLRUSetCache(&cache.Options{
 		TTL:      options.ContainerTTL,
 		Capacity: options.ContainersCapacity,
 	})
@@ -209,7 +209,7 @@ func NewRunner(options Options, dockerMgr docker.Manager, checker sys.SystemChec
 		dockerMgr:      dockerMgr,
 		fileRepo:       repo,
 		sys:            checker,
-		options:        options,
+		options:        *options,
 		containerCache: containerCache,
 		redisCli:       redisClient,
 	}
@@ -237,7 +237,9 @@ func (r *DockerRunner) CleanupUnused() {
 
 	var wg sync.WaitGroup
 
-	for _, c := range cl {
+	for i := range cl {
+		c := &cl[i]
+
 		if c.Labels[containerLabel] != r.poolID {
 			wg.Add(1)
 
@@ -246,6 +248,7 @@ func (r *DockerRunner) CleanupUnused() {
 				if e := r.dockerMgr.ContainerStop(ctx, cID); e != nil {
 					logrus.WithField("containerID", cID).Warn("Stopping container failed")
 				}
+
 				cancel()
 				wg.Done()
 			}(c.ID)
@@ -345,11 +348,10 @@ func (r *DockerRunner) processRun(ctx context.Context, logger logrus.FieldLogger
 	return ret, cont, newContainer, err
 }
 
-func (r *DockerRunner) processOutput(ctx context.Context, conn, stdout, stderr io.Reader, delim string, limit int) ([]byte, []byte, []byte, error) {
+func (r *DockerRunner) processOutput(ctx context.Context, conn, stdout, stderr io.Reader, delim string, limit int) (output, stdoutBytes, stderrBytes []byte, err error) {
 	var (
-		wg                       sync.WaitGroup
-		e1, e2                   error
-		stdoutBytes, stderrBytes []byte
+		wg     sync.WaitGroup
+		e1, e2 error
 	)
 
 	// In non async mode simply read stdout and stderr.
@@ -357,15 +359,17 @@ func (r *DockerRunner) processOutput(ctx context.Context, conn, stdout, stderr i
 
 	go func() {
 		stdoutBytes, e1 = util.ReadLimitedUntil(ctx, stdout, delim, r.options.StreamMaxLength)
+
 		wg.Done()
 	}()
 
 	go func() {
 		stderrBytes, e2 = util.ReadLimitedUntil(ctx, stderr, delim, r.options.StreamMaxLength)
+
 		wg.Done()
 	}()
 
-	output, err := util.ReadLimited(ctx, conn, limit)
+	output, err = util.ReadLimited(ctx, conn, limit)
 
 	wg.Wait()
 
@@ -669,7 +673,7 @@ func (r *DockerRunner) Shutdown() {
 	r.containerCache.StopJanitor()
 }
 
-func (r *DockerRunner) reserveContainer(ctx context.Context, cont *Container, connID string, new bool, options *RunOptions, constraints *docker.Constraints) error {
+func (r *DockerRunner) reserveContainer(ctx context.Context, cont *Container, connID string, newCont bool, options *RunOptions, constraints *docker.Constraints) error {
 	a := cont.Reserve(connID, func(numConns int) error {
 		if numConns == 1 {
 			// If it's the first concurrent connection, acquire semaphore and adapt docker container if needed.
@@ -679,7 +683,7 @@ func (r *DockerRunner) reserveContainer(ctx context.Context, cont *Container, co
 			freeCPUCounter.Add(-int64(options.MCPU))
 
 			// Set CPU/Memory resources for async container or if using higher weight for new non-async container.
-			if options.Async > 1 || (new && options.Weight > 1) {
+			if options.Async > 1 || (newCont && options.Weight > 1) {
 				ctx2, cancel := context.WithTimeout(ctx, dockerTimeout)
 				defer cancel()
 				if err := r.dockerMgr.ContainerUpdate(ctx2, cont.ID, constraints); err != nil {
@@ -791,7 +795,7 @@ func (r *DockerRunner) getContainer(ctx context.Context, runtime, requestID, sou
 	cont.UserID = userID
 	cont.Hash = containerHash
 
-	if err = r.reserveContainer(ctx, cont, requestID, true, options, constraints); err != nil {
+	if err := r.reserveContainer(ctx, cont, requestID, true, options, constraints); err != nil {
 		return conn, cont, true, err
 	}
 
@@ -900,10 +904,13 @@ func (r *DockerRunner) createFreshContainer(ctx context.Context, runtime string)
 
 	go func() {
 		l, _, _ := cont.resp.Reader.ReadLine()
+
 		if len(l) > stdWriterPrefixLen {
 			l = l[stdWriterPrefixLen:]
 		}
+
 		retCh <- string(l)
+
 		cont.resp.Close()
 	}()
 
@@ -990,14 +997,14 @@ func (r *DockerRunner) OnContainerReleased(f ContainerReleasedHandler) {
 	r.muHandler.Unlock()
 }
 
-func (r *DockerRunner) createWrapperVolume(runtime string) (string, string, error) {
-	volKey, volPath, err := r.fileRepo.CreateVolume()
+func (r *DockerRunner) createWrapperVolume(runtime string) (volKey, volPath string, err error) {
+	volKey, volPath, err = r.fileRepo.CreateVolume()
 	if err != nil {
 		return "", "", err
 	}
 
 	for _, resKey := range []string{wrapperName, runtime} {
-		if err = r.fileRepo.Link(volKey, resKey, wrapperMount); err != nil {
+		if err := r.fileRepo.Link(volKey, resKey, wrapperMount); err != nil {
 			return "", "", err
 		}
 	}

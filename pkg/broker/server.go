@@ -56,7 +56,7 @@ type ServerOptions struct {
 }
 
 // DefaultOptions holds default options values for Broker server.
-var DefaultOptions = ServerOptions{
+var DefaultOptions = &ServerOptions{
 	DownloadConcurrency: 16,
 	LBRetry:             3,
 	MaxPayloadSize:      6 << 20,
@@ -94,7 +94,7 @@ const (
 )
 
 // NewServer initializes new Broker server.
-func NewServer(redisClient RedisClient, options ServerOptions) (*Server, error) {
+func NewServer(redisClient RedisClient, options *ServerOptions) (*Server, error) {
 	// Register prometheus exports.
 	initOnce.Do(func() {
 		prometheus.MustRegister(
@@ -104,7 +104,7 @@ func NewServer(redisClient RedisClient, options ServerOptions) (*Server, error) 
 		)
 	})
 
-	var lbServers []*loadBalancer
+	lbServers := make([]*loadBalancer, 0, len(options.LBAddr))
 
 	// Initialize all load balancer connections.
 	for _, addr := range options.LBAddr {
@@ -124,8 +124,8 @@ func NewServer(redisClient RedisClient, options ServerOptions) (*Server, error) 
 		redisCli:   redisClient,
 		lbServers:  lbServers,
 		uploads:    make(map[string]chan struct{}),
-		downloader: util.NewDownloader(util.DownloaderOptions{Concurrency: options.DownloadConcurrency}),
-		options:    options,
+		downloader: util.NewDownloader(&util.DownloaderOptions{Concurrency: options.DownloadConcurrency}),
+		options:    *options,
 	}, nil
 }
 
@@ -285,7 +285,7 @@ func uploadChunks(stream repopb.Repo_UploadClient, key string, resCh <-chan *uti
 	var err error
 
 	// Send meta header.
-	if err = stream.Send(&repopb.UploadRequest{
+	if err := stream.Send(&repopb.UploadRequest{
 		Value: &repopb.UploadRequest_Meta{
 			Meta: &repopb.UploadRequest_MetaMessage{Key: key},
 		},
@@ -328,7 +328,7 @@ func uploadChunks(stream repopb.Repo_UploadClient, key string, resCh <-chan *uti
 				break
 			}
 
-			if err = stream.Send(&repopb.UploadRequest{
+			if err := stream.Send(&repopb.UploadRequest{
 				Value: &repopb.UploadRequest_Chunk{
 					Chunk: &repopb.UploadRequest_ChunkMessage{
 						Name: name,
@@ -342,7 +342,7 @@ func uploadChunks(stream repopb.Repo_UploadClient, key string, resCh <-chan *uti
 	}
 
 	// Send done flag.
-	if err = stream.Send(&repopb.UploadRequest{Value: &repopb.UploadRequest_Done{Done: true}}); err != nil {
+	if err := stream.Send(&repopb.UploadRequest{Value: &repopb.UploadRequest_Done{Done: true}}); err != nil {
 		return err
 	}
 	// Wait for response as a confirmation of finished upload.
@@ -399,7 +399,8 @@ func (s *Server) uploadFiles(ctx context.Context, lb *loadBalancer, key string, 
 	}
 
 	// Start downloading files.
-	var fileURLs []string
+	fileURLs := make([]string, 0, len(files))
+
 	for url := range files {
 		fileURLs = append(fileURLs, url)
 	}

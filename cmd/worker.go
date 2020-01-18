@@ -35,8 +35,8 @@ const (
 )
 
 var (
-	dockerOptions = docker.Options{}
-	scriptOptions = script.Options{Constraints: new(docker.Constraints)}
+	dockerOptions = &docker.Options{}
+	scriptOptions = &script.Options{Constraints: new(docker.Constraints)}
 )
 
 var workerCmd = cli.Command{
@@ -279,8 +279,7 @@ func init() {
 // startServer returns two values. First one is a bool - true if registration to specified lbAddr was successful,
 // second one is an error that occurred (if any).
 func startServer(
-	poolID string,
-	lbAddr string,
+	poolID, lbAddr string,
 	heartbeat time.Duration,
 	repo filerepo.Repo,
 	runner script.Runner,
@@ -317,12 +316,13 @@ func startServer(
 	}
 
 	defer conn.Close()
-	client := lbpb.NewWorkerPlugClient(conn)
+
+	plugClient := lbpb.NewWorkerPlugClient(conn)
 
 	// Setup script runner event handlers.
 	runner.OnContainerRemoved(func(cont *script.Container) {
 		ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
-		if _, e := client.ContainerRemoved(ctx,
+		if _, e := plugClient.ContainerRemoved(ctx,
 			&lbpb.ContainerRemovedRequest{
 				Id:          poolID,
 				ContainerID: cont.ID,
@@ -336,7 +336,7 @@ func startServer(
 	})
 	runner.OnContainerReleased(func(cont *script.Container, options *script.RunOptions) {
 		ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
-		if _, e := client.ResourceRelease(ctx, &lbpb.ResourceReleaseRequest{Id: poolID, MCPU: options.MCPU}); err != nil {
+		if _, e := plugClient.ResourceRelease(ctx, &lbpb.ResourceReleaseRequest{Id: poolID, MCPU: options.MCPU}); err != nil {
 			errCh <- e
 		}
 		cancel()
@@ -346,7 +346,7 @@ func startServer(
 	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 	defer cancel()
 
-	if _, err = client.Register(ctx,
+	if _, err = plugClient.Register(ctx,
 		&lbpb.RegisterRequest{
 			Id:          poolID,
 			Port:        uint32(lis.Addr().(*net.TCPAddr).Port),
@@ -362,7 +362,7 @@ func startServer(
 	// On quit call disconnect.
 	defer func() {
 		ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
-		client.Disconnect(ctx, &lbpb.DisconnectRequest{Id: poolID}) // nolint - ignore error
+		plugClient.Disconnect(ctx, &lbpb.DisconnectRequest{Id: poolID}) // nolint - ignore error
 		cancel()
 	}()
 
@@ -373,7 +373,7 @@ func startServer(
 		select {
 		case <-ticker.C:
 			ctx, cancel := context.WithTimeout(context.Background(), heartbeatTimeout)
-			_, err := client.Heartbeat(ctx,
+			_, err := plugClient.Heartbeat(ctx,
 				&lbpb.HeartbeatRequest{
 					Id:     poolID,
 					Memory: syschecker.AvailableMemory(),

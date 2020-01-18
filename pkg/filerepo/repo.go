@@ -49,7 +49,7 @@ type Options struct {
 }
 
 // DefaultOptions holds default options values for file repo.
-var DefaultOptions = Options{
+var DefaultOptions = &Options{
 	BasePath:         "/home/codebox/storage",
 	MaxDiskUsage:     90,
 	TTL:              3 * time.Hour,
@@ -87,13 +87,13 @@ const (
 )
 
 // New initializes a new file repo.
-func New(options Options, checker sys.SystemChecker, fs Fs, command Commander) *FsRepo {
-	mergo.Merge(&options, DefaultOptions) // nolint - error not possible
+func New(options *Options, checker sys.SystemChecker, fs Fs, command Commander) *FsRepo {
+	mergo.Merge(options, DefaultOptions) // nolint - error not possible
 	util.Must(fs.MkdirAll(options.BasePath, os.ModePerm))
 
 	r := FsRepo{
 		storeID:    util.GenerateKey(),
-		options:    options,
+		options:    *options,
 		sys:        checker,
 		fs:         fs,
 		command:    command,
@@ -102,11 +102,11 @@ func New(options Options, checker sys.SystemChecker, fs Fs, command Commander) *
 		storeLocks: make(map[string]chan struct{}),
 	}
 
-	r.fileCache = cache.NewLRUCache(cache.Options{
+	r.fileCache = cache.NewLRUCache(&cache.Options{
 		TTL:             options.TTL,
 		CleanupInterval: options.CleanupInterval,
 		Capacity:        options.Capacity,
-	}, cache.LRUOptions{})
+	}, &cache.LRUOptions{})
 
 	r.fileCache.OnValueEvicted(r.onValueEvictedHandler)
 
@@ -129,33 +129,32 @@ func (r *FsRepo) StoragePath() string {
 }
 
 // Store stores a file in cache.
-func (r *FsRepo) Store(key string, storeKey string, src io.Reader, filename string, mode os.FileMode) (string, error) {
+func (r *FsRepo) Store(key, storeKey string, src io.Reader, filename string, mode os.FileMode) (string, error) {
 	path := filepath.Join(r.StoragePath(), fileStorageName, key, storeKey)
 	return path, r.storeFile(path, src, filename, mode)
 }
 
 // StoreLock starts storing procedure returning lock channel and storeKey if key doesn't exist, nil and "" otherwise.
-func (r *FsRepo) StoreLock(key string) (chan struct{}, string) {
-	var (
-		ch chan struct{}
-		ok bool
-	)
+func (r *FsRepo) StoreLock(key string) (lockCh chan struct{}, storeKey string) {
+	var ok bool
 
 	r.muStoreLocks.Lock()
 
-	ch, ok = r.storeLocks[key]
+	lockCh, ok = r.storeLocks[key]
 	if !ok {
-		ch = make(chan struct{})
-		r.storeLocks[key] = ch
+		lockCh = make(chan struct{})
+		r.storeLocks[key] = lockCh
 		r.muStoreLocks.Unlock()
 
-		return ch, util.GenerateKey()
+		storeKey = util.GenerateKey()
+
+		return lockCh, storeKey
 	}
 
 	r.muStoreLocks.Unlock()
 
 	select {
-	case <-ch:
+	case <-lockCh:
 		if r.Get(key) != "" {
 			return nil, ""
 		}
@@ -163,7 +162,7 @@ func (r *FsRepo) StoreLock(key string) (chan struct{}, string) {
 		logrus.WithField("key", key).Warn("Timed out while waiting for store lock")
 	}
 
-	r.removeStoreLock(key, ch)
+	r.removeStoreLock(key, lockCh)
 
 	return r.StoreLock(key)
 }
@@ -231,7 +230,7 @@ func (r *FsRepo) storeFile(path string, src io.Reader, filename string, mode os.
 	}
 
 	if mode != 0 {
-		if err = r.fs.Chmod(filePath, mode); err != nil {
+		if err := r.fs.Chmod(filePath, mode); err != nil {
 			return err
 		}
 	}
@@ -275,7 +274,7 @@ func (r *FsRepo) Delete(key string) {
 }
 
 // CreateVolume creates a new volume. Returns volKey, real path to the volume and optionally an error that occurred.
-func (r *FsRepo) CreateVolume() (volKey string, path string, err error) {
+func (r *FsRepo) CreateVolume() (volKey, path string, err error) {
 	r.muVol.Lock()
 	defer r.muVol.Unlock()
 

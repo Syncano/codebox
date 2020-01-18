@@ -48,7 +48,7 @@ type ServerOptions struct {
 }
 
 // DefaultOptions holds default options values for LB server.
-var DefaultOptions = ServerOptions{
+var DefaultOptions = &ServerOptions{
 	WorkerRetry:          3,
 	WorkerKeepalive:      30 * time.Second,
 	WorkerErrorThreshold: 2,
@@ -101,7 +101,7 @@ const (
 )
 
 // NewServer initializes new LB server.
-func NewServer(fileRepo filerepo.Repo, options ServerOptions) *Server {
+func NewServer(fileRepo filerepo.Repo, options *ServerOptions) *Server {
 	// Register expvar and prometheus exports.
 	initOnce.Do(func() {
 		workerCounter = expvar.NewInt("workers")
@@ -112,19 +112,19 @@ func NewServer(fileRepo filerepo.Repo, options ServerOptions) *Server {
 			workerMemory,
 		)
 	})
-	mergo.Merge(&options, DefaultOptions) // nolint - error not possible
+	mergo.Merge(options, DefaultOptions) // nolint - error not possible
 
-	workers := cache.NewLRUCache(cache.Options{
+	workers := cache.NewLRUCache(&cache.Options{
 		TTL: options.WorkerKeepalive,
-	}, cache.LRUOptions{
+	}, &cache.LRUOptions{
 		AutoRefresh: false,
 	})
 	s := &Server{
-		options:              options,
+		options:              *options,
 		workers:              workers,
 		workerContainerCache: make(ContainerWorkerCache),
 		fileRepo:             fileRepo,
-		limiter:              limiter.New(limiter.Options{}),
+		limiter:              limiter.New(&limiter.Options{}),
 	}
 	workers.OnValueEvicted(s.onEvictedWorkerHandler)
 

@@ -66,7 +66,7 @@ func TestServerMethods(t *testing.T) {
 		downloader := new(utilmocks.Downloader)
 		stream := new(mocks.ScriptRunner_RunServer)
 
-		s, e := NewServer(redisCli, ServerOptions{
+		s, e := NewServer(redisCli, &ServerOptions{
 			LBAddr:              []string{"127.0.0.1"},
 			LBRetry:             0,
 			DownloadConcurrency: 1,

@@ -50,7 +50,7 @@ const (
 )
 
 // NewWorker initializes new worker info along with worker connection.
-func NewWorker(id string, addr net.TCPAddr, mCPU uint32, defaultMCPU uint32, memory uint64) *Worker {
+func NewWorker(id string, addr net.TCPAddr, mCPU, defaultMCPU uint32, memory uint64) *Worker {
 	conn, err := grpc.Dial(addr.String(), sys.DefaultGRPCDialOptions...)
 	util.Must(err)
 
@@ -147,7 +147,7 @@ func (w *Worker) Exists(ctx context.Context, key string) (*repopb.ExistsResponse
 func uploadDir(stream repopb.Repo_UploadClient, fs afero.Fs, key, sourcePath string) error {
 	var err error
 
-	if err = stream.Send(&repopb.UploadRequest{
+	if err := stream.Send(&repopb.UploadRequest{
 		Value: &repopb.UploadRequest_Meta{
 			Meta: &repopb.UploadRequest_MetaMessage{Key: key},
 		},
@@ -166,7 +166,7 @@ func uploadDir(stream repopb.Repo_UploadClient, fs afero.Fs, key, sourcePath str
 		return nil
 	}
 
-	if err = afero.Walk(fs, sourcePath, func(path string, info os.FileInfo, err error) error {
+	if err := afero.Walk(fs, sourcePath, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
@@ -184,7 +184,7 @@ func uploadDir(stream repopb.Repo_UploadClient, fs afero.Fs, key, sourcePath str
 					break
 				}
 
-				if err = stream.Send(&repopb.UploadRequest{
+				if err := stream.Send(&repopb.UploadRequest{
 					Value: &repopb.UploadRequest_Chunk{
 						Chunk: &repopb.UploadRequest_ChunkMessage{Name: name, Data: buf[:n]},
 					},
@@ -199,11 +199,11 @@ func uploadDir(stream repopb.Repo_UploadClient, fs afero.Fs, key, sourcePath str
 	}
 
 	// Send done flag.
-	if err = stream.Send(&repopb.UploadRequest{Value: &repopb.UploadRequest_Done{Done: true}}); err != nil {
+	if err := stream.Send(&repopb.UploadRequest{Value: &repopb.UploadRequest_Done{Done: true}}); err != nil {
 		return err
 	}
 	// Wait for response as a confirmation of finished upload.
-	if _, err = stream.Recv(); err != nil {
+	if _, err := stream.Recv(); err != nil {
 		return err
 	}
 
@@ -290,7 +290,7 @@ func (w *WorkerContainer) Conns() uint64 {
 }
 
 // Upload calls worker RPC and uploads file(s) to it.
-func (w *WorkerContainer) Upload(ctx context.Context, fs afero.Fs, sourcePath string, key string) error {
+func (w *WorkerContainer) Upload(ctx context.Context, fs afero.Fs, sourcePath, key string) error {
 	stream, err := w.repoCli.Upload(ctx)
 	if err != nil {
 		return err
@@ -314,7 +314,7 @@ func (w *WorkerContainer) Run(ctx context.Context, meta *scriptpb.RunRequest_Met
 	}
 
 	// Send meta header.
-	if err = stream.Send(&scriptpb.RunRequest{
+	if err := stream.Send(&scriptpb.RunRequest{
 		Value: &scriptpb.RunRequest_Meta{
 			Meta: meta,
 		},
@@ -324,7 +324,7 @@ func (w *WorkerContainer) Run(ctx context.Context, meta *scriptpb.RunRequest_Met
 
 	// Send chunks.
 	for _, m := range chunk {
-		if err = stream.Send(&scriptpb.RunRequest{
+		if err := stream.Send(&scriptpb.RunRequest{
 			Value: &scriptpb.RunRequest_Chunk{
 				Chunk: m,
 			},
@@ -333,7 +333,7 @@ func (w *WorkerContainer) Run(ctx context.Context, meta *scriptpb.RunRequest_Met
 		}
 	}
 
-	if err = stream.CloseSend(); err != nil {
+	if err := stream.CloseSend(); err != nil {
 		return nil, err
 	}
 
@@ -346,10 +346,12 @@ func (w *WorkerContainer) Run(ctx context.Context, meta *scriptpb.RunRequest_Met
 				if err != io.EOF {
 					ch <- err
 				}
+
 				close(ch)
 
 				atomic.AddUint64(&w.conns, ^uint64(0))
 				w.waitGroup.Done()
+
 				return
 			}
 			ch <- runRes

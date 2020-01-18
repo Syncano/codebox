@@ -78,7 +78,9 @@ func (ac *Channel) Init(url string) error {
 
 			if e != nil {
 				logrus.WithError(e).Warn("Lost AMQP connection")
+
 				amqpSleep := amqpRetrySleep
+
 				ac.mu.Lock()
 
 				for {
@@ -86,13 +88,17 @@ func (ac *Channel) Init(url string) error {
 						if e := ac.connect(url); e != nil {
 							logrus.WithError(e).Error("Cannot connect to AMQP, retrying")
 							time.Sleep(amqpSleep)
+
 							if amqpSleep < amqpMaxRetrySleep {
 								amqpSleep += amqpRetrySleep
 							}
+
 							continue
 						}
+
 						logrus.Info("Reconnected to AMQP")
 					}
+
 					break
 				}
 				ac.mu.Unlock()
@@ -120,7 +126,7 @@ func (ac *Channel) setRunning(running bool) {
 }
 
 // Publish sends a Publishing from the client to an exchange on the server.
-func (ac *Channel) Publish(exchange, key string, mandatory, immediate bool, msg amqp.Publishing) error {
+func (ac *Channel) Publish(exchange, key string, mandatory, immediate bool, msg amqp.Publishing) error { // nolint: gocritic
 	ac.mu.Lock()
 	defer ac.mu.Unlock()
 

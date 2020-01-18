@@ -32,7 +32,7 @@ type Options struct {
 }
 
 // DefaultOptions holds default options values for LB Autoscaler.
-var DefaultOptions = Options{
+var DefaultOptions = &Options{
 	UpscaleConsecutive:   2,
 	DownscaleConsecutive: 5,
 	MinScale:             1,
@@ -55,10 +55,10 @@ const (
 )
 
 // New initializes new Load Balancer Autoscaler.
-func New(options Options) (*Autoscaler, error) {
+func New(options *Options) (*Autoscaler, error) {
 	// Create the in-cluster config.
 	host, port := os.Getenv("KUBERNETES_SERVICE_HOST"), os.Getenv("KUBERNETES_SERVICE_PORT")
-	if len(host) == 0 || len(port) == 0 {
+	if host == "" || port == "" {
 		return nil, errors.New("unable to load in-cluster configuration, KUBERNETES_SERVICE_HOST and KUBERNETES_SERVICE_PORT must be defined")
 	}
 
@@ -90,7 +90,7 @@ func New(options Options) (*Autoscaler, error) {
 	transport := &http.Transport{
 		TLSClientConfig: tlsConfig,
 	}
-	if err = http2.ConfigureTransport(transport); err != nil {
+	if err := http2.ConfigureTransport(transport); err != nil {
 		return nil, err
 	}
 
@@ -109,7 +109,7 @@ func New(options Options) (*Autoscaler, error) {
 		},
 		url:     u.String(),
 		token:   string(token),
-		options: options,
+		options: *options,
 	}, nil
 }
 
@@ -195,18 +195,22 @@ func (a *Autoscaler) Start() chan struct{} { // nolint: gocyclo, gocognit
 				}
 
 				freeCPU := uint(freeCPUCounter.Value())
+
 				replicaSpec, err := a.getReplicas()
 				if err != nil {
 					logrus.WithField("options", a.options).WithError(err).Warn("Autoscaling.GetScale failed")
 					continue
 				}
+
 				changed := false
 				desiredReplicas, curReplicas := replicaSpec.Spec.Replicas, replicaSpec.Status.Replicas
+
 				switch {
 				case workerCount == curReplicas && freeCPU < a.options.MinFreeCPU && curReplicas == desiredReplicas:
 					if desiredReplicas < a.options.MaxScale {
 						if upscaleConsecutive+1 > a.options.UpscaleConsecutive {
 							desiredReplicas++
+
 							changed = true
 						} else {
 							upscaleConsecutive++
@@ -217,6 +221,7 @@ func (a *Autoscaler) Start() chan struct{} { // nolint: gocyclo, gocognit
 					if desiredReplicas > a.options.MinScale {
 						if downscaleConsecutive+1 > a.options.DownscaleConsecutive {
 							desiredReplicas--
+
 							changed = true
 						} else {
 							downscaleConsecutive++
@@ -232,6 +237,7 @@ func (a *Autoscaler) Start() chan struct{} { // nolint: gocyclo, gocognit
 					logrus.WithFields(logrus.Fields{"current": curReplicas, "desired": desiredReplicas}).Info("Autoscaling.UpdateScale")
 
 					lastUpdate = time.Now()
+
 					err = a.updateReplicas(desiredReplicas)
 					if err != nil {
 						logrus.WithError(err).WithField("replicas", desiredReplicas).Warn("Autoscaling.UpdateScale failed")

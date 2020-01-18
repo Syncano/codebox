@@ -24,7 +24,7 @@ import (
 )
 
 var (
-	brokerOptions = broker.ServerOptions{}
+	brokerOptions = &broker.ServerOptions{}
 )
 
 var brokerCmd = cli.Command{
