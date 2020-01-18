@@ -23,10 +23,10 @@ var defaultLRUOptions = LRUOptions{
 
 // NewLRUCache creates and initializes a new cache object.
 // This one is based on LRU KV with TTL
-func NewLRUCache(options Options, lruOptions LRUOptions) *LRUCache {
-	mergo.Merge(&lruOptions, defaultLRUOptions) // nolint - error not possible
+func NewLRUCache(options *Options, lruOptions *LRUOptions) *LRUCache {
+	mergo.Merge(lruOptions, defaultLRUOptions) // nolint - error not possible
 
-	cache := LRUCache{lruOptions: lruOptions}
+	cache := LRUCache{lruOptions: *lruOptions}
 
 	cache.Cache.Init(options, cache.deleteHandler)
 

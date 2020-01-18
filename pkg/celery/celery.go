@@ -31,7 +31,7 @@ func Init(ch AMQPChannel) {
 }
 
 // NewTask returns a new task object.
-func NewTask(task string, queue string, args []interface{}, kwargs map[string]interface{}) *Task {
+func NewTask(task, queue string, args []interface{}, kwargs map[string]interface{}) *Task {
 	if args == nil {
 		args = make([]interface{}, 0)
 	}

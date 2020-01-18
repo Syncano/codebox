@@ -29,7 +29,7 @@ func TestNewManager(t *testing.T) {
 				cli.On("Info", mock.Anything).Return(
 					types.Info{}, io.EOF,
 				)
-				_, e := NewManager(Options{}, cli)
+				_, e := NewManager(&Options{}, cli)
 				So(e, ShouldEqual, io.EOF)
 			})
 
@@ -44,7 +44,7 @@ func TestNewManager(t *testing.T) {
 				cli.On("NetworkInspect", mock.Anything, "isolated_nw", mock.Anything).Return(
 					types.NetworkResource{}, nil,
 				)
-				m, e := NewManager(Options{}, cli)
+				m, e := NewManager(&Options{}, cli)
 				So(e, ShouldBeNil)
 				So(m.storageLimitSupported, ShouldBeTrue)
 				So(m.runtime, ShouldEqual, "")
@@ -66,7 +66,7 @@ func TestNewManager(t *testing.T) {
 					cli.On("NetworkCreate", mock.Anything, "isolated_nw", mock.Anything).Return(
 						types.NetworkCreateResponse{}, nil,
 					)
-					m, e := NewManager(Options{}, cli)
+					m, e := NewManager(&Options{}, cli)
 					So(e, ShouldBeNil)
 					So(m.storageLimitSupported, ShouldBeTrue)
 				})
@@ -74,7 +74,7 @@ func TestNewManager(t *testing.T) {
 					cli.On("NetworkCreate", mock.Anything, "isolated_nw", mock.Anything).Return(
 						types.NetworkCreateResponse{}, io.EOF,
 					)
-					_, e := NewManager(Options{}, cli)
+					_, e := NewManager(&Options{}, cli)
 					So(e, ShouldEqual, io.EOF)
 				})
 			})
@@ -93,7 +93,7 @@ func TestNewManager(t *testing.T) {
 				cli.On("NetworkInspect", mock.Anything, "isolated_nw", mock.Anything).Return(
 					types.NetworkResource{}, nil,
 				)
-				m, e := NewManager(Options{}, cli)
+				m, e := NewManager(&Options{}, cli)
 				So(e, ShouldBeNil)
 				So(m.runtime, ShouldEqual, gvisorRuntime)
 			})
@@ -109,7 +109,7 @@ func TestNewManager(t *testing.T) {
 				cli.On("NetworkInspect", mock.Anything, "other_nw", mock.Anything).Return(
 					types.NetworkResource{}, nil,
 				)
-				m, e := NewManager(Options{Network: "other_nw"}, cli)
+				m, e := NewManager(&Options{Network: "other_nw"}, cli)
 				So(e, ShouldBeNil)
 				So(m.storageLimitSupported, ShouldBeFalse)
 			})
@@ -122,7 +122,7 @@ func TestNewManager(t *testing.T) {
 						NCPU:         1,
 					}, nil,
 				)
-				m, e := NewManager(Options{Network: "other_nw", ReservedCPU: 5000}, cli)
+				m, e := NewManager(&Options{Network: "other_nw", ReservedCPU: 5000}, cli)
 				So(m, ShouldBeNil)
 				So(e, ShouldEqual, ErrReservedCPUTooHigh)
 			})

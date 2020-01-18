@@ -72,7 +72,7 @@ func TestNewRunner(t *testing.T) {
 		checker := new(sysmock.SystemChecker)
 		repo := new(repomock.Repo)
 		redisCli := new(MockRedisClient)
-		opts := Options{Concurrency: 1, CreateRetrySleep: 1 * time.Millisecond, MCPU: 1000}
+		opts := &Options{Concurrency: 1, CreateRetrySleep: 1 * time.Millisecond, MCPU: 1000}
 
 		err := errors.New("some error")
 		defaultRuntime := "nodejs_v6"
@@ -426,8 +426,8 @@ func TestRunnerMethods(t *testing.T) {
 		r := DockerRunner{sys: checker,
 			fileRepo:       repo,
 			dockerMgr:      dockerMgr,
-			options:        opts,
-			containerCache: cache.NewLRUSetCache(cache.Options{}),
+			options:        *opts,
+			containerCache: cache.NewLRUSetCache(&cache.Options{}),
 		}
 		err := errors.New("some error")
 

@@ -145,8 +145,7 @@ func ToQuoteJSON(s []byte) []byte { // nolint: gocyclo
 		width = 1
 
 		if r == '"' || r == '\\' {
-			buf = append(buf, '\\')
-			buf = append(buf, byte(r))
+			buf = append(buf, '\\', byte(r))
 
 			continue
 		}

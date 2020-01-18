@@ -8,11 +8,10 @@ run:
     - mocks
 
 issues:
-  exclude-use-default: false
-  exclude:
-    - G104
-    - should have a package comment
-    - Error return value of .((os\.)?std(out|err)\..*|.*Close|.*Flush|os\.Remove(All)?|.*printf?|os\.(Un)?Setenv). is not checked
+  exclude-rules:
+    - text: declaration of "err" shadows declaration
+      linters:
+        - govet
 
 linters-settings:
   govet:
@@ -20,23 +19,68 @@ linters-settings:
   golint:
     min-confidence: 0
   gocyclo:
-    min-complexity: 15
+    min-complexity: 20
   maligned:
     suggest-new: true
   dupl:
-    threshold: 100
+    threshold: 150
   goconst:
     min-len: 3
     min-occurrences: 3
   misspell:
     locale: US
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - experimental
+      - opinionated
+      - performance
+      - style
+    disabled-checks:
+      - whyNoLint
+      - commentedOutCode
 
 linters:
-  enable-all: true
-  disable:
-    - lll
-    - maligned
+  disable-all: true
+  enable:
+    - bodyclose
+    - deadcode
+    - depguard
+    - dogsled
+    - dupl
+    - errcheck
+    - goconst
+    - gocritic
+    - gocyclo
+    - gofmt
+    - goimports
+    - golint
+    - gosec
+    - gosimple
+    - govet
+    - ineffassign
+    - interfacer
+    - misspell
+    - nakedret
     - prealloc
-    - gochecknoglobals
-    - gochecknoinits
-    - funlen
+    - scopelint
+    - staticcheck
+    - structcheck
+    - stylecheck
+    - typecheck
+    - unconvert
+    - unparam
+    - unused
+    - varcheck
+    - whitespace
+    - wsl
+
+    # don't enable:
+    # - funlen
+    # - gochecknoglobals
+    # - gochecknoinits
+    # - godox
+    # - gocognit
+    # - gomnd
+    # - lll
+    # - maligned

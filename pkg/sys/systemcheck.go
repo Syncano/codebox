@@ -34,7 +34,7 @@ func (s *SigarChecker) Reset() {
 }
 
 // GetMemory returns info about memory.
-func (s *SigarChecker) GetMemory() (uint64, uint64) {
+func (s *SigarChecker) GetMemory() (total, actualFree uint64) {
 	var mem sigar.Mem
 	err := mem.Get()
 	util.Must(err)
@@ -86,7 +86,7 @@ func (s *SigarChecker) FreeMemory(amount uint64) {
 }
 
 // GetDiskUsage returns info about disk usage at path.
-func (s *SigarChecker) GetDiskUsage(path string) (float64, uint64) {
+func (s *SigarChecker) GetDiskUsage(path string) (usePercent float64, avail uint64) {
 	var fsu sigar.FileSystemUsage
 
 	err := fsu.Get(path)

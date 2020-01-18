@@ -179,10 +179,9 @@ func (c *Container) Setup(options *RunOptions, constraints *docker.Constraints) 
 // Run sends run packet to container.
 func (c *Container) Run(conn io.Writer, options *RunOptions) (string, error) {
 	// Prepare files for context.
-	var (
-		filesSize int
-		files     []contextFile
-	)
+	var filesSize int
+
+	files := make([]contextFile, 0, len(options.Files))
 
 	for f, data := range options.Files {
 		flen := len(data.Data)

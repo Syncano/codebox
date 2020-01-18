@@ -25,7 +25,7 @@ import (
 )
 
 var (
-	repoOptions = filerepo.Options{}
+	repoOptions = &filerepo.Options{}
 
 	// App is the main structure of a cli application.
 	App = cli.NewApp()

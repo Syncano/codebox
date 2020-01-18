@@ -27,7 +27,7 @@ type Options struct {
 }
 
 // DefaultOptions holds default options values for limiter.
-var DefaultOptions = Options{
+var DefaultOptions = &Options{
 	Queue: 100,
 }
 
@@ -44,12 +44,12 @@ var (
 )
 
 // New initializes new limiter.
-func New(options Options) *Limiter {
-	mergo.Merge(&options, DefaultOptions) // nolint - error not possible
+func New(options *Options) *Limiter {
+	mergo.Merge(options, DefaultOptions) // nolint - error not possible
 
-	channels := cache.NewLRUCache(cache.Options{}, cache.LRUOptions{})
+	channels := cache.NewLRUCache(&cache.Options{}, &cache.LRUOptions{})
 	l := &Limiter{
-		options:  options,
+		options:  *options,
 		channels: channels,
 	}
 

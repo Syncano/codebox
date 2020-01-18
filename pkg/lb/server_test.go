@@ -40,7 +40,7 @@ func TestServerMethods(t *testing.T) {
 
 	Convey("Given server with mocked repo", t, func() {
 		repo := new(repomocks.Repo)
-		s := NewServer(repo, ServerOptions{WorkerRetry: 1})
+		s := NewServer(repo, &ServerOptions{WorkerRetry: 1})
 
 		Convey("given mocked Run stream, Run", func() {
 			stream := new(mocks.ScriptRunner_RunServer)

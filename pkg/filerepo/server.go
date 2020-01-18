@@ -55,6 +55,7 @@ func (s *Server) Upload(stream pb.Repo_UploadServer) error {
 		if chunkCh != nil {
 			close(chunkCh)
 		}
+
 		if lockCh != nil {
 			s.Repo.StoreUnlock(meta.GetKey(), storeKey, lockCh, false)
 		}
@@ -123,7 +124,7 @@ func (s *Server) Upload(stream pb.Repo_UploadServer) error {
 }
 
 func (s *Server) processChunkUpload(key, storeKey, chunkName string, chunkCh chan []byte, chunk *pb.UploadRequest_ChunkMessage,
-	errCh chan error) (string, chan []byte, error) {
+	errCh chan error) (newChunkName string, newChunkCh chan []byte, err error) {
 	// If we are to start a new chunk, close previous chunk channel.
 	if chunkCh != nil && chunk.GetName() != chunkName {
 		close(chunkCh)

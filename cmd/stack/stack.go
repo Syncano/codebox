@@ -13,7 +13,7 @@ import (
 // Set levels to callerLevels for which "caller" value may be set, providing a
 // single frame of stack. Set levels to stackLevels for which "stack" value may
 // be set, providing the full stack (minus logrus).
-func NewHook(inAppPrefix string, callerLevels []logrus.Level, stackLevels []logrus.Level) *LogrusStackHook {
+func NewHook(inAppPrefix string, callerLevels, stackLevels []logrus.Level) *LogrusStackHook {
 	return &LogrusStackHook{
 		InAppPrefix:  inAppPrefix,
 		CallerLevels: callerLevels,

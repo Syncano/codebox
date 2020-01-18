@@ -71,12 +71,12 @@ func createCacheKey(schema, endpointName, hash string) string {
 	return fmt.Sprintf("%s:cache:s:%s:%s", schema, endpointName, hash)
 }
 
-func httpError(w http.ResponseWriter, status int, error string) {
+func httpError(w http.ResponseWriter, status int, err string) {
 	w.WriteHeader(status)
 
 	if status != 0 {
 		w.Header().Set("Content-Type", jsonContentType)
-		fmt.Fprintf(w, `{"detail":"%s"}`, error)
+		fmt.Fprintf(w, `{"detail":"%s"}`, err)
 	}
 }
 

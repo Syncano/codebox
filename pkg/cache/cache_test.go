@@ -20,12 +20,12 @@ func TestCache(t *testing.T) {
 		c := new(Cache)
 
 		Convey("Init sets default delete handler and starts janitor", func() {
-			c.Init(Options{}, nil)
+			c.Init(&Options{}, nil)
 			So(c.janitor, ShouldNotBeNil)
 			So(c.deleteHandler, ShouldEqual, c.defaultDeleteHandler)
 
 			Convey("and cannot be called twice", func() {
-				So(func() { c.Init(Options{}, nil) }, ShouldPanic)
+				So(func() { c.Init(&Options{}, nil) }, ShouldPanic)
 			})
 			Convey("delete returns false when delete handler returns nil", func() {
 				c.deleteHandler = func(item *valuesItem) *keyValue {

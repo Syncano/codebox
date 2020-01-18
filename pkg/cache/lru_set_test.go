@@ -10,7 +10,7 @@ import (
 
 func TestLRUSetCache(t *testing.T) {
 	Convey("Given new LRU set", t, func() {
-		c := NewLRUSetCache(Options{Capacity: 3, CleanupInterval: 1 * time.Millisecond})
+		c := NewLRUSetCache(&Options{Capacity: 3, CleanupInterval: 1 * time.Millisecond})
 
 		So(c.janitor, ShouldNotBeNil)
 		So(c.deleteHandler, ShouldEqual, c.deleteHandler)

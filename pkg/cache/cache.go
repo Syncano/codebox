@@ -66,7 +66,7 @@ type DeleteHandler func(*valuesItem) *keyValue
 type EvictionHandler func(string, interface{})
 
 // Init initializes cache struct fields and starts janitor process.
-func (c *Cache) Init(options Options, deleteHandler DeleteHandler) {
+func (c *Cache) Init(options *Options, deleteHandler DeleteHandler) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -74,8 +74,8 @@ func (c *Cache) Init(options Options, deleteHandler DeleteHandler) {
 		panic("init on cache cannot be called twice")
 	}
 
-	mergo.Merge(&options, defaultOptions) // nolint - error not possible
-	c.options = options
+	mergo.Merge(options, defaultOptions) // nolint - error not possible
+	c.options = *options
 
 	if deleteHandler == nil {
 		deleteHandler = c.defaultDeleteHandler

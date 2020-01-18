@@ -23,7 +23,7 @@ func TestDownloader(t *testing.T) {
 	Convey("Given http server and initialized downloader", t, func() {
 		srv := http.Server{Addr: ":9123", Handler: http.HandlerFunc(handlerFunc)}
 		go srv.ListenAndServe()
-		downloader := NewDownloader(DownloaderOptions{RetryCount: 0})
+		downloader := NewDownloader(&DownloaderOptions{RetryCount: 0})
 
 		Convey("downloader processes all files as soon as they are ready", func() {
 			ctx := context.Background()

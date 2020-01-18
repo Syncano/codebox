@@ -22,8 +22,8 @@ import (
 )
 
 var (
-	lbOptions         = lb.ServerOptions{}
-	autoscalerOptions = autoscaler.Options{}
+	lbOptions         = &lb.ServerOptions{}
+	autoscalerOptions = &autoscaler.Options{}
 )
 
 var lbCmd = cli.Command{

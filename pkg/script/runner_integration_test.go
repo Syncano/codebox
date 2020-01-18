@@ -61,21 +61,21 @@ func TestRunnerIntegration(t *testing.T) {
 		So(err, ShouldBeNil)
 
 		// Initialize docker manager.
-		dockerMgr, err := docker.NewManager(docker.Options{ReservedCPU: 0.25}, cli)
+		dockerMgr, err := docker.NewManager(&docker.Options{ReservedCPU: 0.25}, cli)
 		So(err, ShouldBeNil)
 
 		// Initialize system checker.
 		syschecker := new(sys.SigarChecker)
 
 		// Initialize file repo.
-		repo := filerepo.New(filerepo.Options{
+		repo := filerepo.New(&filerepo.Options{
 			BasePath: os.Getenv("REPO_PATH"),
 		}, syschecker, new(filerepo.LinkFs), new(filerepo.Command))
 
 		redisCli := new(script.MockRedisClient)
 
 		// Initialize script runner.
-		runner, err := script.NewRunner(script.Options{
+		runner, err := script.NewRunner(&script.Options{
 			Concurrency:       2,
 			PruneImages:       false,
 			HostStoragePath:   os.Getenv("HOST_STORAGE_PATH"),

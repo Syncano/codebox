@@ -10,7 +10,6 @@ import (
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/blkiodev"
 	"github.com/docker/docker/api/types/container"
-	containertypes "github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/network"
 	units "github.com/docker/go-units"
@@ -37,7 +36,7 @@ type Options struct {
 }
 
 // DefaultOptions holds default options values for docker manager.
-var DefaultOptions = Options{
+var DefaultOptions = &Options{
 	BlkioDevice:   "/dev/sda",
 	Network:       "isolated_nw",
 	NetworkSubnet: "172.25.0.0/16",
@@ -71,8 +70,8 @@ const (
 )
 
 // NewManager initializes a new manager for docker.
-func NewManager(options Options, cli Client) (*StdManager, error) {
-	mergo.Merge(&options, DefaultOptions) // nolint - error not possible
+func NewManager(options *Options, cli Client) (*StdManager, error) {
+	mergo.Merge(options, DefaultOptions) // nolint - error not possible
 
 	// Get and save Info from docker.
 	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
@@ -85,7 +84,7 @@ func NewManager(options Options, cli Client) (*StdManager, error) {
 
 	m := StdManager{
 		client:  cli,
-		options: options,
+		options: *options,
 		info:    info,
 		runtime: gvisorRuntime,
 	}
@@ -186,7 +185,7 @@ func (m *StdManager) ListContainersByLabel(ctx context.Context, label string) ([
 }
 
 // ContainerCreate creates docker container for given image and command.
-func (m *StdManager) ContainerCreate(ctx context.Context, image, user string, cmd []string, env []string,
+func (m *StdManager) ContainerCreate(ctx context.Context, image, user string, cmd, env []string,
 	labels map[string]string, constraints *Constraints, binds []string) (string, error) {
 	stopTimeout := 0
 	containerConfig := container.Config{
@@ -265,8 +264,8 @@ func (m *StdManager) ContainerStop(ctx context.Context, containerID string) erro
 
 // ContainerUpdate updates given containerID.
 func (m *StdManager) ContainerUpdate(ctx context.Context, containerID string, constraints *Constraints) error {
-	_, err := m.client.ContainerUpdate(ctx, containerID, containertypes.UpdateConfig{
-		Resources: containertypes.Resources{
+	_, err := m.client.ContainerUpdate(ctx, containerID, container.UpdateConfig{
+		Resources: container.Resources{
 			NanoCPUs:  constraints.CPULimit,
 			CPUPeriod: constraints.CPUPeriod,
 			CPUQuota:  constraints.CPUQuota,
