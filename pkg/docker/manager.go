@@ -32,6 +32,7 @@ type Options struct {
 	Network       string
 	NetworkSubnet string
 	ReservedCPU   float64
+	DNS           []string
 	ExtraHosts    []string
 }
 
@@ -41,6 +42,7 @@ var DefaultOptions = &Options{
 	Network:       "isolated_nw",
 	NetworkSubnet: "172.25.0.0/16",
 	ReservedCPU:   0.25,
+	DNS:           []string{"208.67.222.222", "208.67.220.220"},
 }
 
 // ErrReservedCPUTooHigh signals that too we are trying to reserve more cpu than we got.
@@ -214,9 +216,15 @@ func (m *StdManager) ContainerCreate(ctx context.Context, image, user string, cm
 			Rate: constraints.IOPSLimit,
 		},
 	}
+
+	hostDNS := m.options.DNS
+	if len(hostDNS) == 0 {
+		hostDNS = nil
+	}
+
 	hostConfig := container.HostConfig{
 		Binds:       binds,
-		DNS:         []string{"208.67.222.222", "208.67.220.220"},
+		DNS:         hostDNS,
 		ExtraHosts:  m.options.ExtraHosts,
 		NetworkMode: container.NetworkMode(m.options.Network),
 		Resources: container.Resources{

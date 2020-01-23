@@ -137,6 +137,10 @@ var workerCmd = cli.Command{
 			EnvVar: "DOCKER_DEVICE", Value: docker.DefaultOptions.BlkioDevice, Destination: &dockerOptions.BlkioDevice,
 		},
 		cli.StringSliceFlag{
+			Name: "docker-dns", Usage: "docker DNS",
+			EnvVar: "DOCKER_DNS", Value: (*cli.StringSlice)(&docker.DefaultOptions.DNS),
+		},
+		cli.StringSliceFlag{
 			Name: "docker-extra-hosts", Usage: "docker extra hosts",
 			EnvVar: "DOCKER_EXTRA_HOSTS",
 		},
@@ -184,8 +188,10 @@ var workerCmd = cli.Command{
 		}
 
 		// Initialize docker manager.
-		logrus.WithField("options", dockerOptions).Debug("Initializing docker manager")
+		dockerOptions.DNS = c.StringSlice("docker-dns")
 		dockerOptions.ExtraHosts = c.StringSlice("docker-extra-hosts")
+
+		logrus.WithField("options", dockerOptions).Debug("Initializing docker manager")
 		dockerMgr, err := docker.NewManager(dockerOptions, cli)
 		if err != nil {
 			return err
