@@ -2,7 +2,7 @@
 export APP=codebox
 export VERSION="$2"
 
-export DOCKERIMAGE=${DOCKERIMAGE:-quay.io/syncano/codebox}
+export DOCKERIMAGE=${DOCKERIMAGE:-syncano/codebox}
 TARGET="$1"
 LB_TOTAL_NUM=1
 
@@ -76,6 +76,8 @@ if $PUSH; then
 	docker push "$DOCKERIMAGE":"$VERSION"
 fi
 
+IMAGE="$DOCKERIMAGE":"$VERSION"
+export IMAGE
 
 # Create configmap.
 echo "* Updating ConfigMap."

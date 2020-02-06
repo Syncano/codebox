@@ -24,7 +24,7 @@ spec:
         - name: syncano-k8s-pull-secret
       containers:
         - name: codebox-broker
-          image: {{ DOCKERIMAGE }}:{{ VERSION }}
+          image: {{ IMAGE }}
           command:
             - "codebox"
             - "broker"

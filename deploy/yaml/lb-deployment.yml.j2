@@ -31,7 +31,7 @@ spec:
             path: /tmp/codebox
       containers:
         - name: codebox-lb-{{ LB_NUM }}
-          image: {{ DOCKERIMAGE }}:{{ VERSION }}
+          image: {{ IMAGE }}
           command:
             - "codebox"
             - "lb"
