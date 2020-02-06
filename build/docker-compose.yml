@@ -3,7 +3,7 @@ version: '3'
 services:
   broker:
     command: codebox --debug broker
-    image: quay.io/syncano/codebox
+    image: syncano/codebox
     build: .
     depends_on:
       - lb
@@ -18,8 +18,8 @@ services:
       - REDIS_ADDR
 
   lb:
-    command: codebox --debug lb 
-    image: quay.io/syncano/codebox
+    command: codebox --debug lb
+    image: syncano/codebox
     build: .
     ports:
       - "9001:9000"
@@ -30,7 +30,7 @@ services:
   worker:
     command: codebox --debug worker
     user: root
-    image: quay.io/syncano/codebox
+    image: syncano/codebox
     privileged: true
     build: .
     depends_on:

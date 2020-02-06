@@ -1,5 +1,5 @@
 ifndef DOCKERIMAGE
-DOCKERIMAGE := quay.io/syncano/codebox
+DOCKERIMAGE := syncano/codebox
 endif
 
 CURRENTPACKAGE := github.com/Syncano/codebox
