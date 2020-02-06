@@ -76,6 +76,8 @@ if $PUSH; then
 	docker push "$DOCKERIMAGE":"$VERSION"
 fi
 
+IMAGE="$DOCKERIMAGE":"$VERSION"
+export IMAGE
 
 # Create configmap.
 echo "* Updating ConfigMap."
