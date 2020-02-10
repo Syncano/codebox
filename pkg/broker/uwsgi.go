@@ -225,7 +225,7 @@ func (s *Server) prepareRequest(r *http.Request, payload *uwsgiPayload) (*broker
 			TraceID:        tracePK,
 		},
 		LbMeta: &lbpb.RunRequest_MetaMessage{
-			RequestID:        util.GenerateKey(),
+			RequestID:        util.GenerateShortKey(),
 			ConcurrencyKey:   instancePK,
 			ConcurrencyLimit: payload.Run.ConcurrencyLimit,
 		},

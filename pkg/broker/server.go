@@ -160,7 +160,7 @@ func (s *Server) Run(request *brokerpb.RunRequest, stream brokerpb.ScriptRunner_
 	}
 
 	if request.LbMeta.RequestID == "" {
-		request.LbMeta.RequestID = util.GenerateKey()
+		request.LbMeta.RequestID = util.GenerateShortKey()
 	}
 
 	logger = logger.WithFields(logrus.Fields{

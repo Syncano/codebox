@@ -210,7 +210,7 @@ func (s *Server) Run(stream pb.ScriptRunner_RunServer) error {
 	}
 
 	if runMeta.RequestID == "" {
-		runMeta.RequestID = util.GenerateKey()
+		runMeta.RequestID = util.GenerateShortKey()
 	}
 
 	scriptMeta.RequestID = runMeta.RequestID
