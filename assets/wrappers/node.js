@@ -22,20 +22,16 @@ const SCRIPT_FUNC = new vm.Script(`
     __script.handleError(error)
   }
 
-  if (__f instanceof Promise) {
-    __f.catch(function (error) {
-      __script.handleError(error)
-    })
+  __f = Promise.resolve(__f)
 
-    __f.then(function (r) {
-      __script.setResponse(r)
-      __script.sendResponse()
-    })
+  __f.catch(function (error) {
+    __script.handleError(error)
+  })
 
-  } else {
-    __script.setResponse(__f)
+  __f.then(function (r) {
+    __script.setResponse(r)
     __script.sendResponse()
-}
+  })
 }`)
 
 let lastContext
@@ -191,10 +187,13 @@ function processScript (socket, context) {
   let opts = { timeout: timeout / 1e6 }
   if (scriptFunc === undefined) {
     let ret = script.runInNewContext(ctx, opts)
+
     if (typeof (ret) === 'function') {
       scriptFunc = ret
       ctx['__func'] = commonCtx['__func'] = scriptFunc
       SCRIPT_FUNC.runInNewContext(ctx, opts)
+    } else if (asyncMode) {
+      ctx['__script'].sendResponse()
     }
   } else {
     // Run script function if it's defined.
@@ -249,6 +248,7 @@ function processData (socket, chunk, position = 0) {
         process.stderr.write(lastContext.delim)
       })
     }
+
     setupDone = true
   } else {
     // Read context JSON.

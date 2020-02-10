@@ -98,7 +98,7 @@ func (s *Server) Run(stream pb.ScriptRunner_RunServer) error {
 	}
 
 	if meta.RequestID == "" {
-		meta.RequestID = util.GenerateKey()
+		meta.RequestID = util.GenerateShortKey()
 	}
 
 	peerAddr := util.PeerAddr(stream.Context())

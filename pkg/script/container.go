@@ -21,8 +21,8 @@ import (
 var (
 	// ErrTooManyConnections is an error signaling that there are too many simultaneous connections to container.
 	ErrTooManyConnections = errors.New("too many simultaneous connections")
-	// ErrConnectionNotFound is an error signaling that connection with specified ID was not found.
-	ErrConnectionNotFound = errors.New("connection not found")
+	// ErrConnectionIDReserved is an error signaling that connection with specified ID was already reserved.
+	ErrConnectionIDReserved = errors.New("connection already reserved")
 )
 
 // Container defines unique container information.
@@ -264,7 +264,7 @@ func (c *Container) Reserve(connID string, success func(numConns int) error) err
 	}
 
 	if _, ok := c.conns[connID]; ok {
-		return ErrConnectionNotFound
+		return ErrConnectionIDReserved
 	}
 
 	c.conns[connID] = struct{}{}

@@ -31,7 +31,7 @@ type Options struct {
 	BlkioDevice   string
 	Network       string
 	NetworkSubnet string
-	ReservedCPU   float64
+	ReservedMCPU  uint
 	DNS           []string
 	ExtraHosts    []string
 }
@@ -41,7 +41,7 @@ var DefaultOptions = &Options{
 	BlkioDevice:   "/dev/sda",
 	Network:       "isolated_nw",
 	NetworkSubnet: "172.25.0.0/16",
-	ReservedCPU:   0.25,
+	ReservedMCPU:  250,
 	DNS:           []string{"208.67.222.222", "208.67.220.220"},
 }
 
@@ -110,7 +110,7 @@ func NewManager(options *Options, cli Client) (*StdManager, error) {
 	}
 
 	// Check reserved cpu option.
-	if float64(info.NCPU) <= options.ReservedCPU {
+	if uint(info.NCPU*1e3) <= options.ReservedMCPU {
 		return nil, ErrReservedCPUTooHigh
 	}
 
@@ -232,7 +232,8 @@ func (m *StdManager) ContainerCreate(ctx context.Context, image, user string, cm
 			MemorySwap:           constraints.MemorySwapLimit,
 			Ulimits:              ulimits,
 			PidsLimit:            constraints.PidLimit,
-			NanoCPUs:             constraints.CPULimit,
+			CPUPeriod:            constraints.CPUPeriod,
+			CPUQuota:             constraints.CPUQuota,
 			BlkioDeviceReadIOps:  blkioThrottle,
 			BlkioDeviceWriteIOps: blkioThrottle,
 		},
@@ -274,7 +275,6 @@ func (m *StdManager) ContainerStop(ctx context.Context, containerID string) erro
 func (m *StdManager) ContainerUpdate(ctx context.Context, containerID string, constraints *Constraints) error {
 	_, err := m.client.ContainerUpdate(ctx, containerID, container.UpdateConfig{
 		Resources: container.Resources{
-			NanoCPUs:  constraints.CPULimit,
 			CPUPeriod: constraints.CPUPeriod,
 			CPUQuota:  constraints.CPUQuota,
 			Memory:    constraints.MemoryLimit,

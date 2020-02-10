@@ -122,7 +122,7 @@ func TestNewManager(t *testing.T) {
 						NCPU:         1,
 					}, nil,
 				)
-				m, e := NewManager(&Options{Network: "other_nw", ReservedCPU: 5000}, cli)
+				m, e := NewManager(&Options{Network: "other_nw", ReservedMCPU: 50000}, cli)
 				So(m, ShouldBeNil)
 				So(e, ShouldEqual, ErrReservedCPUTooHigh)
 			})

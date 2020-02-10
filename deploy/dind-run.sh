@@ -17,7 +17,7 @@ fi
 
 # Setup iptables
 if [ "${SETUP_FILTERING:-1}" == "1" ]; then
-    if iptables -t nat -n --list CODEBOX > /dev/null 2>&1; then 
+    if iptables -t nat -n --list CODEBOX > /dev/null 2>&1; then
         # Flush chain if it already exists
         iptables -t nat -F CODEBOX
     else

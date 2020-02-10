@@ -61,7 +61,7 @@ func TestRunnerIntegration(t *testing.T) {
 		So(err, ShouldBeNil)
 
 		// Initialize docker manager.
-		dockerMgr, err := docker.NewManager(&docker.Options{ReservedCPU: 0.25}, cli)
+		dockerMgr, err := docker.NewManager(&docker.Options{ReservedMCPU: 250}, cli)
 		So(err, ShouldBeNil)
 
 		// Initialize system checker.

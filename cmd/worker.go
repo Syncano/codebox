@@ -128,9 +128,9 @@ var workerCmd = cli.Command{
 			Name: "docker-network-subnet", Usage: "docker network subnet to create (if network is missing)",
 			EnvVar: "DOCKER_NETWORK_SUBNET", Value: docker.DefaultOptions.NetworkSubnet, Destination: &dockerOptions.NetworkSubnet,
 		},
-		cli.Float64Flag{
-			Name: "docker-reserved-cpu", Usage: "reserved cpu for docker runner",
-			EnvVar: "DOCKER_RESERVED_CPU", Value: docker.DefaultOptions.ReservedCPU, Destination: &dockerOptions.ReservedCPU,
+		cli.UintFlag{
+			Name: "docker-reserved-cpu", Usage: "reserved cpu for docker runner (in millicpu)",
+			EnvVar: "DOCKER_RESERVED_CPU", Value: docker.DefaultOptions.ReservedMCPU, Destination: &dockerOptions.ReservedMCPU,
 		},
 		cli.StringFlag{
 			Name: "docker-blkio-device", Usage: "docker blkio device to limit iops",
@@ -356,7 +356,7 @@ func startServer(
 		&lbpb.RegisterRequest{
 			Id:          poolID,
 			Port:        uint32(lis.Addr().(*net.TCPAddr).Port),
-			MCPU:        uint32(scriptOptions.MCPU - uint(dockerOptions.ReservedCPU*1000)),
+			MCPU:        uint32(scriptOptions.MCPU - dockerOptions.ReservedMCPU),
 			Memory:      syschecker.AvailableMemory(),
 			DefaultMCPU: uint32(scriptOptions.Constraints.CPULimit / 1e6),
 		}); err != nil {

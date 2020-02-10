@@ -171,6 +171,9 @@ const (
 	dockerDownloadTimeout = 5 * time.Minute
 	stdWriterPrefixLen    = 8
 	containerLogFormat    = "stream:%s:%s:log"
+
+	freezeCPUQuota  = 1000
+	freezeCPUPeriod = 1000000
 )
 
 // NewRunner initializes a new script runner.
@@ -193,7 +196,12 @@ func NewRunner(options *Options, dockerMgr docker.Manager, checker sys.SystemChe
 	}
 
 	// Calculate CPU and IOPS limit.
-	options.Constraints.CPULimit = int64((options.MCPU-uint(dockerMgr.Options().ReservedCPU*1e3))*1e6) / int64(options.Concurrency)
+	options.Constraints.CPULimit = int64((options.MCPU-dockerMgr.Options().ReservedMCPU)*1e6) / int64(options.Concurrency)
+	// Use the default setting of 100ms, as is specified in:
+	// https://www.kernel.org/doc/Documentation/scheduler/sched-bwc.txt
+	//    	cpu.cfs_period_us=100ms
+	options.Constraints.CPUPeriod = int64(100 * time.Millisecond / time.Microsecond)
+	options.Constraints.CPUQuota = options.Constraints.CPULimit * options.Constraints.CPUPeriod / 1e9
 	options.Constraints.IOPSLimit = options.NodeIOPS / uint64(options.Concurrency)
 
 	// Check memory requirements.
@@ -449,7 +457,7 @@ func (r *DockerRunner) Run(ctx context.Context, logger logrus.FieldLogger, runti
 }
 
 func (r *DockerRunner) processContainerDone(runtime string, cont *Container, requestID string, options *RunOptions, newContainer bool, err error) {
-	logger := logrus.WithError(err).WithField("container", cont)
+	logger := logrus.WithField("container", cont)
 	// Add new container if we took it from the pool.
 	recreate := newContainer
 
@@ -475,7 +483,9 @@ func (r *DockerRunner) processContainerDone(runtime string, cont *Container, req
 	// If we have an error at this point, stop accepting connections to container and mark it for cleanup.
 	if err != nil {
 		// Check for non critical errors.
+		logger = logger.WithError(err)
 		logFunc := logger.Warn
+
 		if err != util.ErrLimitReached && err != io.EOF && err != context.DeadlineExceeded && err != context.Canceled {
 			logFunc = logger.Error
 		}
@@ -674,27 +684,32 @@ func (r *DockerRunner) Shutdown() {
 }
 
 func (r *DockerRunner) reserveContainer(ctx context.Context, cont *Container, connID string, newCont bool, options *RunOptions, constraints *docker.Constraints) error {
-	a := cont.Reserve(connID, func(numConns int) error {
+	err := cont.Reserve(connID, func(numConns int) error {
 		if numConns == 1 {
 			// If it's the first concurrent connection, acquire semaphore and adapt docker container if needed.
 			if r.poolSemaphore.Acquire(ctx, int64(options.Weight)) != nil {
 				return ErrSemaphoreNotAcquired
 			}
+
 			freeCPUCounter.Add(-int64(options.MCPU))
 
 			// Set CPU/Memory resources for async container or if using higher weight for new non-async container.
 			if options.Async > 1 || (newCont && options.Weight > 1) {
 				ctx2, cancel := context.WithTimeout(ctx, dockerTimeout)
 				defer cancel()
+
+				logrus.WithField("container", cont).Info("Waking up container")
+
 				if err := r.dockerMgr.ContainerUpdate(ctx2, cont.ID, constraints); err != nil {
 					return err
 				}
 			}
 		}
+
 		return nil
 	})
 
-	return a
+	return err
 }
 
 func (r *DockerRunner) releaseContainer(cont *Container, requestID string, options *RunOptions) error {
@@ -703,6 +718,7 @@ func (r *DockerRunner) releaseContainer(cont *Container, requestID string, optio
 	if err := cont.Release(requestID, func(numConns int) error {
 		if numConns == 0 {
 			released = true
+
 			r.poolSemaphore.Release(int64(options.Weight))
 			freeCPUCounter.Add(int64(options.MCPU))
 
@@ -710,15 +726,19 @@ func (r *DockerRunner) releaseContainer(cont *Container, requestID string, optio
 			if options.Async > 1 {
 				ctx2, cancel := context.WithTimeout(context.Background(), dockerTimeout)
 				defer cancel()
+
+				logrus.WithField("container", cont).Info("Freezing container")
+
 				if err := r.dockerMgr.ContainerUpdate(ctx2, cont.ID, &docker.Constraints{
-					CPUPeriod:   1000000,
-					CPUQuota:    1000,
+					CPUPeriod:   freezeCPUPeriod,
+					CPUQuota:    freezeCPUQuota,
 					MemoryLimit: int64(options.Weight) * r.options.Constraints.MemoryLimit,
 				}); err != nil {
 					return err
 				}
 			}
 		}
+
 		return nil
 	}); err != nil {
 		return err
@@ -726,9 +746,11 @@ func (r *DockerRunner) releaseContainer(cont *Container, requestID string, optio
 
 	if released {
 		r.muHandler.RLock()
+
 		if r.onContainerReleased != nil {
 			go r.onContainerReleased(cont, options)
 		}
+
 		r.muHandler.RUnlock()
 	}
 
@@ -737,7 +759,8 @@ func (r *DockerRunner) releaseContainer(cont *Container, requestID string, optio
 
 func (r *DockerRunner) getContainer(ctx context.Context, runtime, requestID, sourceHash, environment, userID string, options *RunOptions) (conn io.ReadWriteCloser, cont *Container, newContainer bool, err error) { // nolint: gocyclo
 	constraints := &docker.Constraints{
-		CPULimit:    int64(options.Weight) * r.options.Constraints.CPULimit,
+		CPUPeriod:   r.options.Constraints.CPUPeriod,
+		CPUQuota:    int64(options.Weight) * r.options.Constraints.CPUQuota,
 		MemoryLimit: int64(options.Weight) * r.options.Constraints.MemoryLimit,
 	}
 
@@ -768,7 +791,7 @@ func (r *DockerRunner) getContainer(ctx context.Context, runtime, requestID, sou
 	if options.Async > 1 {
 		r.containerWaitLock.Lock()
 		if ch, ok := r.containerWait[containerHash]; ok {
-			r.containerWaitLock.Lock()
+			r.containerWaitLock.Unlock()
 			<-ch
 
 			return r.getContainer(ctx, runtime, requestID, sourceHash, environment, userID, options)
@@ -827,7 +850,7 @@ func (r *DockerRunner) getContainer(ctx context.Context, runtime, requestID, sou
 
 		ch := fmt.Sprintf(containerLogFormat, userID, sourceHash)
 
-		util.SubscribeRateLimited(cont.stdout,
+		go util.SubscribeRateLimited(cont.stdout,
 			lim,
 			func(message []byte) {
 				r.redisCli.Publish(ch, cont.ID+"\tO\t"+string(message))
@@ -839,7 +862,7 @@ func (r *DockerRunner) getContainer(ctx context.Context, runtime, requestID, sou
 				}
 			})
 
-		util.SubscribeRateLimited(cont.stderr,
+		go util.SubscribeRateLimited(cont.stderr,
 			lim,
 			func(message []byte) {
 				r.redisCli.Publish(ch, cont.ID+"\tE\t"+string(message))

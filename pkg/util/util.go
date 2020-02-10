@@ -30,6 +30,11 @@ func GenerateKey() string {
 	return GenerateRandomString(32)
 }
 
+// GenerateShortKey creates random string with length=6.
+func GenerateShortKey() string {
+	return GenerateRandomString(6)
+}
+
 // Retry retries f() and sleeps between retries.
 func Retry(attempts int, sleep time.Duration, f func() error) (err error) {
 	for i := 0; ; i++ {
