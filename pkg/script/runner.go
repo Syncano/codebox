@@ -582,6 +582,7 @@ func (r *DockerRunner) CreatePool() (string, error) {
 
 	// Create and fill container pool.
 	r.containerPool = make(map[string]chan *Container)
+	sem := make(chan struct{}, 4) // create only 4 at a time
 	done := make(chan error, r.options.Concurrency)
 
 	// Store codewrapper in repo.
@@ -604,6 +605,12 @@ func (r *DockerRunner) CreatePool() (string, error) {
 
 		for i := uint(0); i < r.options.Concurrency; i++ {
 			go func(runtime string) {
+				sem <- struct{}{}
+
+				defer func() {
+					<-sem
+				}()
+
 				ctx, cancel := context.WithTimeout(context.Background(), r.options.CreateTimeout)
 				defer cancel()
 
@@ -698,7 +705,9 @@ func (r *DockerRunner) reserveContainer(ctx context.Context, cont *Container, co
 				ctx2, cancel := context.WithTimeout(ctx, dockerTimeout)
 				defer cancel()
 
-				logrus.WithField("container", cont).Info("Waking up container")
+				if options.Async > 0 {
+					logrus.WithField("container", cont).Info("Waking up container")
+				}
 
 				if err := r.dockerMgr.ContainerUpdate(ctx2, cont.ID, constraints); err != nil {
 					return err
