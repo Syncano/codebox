@@ -606,9 +606,10 @@ func (r *DockerRunner) CreatePool() (string, error) {
 		for i := uint(0); i < r.options.Concurrency; i++ {
 			go func(runtime string) {
 				sem <- struct{}{}
+
 				defer func() {
 					<-sem
-				}
+				}()
 
 				ctx, cancel := context.WithTimeout(context.Background(), r.options.CreateTimeout)
 				defer cancel()
