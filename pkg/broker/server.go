@@ -164,13 +164,15 @@ func (s *Server) Run(request *brokerpb.RunRequest, stream brokerpb.ScriptRunner_
 	}
 
 	logger = logger.WithFields(logrus.Fields{
-		"reqID":            request.LbMeta.RequestID,
-		"concurrencyKey":   request.LbMeta.ConcurrencyKey,
-		"concurrencyLimit": request.LbMeta.ConcurrencyLimit,
-		"runtime":          scriptMeta.Runtime,
-		"sourceHash":       scriptMeta.SourceHash,
-		"entrypoint":       scriptMeta.GetOptions().GetEntryPoint(),
-		"userID":           scriptMeta.UserID,
+		"reqID":      request.LbMeta.RequestID,
+		"cKey":       request.LbMeta.ConcurrencyKey,
+		"cLimit":     request.LbMeta.ConcurrencyLimit,
+		"runtime":    scriptMeta.Runtime,
+		"sourceHash": scriptMeta.SourceHash,
+		"entryPoint": scriptMeta.GetOptions().GetEntryPoint(),
+		"async":      scriptMeta.GetOptions().GetAsync(),
+		"mcpu":       scriptMeta.GetOptions().GetMCPU(),
+		"userID":     scriptMeta.UserID,
 	})
 
 	runStream, err := s.processRun(ctx, logger, request)

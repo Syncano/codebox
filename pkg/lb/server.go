@@ -228,6 +228,9 @@ func (s *Server) processRun(stream pb.ScriptRunner_RunServer, runMeta *pb.RunReq
 		"meta":       runMeta,
 		"runtime":    scriptMeta.Runtime,
 		"sourceHash": scriptMeta.SourceHash,
+		"entryPoint": scriptMeta.GetOptions().GetEntryPoint(),
+		"async":      scriptMeta.GetOptions().GetAsync(),
+		"mcpu":       scriptMeta.GetOptions().GetMCPU(),
 		"userID":     scriptMeta.UserID,
 	})
 	start := time.Now()
