@@ -30,7 +30,7 @@ type contextFile struct {
 }
 
 type scriptSetup struct {
-	Async      bool          `json:"async"`
+	Async      uint32        `json:"async"`
 	EntryPoint string        `json:"entryPoint"`
 	Timeout    time.Duration `json:"timeout"`
 }
@@ -53,12 +53,12 @@ func nodeCommand(constraints *docker.Constraints) []string {
 
 // SupportedRuntimes defines info and constraints of all runtimes.
 var SupportedRuntimes = map[string]*RuntimeInfo{
-	"nodejs_v6": {
+	"nodejs_v12": {
 		FileName:          "node.js",
 		AssetName:         "wrappers/node.js",
 		Command:           nodeCommand,
 		Environment:       []string{"NODE_PATH=/app/env/node_modules:/app/code"},
-		Image:             "node:6-stretch",
+		Image:             "node:12-stretch",
 		User:              "node",
 		DefaultEntryPoint: "main.js",
 	},

@@ -75,7 +75,7 @@ func TestNewRunner(t *testing.T) {
 		opts := &Options{Concurrency: 1, CreateRetrySleep: 1 * time.Millisecond, MCPU: 1000}
 
 		err := errors.New("some error")
-		defaultRuntime := "nodejs_v6"
+		defaultRuntime := "nodejs_v8"
 		volKey := "volkey"
 		volPath := "volpath"
 		volRelPath := "volrelpath"
@@ -320,9 +320,8 @@ func TestNewRunner(t *testing.T) {
 				})
 			})
 
-			SkipConvey("onEvictedHandler gets called on container removal from cache", func() {
-				cont := &Container{ID: "someId", volumeKey: "someKey", SourceHash: "sourceHash", UserID: "userID"}
-				cont.StopAcceptingConnections()
+			Convey("onEvictedHandler gets called on container removal from cache", func() {
+				cont := &Container{ID: "someId", volumeKey: "someKey", SourceHash: "sourceHash", UserID: "userID", ok: 1}
 				r.containerCache.Set("hash", cont)
 				dockerMgr.On("ContainerStop", mock.Anything, "someId").Return(nil).Once()
 				repo.On("DeleteVolume", "someKey").Return(nil).Once()
@@ -342,7 +341,6 @@ func TestNewRunner(t *testing.T) {
 			})
 
 			Convey("createFreshContainer given mocked dependencies", func() {
-
 				Convey("propagates CreateVolume error", func() {
 					repo.On("CreateVolume").Return(volKey, volPath, err)
 					_, e := r.createFreshContainer(context.Background(), defaultRuntime)

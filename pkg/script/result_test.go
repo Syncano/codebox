@@ -25,7 +25,7 @@ func TestResultParsing(t *testing.T) {
 		So(res.Response, ShouldBeNil)
 	})
 	Convey("Given valid custom response, Parse parses struct correctly", t, func() {
-		data := []byte("\x32" + "\x30\x00\x00\x00" + `{"sc":200,"ct":"text/some-html","h":{"abc":"1"}}abc`)
+		data := []byte("\x32" + "\x02\x30\x00\x00\x00" + `{"sc":200,"ct":"text/some-html","h":{"abc":"1"}}abc`)
 		res := &script.Result{}
 		e := res.Parse(data, 1024, nil)
 		So(e, ShouldBeNil)
@@ -56,7 +56,7 @@ func TestResultParsing(t *testing.T) {
 		} {
 			buf := make([]byte, 4)
 			binary.LittleEndian.PutUint32(buf, uint32(len(resp)))
-			data := append(append([]byte("2"), buf...), resp...)
+			data := append(append([]byte{32, 2}, buf...), resp...)
 			res := &script.Result{}
 			e := res.Parse(data, 1024, nil)
 			So(e, ShouldBeNil)
@@ -86,7 +86,7 @@ func TestResultParsing(t *testing.T) {
 		} {
 			buf := make([]byte, 4)
 			binary.LittleEndian.PutUint32(buf, uint32(len(resp)))
-			data := append(append([]byte{1}, buf...), resp...)
+			data := append(append([]byte{1, 2}, buf...), resp...)
 			res := &script.Result{}
 			e := res.Parse(data, 1024, nil)
 			So(res.Code, ShouldEqual, 1)
@@ -101,7 +101,7 @@ func TestResultParsing(t *testing.T) {
 			res := &script.Result{}
 			e := res.Parse(data, 1024, nil)
 			So(res.Code, ShouldEqual, 1)
-			So(e, ShouldEqual, script.ErrIncorrectCustomResponse)
+			So(e, ShouldEqual, script.ErrIncorrectData)
 		}
 	})
 	Convey("Given deadline exceeded process error, Parse sets code to 124", t, func() {

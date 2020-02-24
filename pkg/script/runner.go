@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/hashicorp/yamux"
 	"github.com/imdario/mergo"
 	"github.com/juju/ratelimit"
 	"github.com/sirupsen/logrus"
@@ -486,7 +487,7 @@ func (r *DockerRunner) processContainerDone(runtime string, cont *Container, req
 		logger = logger.WithError(err)
 		logFunc := logger.Warn
 
-		if err != util.ErrLimitReached && err != io.EOF && err != context.DeadlineExceeded && err != context.Canceled {
+		if err != util.ErrLimitReached && err != io.EOF && err != context.DeadlineExceeded && err != context.Canceled && err != yamux.ErrSessionShutdown && err != yamux.ErrStreamClosed {
 			logFunc = logger.Error
 		}
 
@@ -988,6 +989,7 @@ func (r *DockerRunner) cleanupContainer(cont *Container) {
 
 func (r *DockerRunner) onEvictedContainerHandler(key string, val interface{}) {
 	cont := val.(*Container)
+
 	// Do not cleanup container already being marked for clean up (doing after run of last connection).
 	if !cont.IsAcceptingConnections() {
 		return

@@ -102,7 +102,7 @@ func (c *Container) setupCodewrapper(conn io.Writer, constraints *docker.Constra
 func (c *Container) setupSocket(conn io.Writer, options *RunOptions) error {
 	// Send socket wrapper setup.
 	setup := scriptSetup{
-		Async:      options.Async > 1,
+		Async:      options.Async,
 		EntryPoint: options.EntryPoint,
 		Timeout:    options.Timeout,
 	}
