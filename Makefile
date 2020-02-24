@@ -32,7 +32,7 @@ require-%:
 	fi
 
 download-images: require-docker ## Download wrapper docker images
-	docker pull node:6-stretch
+	docker pull node:12-stretch
 	docker pull node:8-stretch
 
 clean: ## Cleanup repository

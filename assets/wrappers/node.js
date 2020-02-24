@@ -2,10 +2,14 @@ const fs = require('fs')
 const path = require('path')
 const vm = require('vm')
 const net = require('net')
+const util = require('util')
 
 const APP_PATH = '/app/code'
 const APP_LISTEN = '/tmp/wrapper.sock'
 const ENV_PATH = '/app/env'
+const STREAM_STDOUT = 0
+const STREAM_STDERR = 1
+const STREAM_RESPONSE = 2
 const SCRIPT_FUNC = new vm.Script(`
 {
   let __f
@@ -16,7 +20,9 @@ const SCRIPT_FUNC = new vm.Script(`
         meta: META,
         config: CONFIG,
         HttpResponse,
-        setResponse,
+        setResponse: __script.setResponse,
+        log: __script.log,
+        error: __script.error,
     })
   } catch (error) {
     __script.handleError(error)
@@ -105,6 +111,8 @@ class ScriptContext {
     this.outputResponse = null
     this.exitCode = null
     this.delim = delim
+    this.stdout = ''
+    this.stderr = ''
   }
 
   setResponse (response) {
@@ -119,8 +127,9 @@ class ScriptContext {
       return
     }
 
-    console.error(error)
-    if (error.message === 'Script execution timed out.') {
+    this.error(error)
+
+    if (error.toString().startsWith('Error: Script execution timed out')) {
       this.exitCode = 124
     } else {
       this.exitCode = 1
@@ -138,13 +147,20 @@ class ScriptContext {
     }
 
     this.socket.write(String.fromCharCode(exitCode))
+
+    if (this.stdout.length !== 0) {
+      sendData(this.socket, STREAM_STDOUT, this.stdout)
+    }
+
+    if (this.stderr.length !== 0) {
+      sendData(this.socket, STREAM_STDERR, this.stderr)
+    }
+
     if (this.outputResponse !== null && this.outputResponse instanceof HttpResponse) {
-      let json = this.outputResponse.json()
-      let jsonLen = Buffer.allocUnsafe(4)
-      jsonLen.writeUInt32LE(Buffer.byteLength(json))
-      this.socket.write(jsonLen)
-      this.socket.write(json)
+      sendData(this.socket, STREAM_RESPONSE, this.outputResponse.json())
+
       let content = this.outputResponse.content
+
       if (typeof (content) !== 'string' && !(content instanceof HttpResponse)) {
         content = JSON.stringify(content)
       }
@@ -152,6 +168,31 @@ class ScriptContext {
     }
     this.socket.end()
   }
+
+  log (data, ...args) {
+    if (asyncMode) {
+      this.stdout += `${util.format(data, ...args)}\n`
+    } else {
+      console.log(data, ...args)
+    }
+  }
+
+  error (data, ...args) {
+    if (asyncMode) {
+      this.stderr += `${util.format(data, ...args)}\n`
+    } else {
+      console.error(data, ...args)
+    }
+  }
+}
+
+function sendData(socket, type, data) {
+    let len = Buffer.allocUnsafe(4)
+    len.writeUInt32LE(Buffer.byteLength(data))
+
+    socket.write(String.fromCharCode(type))
+    socket.write(len)
+    socket.write(data)
 }
 
 // Main process script function.
@@ -185,19 +226,28 @@ function processScript (socket, context) {
 
   // Run script.
   let opts = { timeout: timeout / 1e6 }
-  if (scriptFunc === undefined) {
-    let ret = script.runInNewContext(ctx, opts)
 
-    if (typeof (ret) === 'function') {
-      scriptFunc = ret
-      ctx['__func'] = commonCtx['__func'] = scriptFunc
+  try {
+    if (scriptFunc === undefined) {
+      let ret = script.runInNewContext(ctx, opts)
+
+      if (typeof ret === 'function') {
+        scriptFunc = ret
+        ctx['__func'] = commonCtx['__func'] = scriptFunc
+        SCRIPT_FUNC.runInNewContext(ctx, opts)
+      } else if (asyncMode) {
+        ctx['__script'].sendResponse()
+      }
+    } else {
+      // Run script function if it's defined.
       SCRIPT_FUNC.runInNewContext(ctx, opts)
-    } else if (asyncMode) {
+    }
+  } catch (error) {
+    ctx['__script'].handleError(error)
+
+    if (asyncMode) {
       ctx['__script'].sendResponse()
     }
-  } else {
-    // Run script function if it's defined.
-    SCRIPT_FUNC.runInNewContext(ctx, opts)
   }
 }
 
@@ -232,7 +282,7 @@ function processData (socket, chunk, position = 0) {
     // Process setup package.
     entryPoint = message.entryPoint
     timeout = message.timeout
-    asyncMode = message.async
+    asyncMode = message.async > 1
 
     // Setup non async mode hooks.
     if (!asyncMode) {

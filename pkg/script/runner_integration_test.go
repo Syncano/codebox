@@ -28,6 +28,12 @@ type scriptTest struct {
 	script  string
 }
 
+type scriptExpectedTest struct {
+	runtime  string
+	script   string
+	expected string
+}
+
 type scriptTimeoutTest struct {
 	runtime          string
 	script           string
@@ -90,10 +96,10 @@ func TestRunnerIntegration(t *testing.T) {
 
 		Convey("runs simple scripts", func() {
 			var tests = []scriptTest{
-				{"nodejs_v6", `console.log(ARGS['arg'] + META['meta'] + CONFIG['cfg'] + '¿¡!')`},
-				{"nodejs_v6", `exports.default = (ctx) => { console.log(ctx.args['arg'] + ctx.meta['meta'] + ctx.config['cfg'] + '¿¡!') }`},
-				{"nodejs_v6", `module.exports=function(n){function r(t){if(e[t])return e[t].exports;var o=e[t]={i:t,l:!1,exports:{}};return n[t].call(o.exports,o,o.exports,r),o.l=!0,o.exports}var e={};return r.m=n,r.c=e,r.i=function(n){return n},r.d=function(n,e,t){r.o(n,e)||Object.defineProperty(n,e,{configurable:!1,enumerable:!0,get:t})},r.n=function(n){var e=n&&n.__esModule?function(){return n.default}:function(){return n};return r.d(e,"a",e),e},r.o=function(n,r){return Object.prototype.hasOwnProperty.call(n,r)},r.p="",r(r.s=239)}({239:function(n,r){console.log(ARGS['arg']+META['meta']+CONFIG['cfg']+'¿¡!')}});`},
 				{"nodejs_v8", `console.log(ARGS['arg'] + META['meta'] + CONFIG['cfg'] + '¿¡!')`},
+				{"nodejs_v8", `exports.default = (ctx) => { console.log(ctx.args['arg'] + ctx.meta['meta'] + ctx.config['cfg'] + '¿¡!') }`},
+				{"nodejs_v8", `module.exports=function(n){function r(t){if(e[t])return e[t].exports;var o=e[t]={i:t,l:!1,exports:{}};return n[t].call(o.exports,o,o.exports,r),o.l=!0,o.exports}var e={};return r.m=n,r.c=e,r.i=function(n){return n},r.d=function(n,e,t){r.o(n,e)||Object.defineProperty(n,e,{configurable:!1,enumerable:!0,get:t})},r.n=function(n){var e=n&&n.__esModule?function(){return n.default}:function(){return n};return r.d(e,"a",e),e},r.o=function(n,r){return Object.prototype.hasOwnProperty.call(n,r)},r.p="",r(r.s=239)}({239:function(n,r){console.log(ARGS['arg']+META['meta']+CONFIG['cfg']+'¿¡!')}});`},
+				{"nodejs_v12", `console.log(ARGS['arg'] + META['meta'] + CONFIG['cfg'] + '¿¡!')`},
 			}
 			for _, data := range tests {
 				hash := util.GenerateKey()
@@ -118,9 +124,9 @@ func TestRunnerIntegration(t *testing.T) {
 		})
 
 		Convey("runs script with files", func() {
-			var tests = []scriptTest{
-				{"nodejs_v6", `console.log(Object.keys(ARGS).length, ARGS['file'].filename, ARGS['file'].contentType, ARGS['file'].length)`},
-				{"nodejs_v8", `console.log(Object.keys(ARGS).length, ARGS['file'].filename, ARGS['file'].contentType, ARGS['file'].length)`},
+			var tests = []scriptExpectedTest{
+				{"nodejs_v8", `console.log(Object.keys(ARGS).length, ARGS['file'].filename, ARGS['file'].contentType, ARGS['file'].length)`, "1 'fname' 'ctype' 10\n"},
+				{"nodejs_v12", `console.log(Object.keys(ARGS).length, ARGS['file'].filename, ARGS['file'].contentType, ARGS['file'].length)`, "1 fname ctype 10\n"},
 			}
 			for _, data := range tests {
 				hash := util.GenerateKey()
@@ -133,7 +139,7 @@ func TestRunnerIntegration(t *testing.T) {
 
 				So(res.Code, ShouldEqual, 0)
 				So(res.Took, ShouldBeGreaterThan, 0)
-				So(string(res.Stdout), ShouldEqual, "1 'fname' 'ctype' 10\n")
+				So(string(res.Stdout), ShouldEqual, data.expected)
 				So(res.Stderr, ShouldBeEmpty)
 				So(res.Response, ShouldBeNil)
 			}
@@ -141,10 +147,10 @@ func TestRunnerIntegration(t *testing.T) {
 
 		Convey("runs scripts with custom response", func() {
 			var tests = []scriptTest{
-				{"nodejs_v6", `setResponse(new HttpResponse(200, 'content', 'content/type', {a:1, b:'c'})); console.log('codebox')`},
 				{"nodejs_v8", `setResponse(new HttpResponse(200, 'content', 'content/type', {a:1, b:'c'})); console.log('codebox')`},
-				{"nodejs_v8", `exports.default = (ctx) => { console.log('codebox'); return new ctx.HttpResponse(200, 'content', 'content/type', {a:1, b:'c'}); }`},
-				{"nodejs_v8", `exports.default = async function(ctx) { console.log('codebox'); return new ctx.HttpResponse(200, 'content', 'content/type', {a:1, b:'c'}); }`},
+				{"nodejs_v12", `setResponse(new HttpResponse(200, 'content', 'content/type', {a:1, b:'c'})); console.log('codebox')`},
+				{"nodejs_v12", `exports.default = (ctx) => { console.log('codebox'); return new ctx.HttpResponse(200, 'content', 'content/type', {a:1, b:'c'}); }`},
+				{"nodejs_v12", `exports.default = async function(ctx) { console.log('codebox'); return new ctx.HttpResponse(200, 'content', 'content/type', {a:1, b:'c'}); }`},
 			}
 			for _, data := range tests {
 				hash := util.GenerateKey()
@@ -181,8 +187,8 @@ func TestRunnerIntegration(t *testing.T) {
 			os.Remove(squashfs)
 
 			var tests = []scriptTest{
-				{"nodejs_v6", `require('fs').readdirSync('/app/env/node_modules').forEach(file => { console.log(file) })`},
 				{"nodejs_v8", `require('fs').readdirSync('/app/env/node_modules').forEach(file => { console.log(file) })`},
+				{"nodejs_v12", `require('fs').readdirSync('/app/env/node_modules').forEach(file => { console.log(file) })`},
 			}
 			for _, data := range tests {
 				env := util.GenerateKey()
@@ -204,7 +210,7 @@ func TestRunnerIntegration(t *testing.T) {
 
 		Convey("handles squashfs malfunctioning properly", func() {
 			var tests = []scriptTest{
-				{"nodejs_v6", ``},
+				{"nodejs_v8", ``},
 			}
 			for _, data := range tests {
 				env := util.GenerateKey()
@@ -223,8 +229,8 @@ func TestRunnerIntegration(t *testing.T) {
 
 		Convey("runs scripts with custom entry point", func() {
 			var tests = []scriptTest{
-				{"nodejs_v6", `console.log(__dirname); console.log(__filename)`},
 				{"nodejs_v8", `console.log(__dirname); console.log(__filename)`},
+				{"nodejs_v12", `console.log(__dirname); console.log(__filename)`},
 			}
 			for _, data := range tests {
 				hash := util.GenerateKey()
@@ -244,9 +250,9 @@ func TestRunnerIntegration(t *testing.T) {
 			graceTimeout := 3 * time.Second
 
 			var tests = []scriptTimeoutTest{
-				{"nodejs_v6", `console.log('codebox'); while(true){}`, false},
 				{"nodejs_v8", `console.log('codebox'); while(true){}`, false},
-				{"nodejs_v6", `console.log('codebox'); setTimeout(function(){}, 30000)`, true},
+				{"nodejs_v12", `console.log('codebox'); while(true){}`, false},
+				{"nodejs_v8", `console.log('codebox'); setTimeout(function(){}, 30000)`, true},
 			}
 			for _, data := range tests {
 				t := time.Now()
@@ -274,7 +280,6 @@ func TestRunnerIntegration(t *testing.T) {
 
 		Convey("runs scripts with out of memory error", func() {
 			var tests = []scriptTest{
-				{"nodejs_v6", `console.log('codebox'); a=Array(128*1024*1024).join('a'); b=Array(128*1024*1024).join('a');`},
 				{"nodejs_v8", `console.log('codebox'); a=Array(128*1024*1024).join('a'); b=Array(128*1024*1024).join('a');`},
 			}
 			for _, data := range tests {
@@ -293,8 +298,8 @@ func TestRunnerIntegration(t *testing.T) {
 
 		Convey("runs weighted scripts", func() {
 			var tests = []scriptTest{
-				{"nodejs_v6", `console.log('codebox')`},
 				{"nodejs_v8", `console.log('codebox')`},
+				{"nodejs_v12", `console.log('codebox')`},
 			}
 			for _, data := range tests {
 				hash := util.GenerateKey()
@@ -309,6 +314,25 @@ func TestRunnerIntegration(t *testing.T) {
 				So(res.Stderr, ShouldBeEmpty)
 				So(res.Response, ShouldBeNil)
 				So(res.Weight, ShouldEqual, 2)
+			}
+		})
+
+		Convey("runs async scripts", func() {
+			var tests = []scriptTest{
+				{"nodejs_v8", `__script.log('codebox'); abrakadabra`},
+				{"nodejs_v12", `__script.log('codebox'); abrakadabra`},
+			}
+			for _, data := range tests {
+				hash := util.GenerateKey()
+				err := uploadFile(repo, hash, []byte(data.script), script.SupportedRuntimes[data.runtime].DefaultEntryPoint)
+				So(err, ShouldBeNil)
+				res, err := runner.Run(context.Background(), logrus.StandardLogger(), data.runtime, "reqID", hash, "", "user", &script.RunOptions{Async: 100})
+				So(err, ShouldBeNil)
+
+				So(res.Code, ShouldEqual, 1)
+				So(string(res.Stdout), ShouldEqual, "codebox\n")
+				So(string(res.Stderr), ShouldContainSubstring, "ReferenceError: abrakadabra is not defined\n")
+				So(res.Response, ShouldBeNil)
 			}
 		})
 

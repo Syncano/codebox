@@ -112,7 +112,7 @@ setTimeout(function() {
 
 			// Simple request.
 			requestMeta := scriptpb.RunRequest_MetaMessage{
-				Runtime:    "nodejs_v6",
+				Runtime:    "nodejs_v8",
 				SourceHash: "hash",
 				Options: &scriptpb.RunRequest_MetaMessage_OptionsMessage{
 					EntryPoint: "file.js",
