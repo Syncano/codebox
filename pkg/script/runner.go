@@ -37,9 +37,8 @@ type DockerRunner struct {
 	poolSemaphore  *semaphore.Weighted
 	taskWaitGroup  sync.WaitGroup
 
-	muHandler           sync.RWMutex
-	onContainerRemoved  ContainerRemovedHandler
-	onContainerReleased ContainerReleasedHandler
+	muHandler          sync.RWMutex
+	onContainerRemoved ContainerRemovedHandler
 
 	containerWaitLock sync.Mutex
 	containerWait     map[string]chan struct{}
@@ -108,9 +107,6 @@ var DefaultOptions = &Options{
 
 	HostStoragePath: "/home/codebox/storage",
 }
-
-// ContainerReleasedHandler is a callback function called whenever run has finished.
-type ContainerReleasedHandler func(cont *Container, options *RunOptions)
 
 // ContainerRemovedHandler is a callback function called whenever container is removed.
 type ContainerRemovedHandler func(cont *Container)
@@ -451,7 +447,7 @@ func (r *DockerRunner) Run(ctx context.Context, logger logrus.FieldLogger, runti
 		ret.Overhead = took - ret.Took
 	}
 
-	// Cleanup only if it's the last connection.
+	// Process after run of container (cleanup etc).
 	go r.afterRun(runtime, cont, requestID, options, newContainer, err)
 
 	return ret, err
@@ -579,7 +575,7 @@ func (r *DockerRunner) CreatePool() (string, error) {
 	}
 
 	// Set free resources counter.
-	freeCPUCounter.Set(int64(r.options.MCPU))
+	freeCPUCounter.Set(int64(r.options.MCPU - r.dockerMgr.Options().ReservedMCPU))
 
 	// Create and fill container pool.
 	r.containerPool = make(map[string]chan *Container)
@@ -645,7 +641,6 @@ func (r *DockerRunner) StopPool() {
 	}
 
 	r.OnContainerRemoved(nil)
-	r.OnContainerReleased(nil)
 
 	r.setRunning(false)
 	logrus.Info("Stopping pool")
@@ -723,12 +718,8 @@ func (r *DockerRunner) reserveContainer(ctx context.Context, cont *Container, co
 }
 
 func (r *DockerRunner) releaseContainer(cont *Container, requestID string, options *RunOptions) error {
-	released := false
-
 	if err := cont.Release(requestID, func(numConns int) error {
 		if numConns == 0 {
-			released = true
-
 			r.poolSemaphore.Release(int64(options.Weight))
 			freeCPUCounter.Add(int64(options.MCPU))
 
@@ -752,16 +743,6 @@ func (r *DockerRunner) releaseContainer(cont *Container, requestID string, optio
 		return nil
 	}); err != nil {
 		return err
-	}
-
-	if released {
-		r.muHandler.RLock()
-
-		if r.onContainerReleased != nil {
-			go r.onContainerReleased(cont, options)
-		}
-
-		r.muHandler.RUnlock()
 	}
 
 	return nil
@@ -1020,14 +1001,6 @@ func (r *DockerRunner) setRunning(running bool) {
 func (r *DockerRunner) OnContainerRemoved(f ContainerRemovedHandler) {
 	r.muHandler.Lock()
 	r.onContainerRemoved = f
-	r.muHandler.Unlock()
-}
-
-// OnContainerReleased sets an (optional) function that when container has been released.
-// Set to nil to disable.
-func (r *DockerRunner) OnContainerReleased(f ContainerReleasedHandler) {
-	r.muHandler.Lock()
-	r.onContainerReleased = f
 	r.muHandler.Unlock()
 }
 

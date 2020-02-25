@@ -107,13 +107,14 @@ func TestServerMethods(t *testing.T) {
 					scriptCli := new(scriptmocks.ScriptRunnerClient)
 					conn, _ := grpc.Dial("localhost", grpc.WithInsecure())
 					worker := Worker{
-						ID:        "id",
-						mCPU:      1,
-						alive:     true,
-						repoCli:   repoCli,
-						scriptCli: scriptCli,
-						scripts:   make(map[ScriptInfo]int),
-						conn:      conn,
+						ID:         "id",
+						mCPU:       1,
+						alive:      true,
+						repoCli:    repoCli,
+						scriptCli:  scriptCli,
+						containers: make(map[string]*WorkerContainer),
+						scripts:    make(map[ScriptInfo]int),
+						conn:       conn,
 					}
 					stdout := []byte("stdout")
 					s.workers.Set("id", &worker)
@@ -281,7 +282,7 @@ func TestServerMethods(t *testing.T) {
 				s.workers.Set("id3", NewWorker("id2", net.TCPAddr{}, 1, 2, 128))
 
 				wi, fromCache := s.grabWorker(ci)
-				So(wi.ID, ShouldEqual, "id2")
+				So(wi.Worker.ID, ShouldEqual, "id2")
 				So(fromCache, ShouldBeFalse)
 			})
 			Convey("prefers worker from container cache if available and slots>0", func() {
@@ -291,7 +292,7 @@ func TestServerMethods(t *testing.T) {
 
 				w2.AddCache(s.workerContainerCache, ci, "id2", &WorkerContainer{Worker: w2})
 				w, fromCache := s.grabWorker(ci)
-				So(w.ID, ShouldEqual, "id2")
+				So(w.Worker.ID, ShouldEqual, "id2")
 				So(fromCache, ShouldBeTrue)
 			})
 			Convey("skips worker from container cache if it's missing from cache", func() {
@@ -300,7 +301,7 @@ func TestServerMethods(t *testing.T) {
 
 				w2.AddCache(s.workerContainerCache, ci, "id1", &WorkerContainer{Worker: w2})
 				w, fromCache := s.grabWorker(ci)
-				So(w.ID, ShouldEqual, "id1")
+				So(w.Worker.ID, ShouldEqual, "id1")
 				So(fromCache, ShouldBeFalse)
 			})
 			Convey("prefers worker from container cache with higher free cpu/conns", func() {
@@ -312,7 +313,7 @@ func TestServerMethods(t *testing.T) {
 				w1.AddCache(s.workerContainerCache, ci, "id1", &WorkerContainer{Worker: w1})
 				w2.AddCache(s.workerContainerCache, ci, "id2", &WorkerContainer{Worker: w2})
 				w, fromCache := s.grabWorker(ci)
-				So(w.ID, ShouldEqual, "id1")
+				So(w.Worker.ID, ShouldEqual, "id1")
 				So(fromCache, ShouldBeTrue)
 				w1.RemoveCache(s.workerContainerCache, ci, "id1")
 				So(s.workerContainerCache[ci], ShouldHaveLength, 1)
@@ -344,10 +345,6 @@ func TestServerMethods(t *testing.T) {
 			So(wi.ID, ShouldEqual, "id2")
 		})
 
-		Convey("ResourceRelease returns unregistered error on unknown id", func() {
-			_, e := s.ResourceRelease(context.Background(), &pb.ResourceReleaseRequest{Id: "id1"})
-			So(e, ShouldEqual, ErrUnknownWorkerID)
-		})
 		Convey("ContainerRemoved returns unregistered error on unknown id", func() {
 			_, e := s.ContainerRemoved(context.Background(), &pb.ContainerRemovedRequest{Id: "id1"})
 			So(e, ShouldEqual, ErrUnknownWorkerID)
@@ -372,13 +369,6 @@ func TestServerMethods(t *testing.T) {
 			Convey("Heartbeat succeeds", func() {
 				_, e := s.Heartbeat(context.Background(), &pb.HeartbeatRequest{Id: "id1"})
 				So(e, ShouldBeNil)
-			})
-			Convey("ResourceRelease increases free cpu", func() {
-				freeCPU := wi.freeCPU
-				_, e := s.ResourceRelease(context.Background(), &pb.ResourceReleaseRequest{Id: "id1", MCPU: 150})
-				So(e, ShouldBeNil)
-
-				So(s.workers.Get("id1").(*Worker).freeCPU, ShouldEqual, freeCPU+150)
 			})
 			Convey("given container in cache", func() {
 				ci := ScriptInfo{SourceHash: "hash", UserID: "user"}

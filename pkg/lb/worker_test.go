@@ -37,26 +37,27 @@ func TestWorker(t *testing.T) {
 		repoCli := new(repomocks.RepoClient)
 		scriptCli := new(scriptmocks.ScriptRunnerClient)
 		worker := &Worker{
-			ID:        "id",
-			freeCPU:   2000,
-			alive:     true,
-			repoCli:   repoCli,
-			scriptCli: scriptCli,
-			scripts:   make(map[ScriptInfo]int),
+			ID:         "id",
+			freeCPU:    2000,
+			alive:      true,
+			repoCli:    repoCli,
+			scriptCli:  scriptCli,
+			containers: make(map[string]*WorkerContainer),
+			scripts:    make(map[ScriptInfo]int),
 		}
 		cont := &WorkerContainer{Worker: worker}
 
 		Convey("Reserve returns false for dead worker", func() {
 			worker.alive = false
-			So(worker.Reserve(100, false), ShouldBeFalse)
-			So(cont.Reserve(100), ShouldBeFalse)
+			So(worker.reserve(100, 1, false), ShouldBeFalse)
+			So(cont.Reserve(), ShouldBeFalse)
 			So(worker.FreeCPU(), ShouldEqual, 2000)
 		})
 		Convey("Reserve returns false when requireSlots is true and there are < 0 slots", func() {
-			So(worker.Reserve(2000, true), ShouldBeTrue)
-			So(worker.Reserve(2000, true), ShouldBeFalse)
+			So(worker.reserve(2000, 1, true), ShouldBeTrue)
+			So(worker.reserve(2000, 1, true), ShouldBeFalse)
 			So(worker.FreeCPU(), ShouldEqual, 0)
-			So(worker.Reserve(2000, false), ShouldBeTrue)
+			So(worker.reserve(2000, 1, false), ShouldBeTrue)
 			So(worker.FreeCPU(), ShouldEqual, -2000)
 		})
 

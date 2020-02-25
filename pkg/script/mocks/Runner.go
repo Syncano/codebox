@@ -66,11 +66,6 @@ func (_m *Runner) IsRunning() bool {
 	return r0
 }
 
-// OnContainerReleased provides a mock function with given fields: f
-func (_m *Runner) OnContainerReleased(f script.ContainerReleasedHandler) {
-	_m.Called(f)
-}
-
 // OnContainerRemoved provides a mock function with given fields: f
 func (_m *Runner) OnContainerRemoved(f script.ContainerRemovedHandler) {
 	_m.Called(f)

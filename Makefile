@@ -94,13 +94,9 @@ generate: generate-assets ## Run go generate
 	go generate ./...
 
 proto: require-protoc ## Run protobuf compiler on all .proto files
-	if ! which protoc-gen-go > /dev/null; then \
-		echo "Installing protoc-gen-gofast"; \
-		go get -u -v github.com/gogo/protobuf/protoc-gen-gofast; \
-	fi
 	for dir in $$(find . -name \*.proto -type f ! -path "./.*" -exec dirname {} \; | sort | uniq); do \
 		protoc -I. \
-			--gofast_out=plugins=grpc:$(GOPATH)/src \
+			--go_out=paths=source_relative,plugins=grpc:. \
 			$$dir/*.proto; \
 	done
 
