@@ -17,6 +17,7 @@ import (
 	. "github.com/smartystreets/goconvey/convey"
 	"google.golang.org/grpc"
 
+	"github.com/Syncano/codebox/pkg/docker"
 	repopb "github.com/Syncano/codebox/pkg/filerepo/proto"
 	lbpb "github.com/Syncano/codebox/pkg/lb/proto"
 	"github.com/Syncano/codebox/pkg/script"
@@ -207,7 +208,7 @@ setTimeout(function() {
 			lbVars := readJSON("http://localhost:9080/debug/vars")
 			workerVars := readJSON("http://localhost:9180/debug/vars")
 			So(lbVars["workers"].(float64), ShouldEqual, 1)
-			So(workerVars["cpu"].(float64), ShouldEqual, script.DefaultOptions.MCPU)
+			So(workerVars["cpu"].(float64), ShouldEqual, script.DefaultOptions.MCPU-docker.DefaultOptions.ReservedMCPU)
 		})
 
 		// Kill started processes and their children.
