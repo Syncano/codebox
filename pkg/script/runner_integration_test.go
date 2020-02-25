@@ -148,7 +148,7 @@ func TestRunnerIntegration(t *testing.T) {
 		Convey("runs scripts with custom response", func() {
 			var tests = []scriptTest{
 				{"nodejs_v8", `setResponse(new HttpResponse(200, 'content', 'content/type', {a:1, b:'c'})); console.log('codebox')`},
-				{"nodejs_v12", `setResponse(new HttpResponse(200, 'content', 'content/type', {a:1, b:'c'})); console.log('codebox')`},
+				{"nodejs_v12", `exports.default = (ctx) => { ctx.setResponse(new HttpResponse(200, 'content', 'content/type', {a:1, b:'c'})); console.log('codebox'); }`},
 				{"nodejs_v12", `exports.default = (ctx) => { console.log('codebox'); return new ctx.HttpResponse(200, 'content', 'content/type', {a:1, b:'c'}); }`},
 				{"nodejs_v12", `exports.default = async function(ctx) { console.log('codebox'); return new ctx.HttpResponse(200, 'content', 'content/type', {a:1, b:'c'}); }`},
 			}
@@ -319,8 +319,8 @@ func TestRunnerIntegration(t *testing.T) {
 
 		Convey("runs async scripts", func() {
 			var tests = []scriptTest{
-				{"nodejs_v8", `__script.log('codebox'); abrakadabra`},
-				{"nodejs_v12", `__script.log('codebox'); abrakadabra`},
+				{"nodejs_v8", `exports.default = (ctx) => { ctx.log('codebox'); abrakadabra }`},
+				{"nodejs_v12", `exports.default = (ctx) => { ctx.log('codebox'); abrakadabra }`},
 			}
 			for _, data := range tests {
 				hash := util.GenerateKey()
