@@ -102,26 +102,3 @@ func (_m *WorkerPlugServer) Register(_a0 context.Context, _a1 *proto.RegisterReq
 
 	return r0, r1
 }
-
-// ResourceRelease provides a mock function with given fields: _a0, _a1
-func (_m *WorkerPlugServer) ResourceRelease(_a0 context.Context, _a1 *proto.ResourceReleaseRequest) (*proto.ResourceReleaseResponse, error) {
-	ret := _m.Called(_a0, _a1)
-
-	var r0 *proto.ResourceReleaseResponse
-	if rf, ok := ret.Get(0).(func(context.Context, *proto.ResourceReleaseRequest) *proto.ResourceReleaseResponse); ok {
-		r0 = rf(_a0, _a1)
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*proto.ResourceReleaseResponse)
-		}
-	}
-
-	var r1 error
-	if rf, ok := ret.Get(1).(func(context.Context, *proto.ResourceReleaseRequest) error); ok {
-		r1 = rf(_a0, _a1)
-	} else {
-		r1 = ret.Error(1)
-	}
-
-	return r0, r1
-}

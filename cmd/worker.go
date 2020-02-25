@@ -340,13 +340,6 @@ func startServer(
 		}
 		cancel()
 	})
-	runner.OnContainerReleased(func(cont *script.Container, options *script.RunOptions) {
-		ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
-		if _, e := plugClient.ResourceRelease(ctx, &lbpb.ResourceReleaseRequest{Id: poolID, MCPU: options.MCPU}); err != nil {
-			errCh <- e
-		}
-		cancel()
-	})
 
 	// Register with load balancer.
 	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)

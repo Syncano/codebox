@@ -37,12 +37,13 @@ type Worker struct {
 	repoCli    repopb.RepoClient
 	scriptCli  scriptpb.ScriptRunnerClient
 	scripts    map[ScriptInfo]int
+	containers map[string]*WorkerContainer
 
 	// These are processed atomically.
 	errorCount uint32
 }
 
-// ContainerWorkerCache defines a map - ScriptInfo->set of *Worker.
+// ContainerWorkerCache defines a map - ScriptInfo->container ID->set of *WorkerContainer.
 type ContainerWorkerCache map[ScriptInfo]map[string]*WorkerContainer
 
 const (
@@ -60,6 +61,7 @@ func NewWorker(id string, addr net.TCPAddr, mCPU, defaultMCPU uint32, memory uin
 
 		alive:       true,
 		scripts:     make(map[ScriptInfo]int),
+		containers:  make(map[string]*WorkerContainer),
 		conn:        conn,
 		mCPU:        mCPU,
 		defaultMCPU: defaultMCPU,
@@ -99,8 +101,15 @@ func (w *Worker) Alive() bool {
 
 // Reserve checks if worker is alive, decreases resources and increases waitgroup.
 // If require is true, returns true only if resources are available.
-func (w *Worker) Reserve(mCPU uint32, require bool) bool {
+func (w *Worker) reserve(mCPU, conns uint32, require bool) bool {
+	// Async connection - only first one should reserve resources.
+	if conns > 1 && w.Alive() {
+		w.waitGroup.Add(1)
+		return true
+	}
+
 	w.mu.Lock()
+
 	if !w.alive || (require && w.freeCPU < int32(mCPU)) {
 		w.mu.Unlock()
 		return false
@@ -116,11 +125,18 @@ func (w *Worker) Reserve(mCPU uint32, require bool) bool {
 }
 
 // Release resources reserved.
-func (w *Worker) Release(mCPU uint32) {
+func (w *Worker) release(mCPU uint32) {
 	w.mu.Lock()
+
+	if !w.alive {
+		w.mu.Unlock()
+		return
+	}
+
 	w.freeCPU += int32(mCPU)
 	w.mu.Unlock()
 
+	w.waitGroup.Done()
 	freeCPUCounter.Add(int64(mCPU))
 }
 
@@ -142,6 +158,14 @@ func (w *Worker) Heartbeat(memory uint64) {
 // Exists calls worker RPC and checks if file exists.
 func (w *Worker) Exists(ctx context.Context, key string) (*repopb.ExistsResponse, error) {
 	return w.repoCli.Exists(ctx, &repopb.ExistsRequest{Key: key})
+}
+
+func (w *Worker) NewContainer(async, mcpu uint32) *WorkerContainer {
+	if mcpu == 0 {
+		mcpu = w.defaultMCPU
+	}
+
+	return &WorkerContainer{Worker: w, async: async, mCPU: mcpu}
 }
 
 func uploadDir(stream repopb.Repo_UploadClient, fs afero.Fs, key, sourcePath string) error {
@@ -216,6 +240,7 @@ func (w *Worker) AddCache(cache ContainerWorkerCache, ci ScriptInfo, contID stri
 
 	container.containerID = contID
 	w.scripts[ci]++
+	w.containers[contID] = container
 
 	if _, ok := cache[ci]; !ok {
 		cache[ci] = map[string]*WorkerContainer{contID: container}
@@ -230,11 +255,14 @@ func (w *Worker) AddCache(cache ContainerWorkerCache, ci ScriptInfo, contID stri
 func (w *Worker) RemoveCache(cache ContainerWorkerCache, ci ScriptInfo, contID string) {
 	w.mu.Lock()
 
+	delete(w.containers, contID)
+
 	ref := w.scripts[ci]
 	if ref > 1 {
 		w.scripts[ci]--
 	} else {
 		delete(w.scripts, ci)
+
 		if m, ok := cache[ci]; ok {
 			if len(m) == 1 {
 				delete(cache, ci)
@@ -250,6 +278,7 @@ func (w *Worker) RemoveCache(cache ContainerWorkerCache, ci ScriptInfo, contID s
 // Shutdown removes all Containers in Worker from ContainerWorkerCache and stops connection when drained.
 func (w *Worker) Shutdown(cache ContainerWorkerCache) {
 	w.mu.Lock()
+
 	w.alive = false
 
 	for ci := range w.scripts {
@@ -265,6 +294,7 @@ func (w *Worker) Shutdown(cache ContainerWorkerCache) {
 			}
 		}
 	}
+
 	w.mu.Unlock()
 
 	// Wait for all calls to finish and close connection in goroutine.
@@ -278,27 +308,29 @@ func (w *Worker) Shutdown(cache ContainerWorkerCache) {
 
 // WorkerContainer defines worker container info.
 type WorkerContainer struct {
-	*Worker
+	Worker *Worker
 
 	containerID string
-	conns       uint64
+	conns       uint32
+	mCPU        uint32
+	async       uint32
 }
 
 // Conns returns number of current connections.
-func (w *WorkerContainer) Conns() uint64 {
-	return atomic.LoadUint64(&w.conns)
+func (w *WorkerContainer) Conns() uint32 {
+	return atomic.LoadUint32(&w.conns)
 }
 
 // Upload calls worker RPC and uploads file(s) to it.
 func (w *WorkerContainer) Upload(ctx context.Context, fs afero.Fs, sourcePath, key string) error {
-	stream, err := w.repoCli.Upload(ctx)
+	stream, err := w.Worker.repoCli.Upload(ctx)
 	if err != nil {
 		return err
 	}
 
 	// Iterate through download results and upload them.
 	if err = uploadDir(stream, fs, key, sourcePath); err != nil {
-		if exists, e := w.repoCli.Exists(ctx, &repopb.ExistsRequest{Key: key}); e == nil && exists.Ok {
+		if exists, e := w.Worker.repoCli.Exists(ctx, &repopb.ExistsRequest{Key: key}); e == nil && exists.Ok {
 			return nil
 		}
 	}
@@ -308,7 +340,7 @@ func (w *WorkerContainer) Upload(ctx context.Context, fs afero.Fs, sourcePath, k
 
 // Run calls worker RPC and runs script there.
 func (w *WorkerContainer) Run(ctx context.Context, meta *scriptpb.RunRequest_MetaMessage, chunk []*scriptpb.RunRequest_ChunkMessage) (<-chan interface{}, error) {
-	stream, err := w.scriptCli.Run(ctx)
+	stream, err := w.Worker.scriptCli.Run(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -349,9 +381,6 @@ func (w *WorkerContainer) Run(ctx context.Context, meta *scriptpb.RunRequest_Met
 
 				close(ch)
 
-				atomic.AddUint64(&w.conns, ^uint64(0))
-				w.waitGroup.Done()
-
 				return
 			}
 			ch <- runRes
@@ -362,27 +391,34 @@ func (w *WorkerContainer) Run(ctx context.Context, meta *scriptpb.RunRequest_Met
 }
 
 // Reserve calls reserve on worker and increases connection count if successful.
-func (w *WorkerContainer) Reserve(mCPU uint32) bool {
-	if mCPU == 0 {
-		mCPU = w.defaultMCPU
+func (w *WorkerContainer) Reserve() bool {
+	conns := atomic.AddUint32(&w.conns, 1)
+
+	// Disallow reservation higher than async value in async mode.
+	if w.async > 0 && conns > w.async {
+		atomic.AddUint32(&w.conns, ^uint32(0))
+		return false
 	}
 
 	// If CPU requirements are met, require reservation to be successful.
-	require := w.FreeCPU() > int32(mCPU)
+	require := w.Worker.FreeCPU() > int32(w.mCPU)
 
-	if w.Worker.Reserve(mCPU, require) {
-		atomic.AddUint64(&w.conns, 1)
+	if w.Worker.reserve(w.mCPU, conns, require) {
 		return true
 	}
+
+	atomic.AddUint32(&w.conns, ^uint32(0))
 
 	return false
 }
 
 // Release resources reserved.
-func (w *WorkerContainer) Release(mCPU uint32) {
-	w.Worker.Release(mCPU)
-	w.waitGroup.Done()
-	atomic.AddUint64(&w.conns, ^uint64(0))
+func (w *WorkerContainer) Release() {
+	conns := atomic.AddUint32(&w.conns, ^uint32(0))
+
+	if conns == 0 {
+		w.Worker.release(w.mCPU)
+	}
 }
 
 // ScriptInfo defines unique container information.
@@ -391,7 +427,7 @@ type ScriptInfo struct {
 	Environment string
 	UserID      string
 	MCPU        uint32
-	Async       bool
+	Async       uint32
 }
 
 func (ci *ScriptInfo) String() string {

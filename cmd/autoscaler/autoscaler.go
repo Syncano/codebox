@@ -234,7 +234,7 @@ func (a *Autoscaler) Start() chan struct{} { // nolint: gocyclo, gocognit
 				}
 
 				if changed {
-					logrus.WithFields(logrus.Fields{"current": curReplicas, "desired": desiredReplicas}).Info("Autoscaling.UpdateScale")
+					logrus.WithFields(logrus.Fields{"current": curReplicas, "desired": desiredReplicas, "freeCPU": freeCPU}).Info("Autoscaling.UpdateScale")
 
 					lastUpdate = time.Now()
 

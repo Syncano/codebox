@@ -9,41 +9,6 @@ type isRunRequest_Value struct {
 	mock.Mock
 }
 
-// MarshalTo provides a mock function with given fields: _a0
-func (_m *isRunRequest_Value) MarshalTo(_a0 []byte) (int, error) {
-	ret := _m.Called(_a0)
-
-	var r0 int
-	if rf, ok := ret.Get(0).(func([]byte) int); ok {
-		r0 = rf(_a0)
-	} else {
-		r0 = ret.Get(0).(int)
-	}
-
-	var r1 error
-	if rf, ok := ret.Get(1).(func([]byte) error); ok {
-		r1 = rf(_a0)
-	} else {
-		r1 = ret.Error(1)
-	}
-
-	return r0, r1
-}
-
-// Size provides a mock function with given fields:
-func (_m *isRunRequest_Value) Size() int {
-	ret := _m.Called()
-
-	var r0 int
-	if rf, ok := ret.Get(0).(func() int); ok {
-		r0 = rf()
-	} else {
-		r0 = ret.Get(0).(int)
-	}
-
-	return r0
-}
-
 // isRunRequest_Value provides a mock function with given fields:
 func (_m *isRunRequest_Value) isRunRequest_Value() {
 	_m.Called()

@@ -20,7 +20,6 @@ type Runner interface {
 	StopPool()
 	Shutdown()
 	OnContainerRemoved(f ContainerRemovedHandler)
-	OnContainerReleased(f ContainerReleasedHandler)
 	IsRunning() bool
 }
 

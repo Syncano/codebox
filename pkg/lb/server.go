@@ -266,14 +266,17 @@ func (s *Server) processRun(stream pb.ScriptRunner_RunServer, runMeta *pb.RunReq
 		logger = logger.WithFields(logrus.Fields{"container": cont, "script": &script, "try": retry, "fromCache": fromCache})
 
 		resCh, err := s.processWorkerRun(ctx, logger, cont, scriptMeta, scriptChunk)
+		defer cont.Release()
+
 		if err != nil {
 			logger.WithError(err).Warn("Worker processing Run failed")
 			// Release worker resources as it failed prematurely.
-			cont.Release(script.MCPU)
 			s.handleWorkerError(cont, err)
+
 			return err == context.Canceled, err
 		}
-		cont.ResetErrorCount()
+
+		cont.Worker.ResetErrorCount()
 
 		var response *scriptpb.RunResponse
 		for res := range resCh {
@@ -298,7 +301,7 @@ func (s *Server) processRun(stream pb.ScriptRunner_RunServer, runMeta *pb.RunReq
 		if response != nil && response.Cached {
 			// Add container to worker cache if we got any response.
 			s.mu.Lock()
-			cont.AddCache(s.workerContainerCache, script, response.ContainerID, cont)
+			cont.Worker.AddCache(s.workerContainerCache, script, response.ContainerID, cont)
 			s.mu.Unlock()
 		}
 
@@ -318,7 +321,7 @@ func (s *Server) createScriptInfo(meta *scriptpb.RunRequest_MetaMessage) ScriptI
 		SourceHash:  meta.SourceHash,
 		Environment: meta.Environment,
 		UserID:      meta.UserID,
-		Async:       meta.GetOptions().GetAsync() > 0,
+		Async:       meta.GetOptions().GetAsync(),
 		MCPU:        meta.GetOptions().GetMCPU(),
 	}
 
@@ -326,7 +329,7 @@ func (s *Server) createScriptInfo(meta *scriptpb.RunRequest_MetaMessage) ScriptI
 }
 
 func (s *Server) uploadResource(ctx context.Context, logger logrus.FieldLogger, cont *WorkerContainer, key string) error {
-	exists, err := cont.Exists(ctx, key)
+	exists, err := cont.Worker.Exists(ctx, key)
 	if err != nil {
 		logger.WithError(err).Warn("Worker grpc:repo:Exists failed")
 		return err
@@ -365,17 +368,22 @@ func (s *Server) grabWorker(script ScriptInfo) (*WorkerContainer, bool) { // nol
 		freeCPU   int32
 	)
 
+	blacklist := make(map[string]struct{})
+
 	s.mu.Lock()
 	for {
 		freeCPU = 0
 
 		if m, ok := s.workerContainerCache[script]; ok {
-			for _, w := range m {
+			for _, cont := range m {
+				w := cont.Worker
 				cpu := w.FreeCPU()
+				_, blacklisted := blacklist[cont.containerID]
 
-				if (container == nil || (cpu > freeCPU || w.Conns() > 1)) && s.workers.Contains(w.ID) && w.Alive() {
+				// Choose alive container with worker that has the highest free CPU.
+				if !blacklisted && cpu > freeCPU && (script.Async == 0 || cont.Conns() < script.Async) && s.workers.Contains(w.ID) && w.Alive() {
 					fromCache = true
-					container = w
+					container = cont
 					freeCPU = cpu
 				}
 			}
@@ -386,7 +394,7 @@ func (s *Server) grabWorker(script ScriptInfo) (*WorkerContainer, bool) { // nol
 			workerMax = s.findWorkerWithMaxFreeCPU()
 			if workerMax != nil {
 				fromCache = false
-				container = &WorkerContainer{Worker: workerMax}
+				container = workerMax.NewContainer(script.Async, script.MCPU)
 			}
 		}
 
@@ -395,8 +403,10 @@ func (s *Server) grabWorker(script ScriptInfo) (*WorkerContainer, bool) { // nol
 			break
 		}
 
-		if s.workers.Get(container.ID) != nil && container.Reserve(script.MCPU) {
+		if s.workers.Get(container.Worker.ID) != nil && container.Reserve() {
 			break
+		} else {
+			blacklist[container.Worker.ID] = struct{}{}
 		}
 	}
 
@@ -410,23 +420,9 @@ func (s *Server) handleWorkerError(cont *WorkerContainer, err error) {
 		return
 	}
 
-	if cont.IncreaseErrorCount() >= s.options.WorkerErrorThreshold {
-		s.workers.Delete(cont.ID)
+	if cont.Worker.IncreaseErrorCount() >= s.options.WorkerErrorThreshold {
+		s.workers.Delete(cont.Worker.ID)
 	}
-}
-
-// ResourceRelease handles notifications sent by client whenever a slot is ready to accept connections.
-func (s *Server) ResourceRelease(ctx context.Context, in *pb.ResourceReleaseRequest) (*pb.ResourceReleaseResponse, error) {
-	logrus.WithFields(logrus.Fields{"id": in.GetId(), "peer": util.PeerAddr(ctx)}).Debug("grpc:lb:ResourceRelease")
-
-	cur := s.workers.Get(in.Id)
-	if cur == nil {
-		return nil, ErrUnknownWorkerID
-	}
-
-	cur.(*Worker).Release(in.MCPU)
-
-	return &pb.ResourceReleaseResponse{}, nil
 }
 
 // ContainerRemoved handles notifications sent by client whenever a container gets removed from cache.
@@ -459,7 +455,8 @@ func (s *Server) Register(ctx context.Context, in *pb.RegisterRequest) (*pb.Regi
 	workerCPU.WithLabelValues(in.Id).Set(float64(in.MCPU))
 
 	w := NewWorker(in.Id, addr, in.MCPU, in.DefaultMCPU, in.Memory)
-	logrus.WithField("worker", w).Info("grpc:lb:Register")
+
+	logrus.WithFields(logrus.Fields{"worker": w, "mcpu": in.MCPU, "defaultMCPU": in.DefaultMCPU, "memory": in.Memory}).Info("grpc:lb:Register")
 	s.workers.Set(in.Id, w)
 
 	return &pb.RegisterResponse{}, nil

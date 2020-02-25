@@ -3,9 +3,6 @@ package lb;
 option go_package = "github.com/Syncano/codebox/pkg/lb/proto";
 
 service WorkerPlug {
-  // ResourceRelease handles notifications sent by client whenever a run has finished.
-  rpc ResourceRelease (ResourceReleaseRequest) returns (ResourceReleaseResponse);
-
   // ContainerRemoved handles notifications sent by client whenever a container gets removed from cache.
   rpc ContainerRemoved (ContainerRemovedRequest) returns (ContainerRemovedResponse);
 
@@ -19,18 +16,12 @@ service WorkerPlug {
   rpc Disconnect (DisconnectRequest) returns (DisconnectResponse);
 }
 
-message ResourceReleaseRequest {
-  string id = 1;
-  uint32 mCPU = 2;
-}
-message ResourceReleaseResponse {}
-
 message ContainerRemovedRequest {
   string id = 1;
-  string containerID = 5;
-  string sourceHash = 2;
-  string environment = 3;
-  string userID = 4;
+  string containerID = 2;
+  string sourceHash = 3;
+  string environment = 4;
+  string userID = 5;
 }
 message ContainerRemovedResponse {}
 
