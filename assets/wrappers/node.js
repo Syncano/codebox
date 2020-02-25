@@ -15,28 +15,20 @@ const SCRIPT_FUNC = new vm.Script(`
   let __f
 
   try {
-    __f = __func({
-        args: ARGS,
-        meta: META,
-        config: CONFIG,
-        HttpResponse,
-        setResponse: __script.setResponse,
-        log: __script.log,
-        error: __script.error,
-    })
+    __f = __func(__run)
   } catch (error) {
-    __script.handleError(error)
+    __conn.handleError(error)
   }
 
   __f = Promise.resolve(__f)
 
   __f.catch(function (error) {
-    __script.handleError(error)
+    __conn.handleError(error)
   })
 
   __f.then(function (r) {
-    __script.setResponse(r)
-    __script.sendResponse()
+    __run.setResponse(r)
+    __conn.sendResponse()
   })
 }`)
 
@@ -104,21 +96,12 @@ class HttpResponse {
 }
 commonCtx['HttpResponse'] = HttpResponse
 
-// ScriptContext class.
-class ScriptContext {
-  constructor (socket, delim) {
+class ConnectionContext {
+  constructor (socket, delim, runCtx) {
     this.socket = socket
-    this.outputResponse = null
-    this.exitCode = null
     this.delim = delim
-    this.stdout = ''
-    this.stderr = ''
-  }
-
-  setResponse (response) {
-    if (response instanceof HttpResponse) {
-      this.outputResponse = response
-    }
+    this.runCtx = runCtx
+    this.exitCode = null
   }
 
   handleError (error) {
@@ -127,7 +110,7 @@ class ScriptContext {
       return
     }
 
-    this.error(error)
+    this.runCtx.error(error)
 
     if (error.toString().startsWith('Error: Script execution timed out')) {
       this.exitCode = 124
@@ -141,37 +124,61 @@ class ScriptContext {
       return
     }
 
+    // Handle exit code.
     let exitCode = process.exitCode
+
     if (this.exitCode !== null) {
       exitCode = this.exitCode
     }
 
     this.socket.write(String.fromCharCode(exitCode))
 
-    if (this.stdout.length !== 0) {
-      sendData(this.socket, STREAM_STDOUT, this.stdout)
+    // Handle stdout, stderr and output response.
+    if (this.runCtx._stdout.length !== 0) {
+      sendData(this.socket, STREAM_STDOUT, this.runCtx._stdout)
     }
 
-    if (this.stderr.length !== 0) {
-      sendData(this.socket, STREAM_STDERR, this.stderr)
+    if (this.runCtx._stderr.length !== 0) {
+      sendData(this.socket, STREAM_STDERR, this.runCtx._stderr)
     }
 
-    if (this.outputResponse !== null && this.outputResponse instanceof HttpResponse) {
-      sendData(this.socket, STREAM_RESPONSE, this.outputResponse.json())
+    if (this.runCtx._outputResponse !== null && this.runCtx._outputResponse instanceof HttpResponse) {
+      sendData(this.socket, STREAM_RESPONSE, this.runCtx._outputResponse.json())
 
-      let content = this.outputResponse.content
+      let content = this.runCtx._outputResponse.content
 
       if (typeof (content) !== 'string' && !(content instanceof HttpResponse)) {
         content = JSON.stringify(content)
       }
+
       this.socket.write(content)
     }
+
     this.socket.end()
+  }
+}
+
+class RunContext {
+  constructor (args, meta, config) {
+    this.HttpResponse = HttpResponse
+    this.args = args
+    this.meta = meta
+    this.config = config
+
+    this._outputResponse = null
+    this._stdout = ''
+    this._stderr = ''
+  }
+
+  setResponse (response) {
+    if (response !== undefined && response instanceof HttpResponse) {
+      this._outputResponse = response
+    }
   }
 
   log (data, ...args) {
     if (asyncMode) {
-      this.stdout += `${util.format(data, ...args)}\n`
+      this._stdout += `${util.format(data, ...args)}\n`
     } else {
       console.log(data, ...args)
     }
@@ -179,7 +186,7 @@ class ScriptContext {
 
   error (data, ...args) {
     if (asyncMode) {
-      this.stderr += `${util.format(data, ...args)}\n`
+      this._stderr += `${util.format(data, ...args)}\n`
     } else {
       console.error(data, ...args)
     }
@@ -220,9 +227,14 @@ function processScript (socket, context) {
     }
     ctx[key] = context[key]
   }
-  ctx['__script'] = lastContext = new ScriptContext(socket, context._delim)
+
+  const runCtx = new RunContext(ctx.ARGS, ctx.META, ctx.CONFIG)
+  const connCtx = new ConnectionContext(socket, context._delim, runCtx)
+
+  ctx['__conn'] = lastContext = connCtx
+  ctx['__run'] = runCtx
   // For backwards compatibility.
-  ctx['setResponse'] = (r) => lastContext.setResponse(r)
+  ctx['setResponse'] = (r) => runCtx.setResponse(r)
 
   // Run script.
   let opts = { timeout: timeout / 1e6 }
@@ -234,19 +246,20 @@ function processScript (socket, context) {
       if (typeof ret === 'function') {
         scriptFunc = ret
         ctx['__func'] = commonCtx['__func'] = scriptFunc
+
         SCRIPT_FUNC.runInNewContext(ctx, opts)
       } else if (asyncMode) {
-        ctx['__script'].sendResponse()
+        connCtx.sendResponse()
       }
     } else {
       // Run script function if it's defined.
       SCRIPT_FUNC.runInNewContext(ctx, opts)
     }
   } catch (error) {
-    ctx['__script'].handleError(error)
+    connCtx.handleError(error)
 
     if (asyncMode) {
-      ctx['__script'].sendResponse()
+      connCtx.sendResponse()
     }
   }
 }
