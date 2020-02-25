@@ -15,7 +15,15 @@ const SCRIPT_FUNC = new vm.Script(`
   let __f
 
   try {
-    __f = __func(__run)
+    __f = __func({
+      args: ARGS,
+      meta: META,
+      config: CONFIG,
+      HttpResponse,
+      setResponse: (response) => { __run.setResponse(response) },
+      log: (data, ...args) => { __run.log(data, ...args) },
+      error: (data, ...args) => { __run.error(data, ...args) },
+    })
   } catch (error) {
     __conn.handleError(error)
   }
@@ -159,12 +167,7 @@ class ConnectionContext {
 }
 
 class RunContext {
-  constructor (args, meta, config) {
-    this.HttpResponse = HttpResponse
-    this.args = args
-    this.meta = meta
-    this.config = config
-
+  constructor () {
     this._outputResponse = null
     this._stdout = ''
     this._stderr = ''
@@ -228,7 +231,7 @@ function processScript (socket, context) {
     ctx[key] = context[key]
   }
 
-  const runCtx = new RunContext(ctx.ARGS, ctx.META, ctx.CONFIG)
+  const runCtx = new RunContext()
   const connCtx = new ConnectionContext(socket, context._delim, runCtx)
 
   ctx['__conn'] = lastContext = connCtx
