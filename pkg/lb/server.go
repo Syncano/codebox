@@ -409,6 +409,7 @@ func (s *Server) grabWorker(script ScriptInfo) (*WorkerContainer, bool) { // nol
 			break
 		} else {
 			blacklist[container.ID] = struct{}{}
+			container = nil
 		}
 	}
 
