@@ -125,7 +125,13 @@ func (w *Worker) reserve(mCPU, conns uint32, require bool) bool {
 }
 
 // Release resources reserved.
-func (w *Worker) release(mCPU uint32) {
+func (w *Worker) release(mCPU, conns uint32) {
+	w.waitGroup.Done()
+
+	if conns != 0 {
+		return
+	}
+
 	w.mu.Lock()
 
 	if !w.alive {
@@ -136,7 +142,6 @@ func (w *Worker) release(mCPU uint32) {
 	w.freeCPU += int32(mCPU)
 	w.mu.Unlock()
 
-	w.waitGroup.Done()
 	freeCPUCounter.Add(int64(mCPU))
 }
 
@@ -299,10 +304,9 @@ func (w *Worker) Shutdown(cache ContainerWorkerCache) {
 
 	// Wait for all calls to finish and close connection in goroutine.
 	go func() {
+		freeCPUCounter.Add(-int64(w.FreeCPU()))
 		w.waitGroup.Wait()
 		w.conn.Close() // nolint
-
-		freeCPUCounter.Add(-int64(w.FreeCPU()))
 	}()
 }
 
@@ -403,22 +407,19 @@ func (w *WorkerContainer) Reserve() bool {
 	// If CPU requirements are met, require reservation to be successful.
 	require := w.Worker.FreeCPU() > int32(w.mCPU)
 
-	if w.Worker.reserve(w.mCPU, conns, require) {
-		return true
+	if !w.Worker.reserve(w.mCPU, conns, require) {
+		atomic.AddUint32(&w.conns, ^uint32(0))
+		return false
 	}
 
-	atomic.AddUint32(&w.conns, ^uint32(0))
-
-	return false
+	return true
 }
 
 // Release resources reserved.
 func (w *WorkerContainer) Release() {
 	conns := atomic.AddUint32(&w.conns, ^uint32(0))
 
-	if conns == 0 {
-		w.Worker.release(w.mCPU)
-	}
+	w.Worker.release(w.mCPU, conns)
 }
 
 // ScriptInfo defines unique container information.
