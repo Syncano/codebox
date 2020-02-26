@@ -701,7 +701,7 @@ func (r *DockerRunner) reserveContainer(ctx context.Context, cont *Container, co
 				ctx2, cancel := context.WithTimeout(ctx, dockerTimeout)
 				defer cancel()
 
-				if options.Async > 0 {
+				if options.Async > 1 {
 					logrus.WithField("container", cont).Info("Waking up container")
 				}
 

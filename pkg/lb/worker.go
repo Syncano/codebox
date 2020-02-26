@@ -238,7 +238,7 @@ func uploadDir(stream repopb.Repo_UploadClient, fs afero.Fs, key, sourcePath str
 func (w *Worker) AddCache(cache ContainerWorkerCache, ci ScriptInfo, contID string, container *WorkerContainer) {
 	w.mu.Lock()
 
-	container.containerID = contID
+	container.ID = contID
 	w.scripts[ci]++
 	w.containers[contID] = container
 
@@ -310,10 +310,10 @@ func (w *Worker) Shutdown(cache ContainerWorkerCache) {
 type WorkerContainer struct {
 	Worker *Worker
 
-	containerID string
-	conns       uint32
-	mCPU        uint32
-	async       uint32
+	ID    string
+	conns uint32
+	mCPU  uint32
+	async uint32
 }
 
 // Conns returns number of current connections.
@@ -395,7 +395,7 @@ func (w *WorkerContainer) Reserve() bool {
 	conns := atomic.AddUint32(&w.conns, 1)
 
 	// Disallow reservation higher than async value in async mode.
-	if w.async > 0 && conns > w.async {
+	if w.async > 1 && conns > w.async {
 		atomic.AddUint32(&w.conns, ^uint32(0))
 		return false
 	}
