@@ -378,10 +378,13 @@ func (s *Server) grabWorker(script ScriptInfo) (*WorkerContainer, bool) { // nol
 			for _, cont := range m {
 				w := cont.Worker
 				cpu := w.FreeCPU()
-				_, blacklisted := blacklist[cont.containerID]
 
-				// Choose alive container with worker that has the highest free CPU.
-				if !blacklisted && cpu > freeCPU && (script.Async == 0 || cont.Conns() < script.Async) && s.workers.Contains(w.ID) && w.Alive() {
+				if _, blacklisted := blacklist[cont.ID]; blacklisted {
+					continue
+				}
+
+				// Choose alive container with worker that has the highest free CPU or has free async connection.
+				if (script.Async <= 1 && cpu > freeCPU) || (script.Async > 1 && cont.Conns() < script.Async) {
 					fromCache = true
 					container = cont
 					freeCPU = cpu
@@ -392,21 +395,20 @@ func (s *Server) grabWorker(script ScriptInfo) (*WorkerContainer, bool) { // nol
 		// If no worker with cached container found - use container with max free cpu instead.
 		if container == nil {
 			workerMax = s.findWorkerWithMaxFreeCPU()
+
 			if workerMax != nil {
 				fromCache = false
 				container = workerMax.NewContainer(script.Async, script.MCPU)
+			} else {
+				// If still cannot find a worker - abandon all hope.
+				break
 			}
-		}
-
-		// If still cannot find a worker - abandon all hope.
-		if container == nil {
-			break
 		}
 
 		if s.workers.Get(container.Worker.ID) != nil && container.Reserve() {
 			break
 		} else {
-			blacklist[container.Worker.ID] = struct{}{}
+			blacklist[container.ID] = struct{}{}
 		}
 	}
 
