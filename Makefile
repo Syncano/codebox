@@ -45,7 +45,7 @@ lint: ## Run lint checks
 	echo "=== lint ==="
 	if ! which golangci-lint > /dev/null; then \
 		echo "Installing golangci-lint"; \
-		curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | sh -s -- -b $$(go env GOPATH)/bin v1.22.2; \
+		curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | sh -s -- -b $$(go env GOPATH)/bin v1.23.6; \
 	fi
 	golangci-lint run $(ARGS)
 
