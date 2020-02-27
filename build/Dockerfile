@@ -1,8 +1,8 @@
-FROM alpine:3.8
+FROM alpine:3.11
 ENV SQUASHFUSE_VERSION 0.1.103
 ENV WRAPPERPATH /usr/local/bin/codewrapper
 
-RUN set -ex \   
+RUN set -ex \
     \
     # Install squashfuse
     && apk --no-cache add --virtual .build-deps \
