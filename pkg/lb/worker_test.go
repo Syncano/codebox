@@ -32,6 +32,7 @@ func (m *MockFs) Open(name string) (afero.File, error) {
 
 func TestWorker(t *testing.T) {
 	err := errors.New("some error")
+	NewServer(nil, &ServerOptions{})
 
 	Convey("Given mocked worker", t, func() {
 		repoCli := new(repomocks.RepoClient)
@@ -50,7 +51,7 @@ func TestWorker(t *testing.T) {
 		Convey("Reserve returns false for dead worker", func() {
 			worker.alive = false
 			So(worker.reserve(100, 1, false), ShouldBeFalse)
-			So(cont.Reserve(), ShouldBeFalse)
+			So(cont.Reserve(), ShouldEqual, -1)
 			So(worker.FreeCPU(), ShouldEqual, 2000)
 		})
 		Convey("Reserve returns false when requireSlots is true and there are < 0 slots", func() {

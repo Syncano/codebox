@@ -134,6 +134,7 @@ func TestServerMethods(t *testing.T) {
 						stream.On("Recv").Return(validReq2, nil).Once()
 						stream.On("Recv").Return(validReq3, nil).Once()
 						stream.On("Recv").Return(nil, io.EOF).Once()
+						repo.On("Get", "hash").Return("/path")
 						e := s.Run(stream)
 						So(e, ShouldResemble, status.Error(codes.ResourceExhausted, context.Canceled.Error()))
 					})
@@ -281,8 +282,9 @@ func TestServerMethods(t *testing.T) {
 				s.workers.Set("id2", NewWorker("id2", net.TCPAddr{}, 2, 2, 128))
 				s.workers.Set("id3", NewWorker("id2", net.TCPAddr{}, 1, 2, 128))
 
-				wi, fromCache := s.grabWorker(ci)
+				wi, conns, fromCache := s.grabWorker(ci)
 				So(wi.Worker.ID, ShouldEqual, "id2")
+				So(conns, ShouldEqual, 1)
 				So(fromCache, ShouldBeFalse)
 			})
 			Convey("prefers worker from container cache if available and slots>0", func() {
@@ -291,8 +293,9 @@ func TestServerMethods(t *testing.T) {
 				s.workers.Set("id2", w2)
 
 				w2.AddCache(s.workerContainerCache, ci, "id2", &WorkerContainer{Worker: w2})
-				w, fromCache := s.grabWorker(ci)
+				w, conns, fromCache := s.grabWorker(ci)
 				So(w.Worker.ID, ShouldEqual, "id2")
+				So(conns, ShouldEqual, 1)
 				So(fromCache, ShouldBeTrue)
 			})
 			Convey("skips worker from container cache if it's missing from cache", func() {
@@ -300,8 +303,9 @@ func TestServerMethods(t *testing.T) {
 				s.workers.Set("id1", NewWorker("id1", net.TCPAddr{}, 2, 2, 128))
 
 				w2.AddCache(s.workerContainerCache, ci, "id1", &WorkerContainer{Worker: w2})
-				w, fromCache := s.grabWorker(ci)
+				w, conns, fromCache := s.grabWorker(ci)
 				So(w.Worker.ID, ShouldEqual, "id1")
+				So(conns, ShouldEqual, 1)
 				So(fromCache, ShouldBeFalse)
 			})
 			Convey("prefers worker from container cache with higher free cpu/conns", func() {
@@ -312,14 +316,15 @@ func TestServerMethods(t *testing.T) {
 
 				w1.AddCache(s.workerContainerCache, ci, "id1", &WorkerContainer{Worker: w1})
 				w2.AddCache(s.workerContainerCache, ci, "id2", &WorkerContainer{Worker: w2})
-				w, fromCache := s.grabWorker(ci)
+				w, conns, fromCache := s.grabWorker(ci)
 				So(w.Worker.ID, ShouldEqual, "id1")
+				So(conns, ShouldEqual, 1)
 				So(fromCache, ShouldBeTrue)
 				w1.RemoveCache(s.workerContainerCache, ci, "id1")
 				So(s.workerContainerCache[ci], ShouldHaveLength, 1)
 			})
 			Convey("returns nil if there are no workers", func() {
-				w, _ := s.grabWorker(ci)
+				w, _, _ := s.grabWorker(ci)
 				So(w, ShouldBeNil)
 			})
 		})

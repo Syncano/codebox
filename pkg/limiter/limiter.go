@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/imdario/mergo"
 
@@ -23,12 +24,14 @@ type Limiter struct {
 
 // Options holds settable options for limiter.
 type Options struct {
-	Queue int32
+	Queue int
+	TTL   time.Duration
 }
 
 // DefaultOptions holds default options values for limiter.
 var DefaultOptions = &Options{
 	Queue: 100,
+	TTL:   10 * time.Minute,
 }
 
 type lockData struct {
@@ -47,7 +50,9 @@ var (
 func New(options *Options) *Limiter {
 	mergo.Merge(options, DefaultOptions) // nolint - error not possible
 
-	channels := cache.NewLRUCache(&cache.Options{}, &cache.LRUOptions{})
+	channels := cache.NewLRUCache(&cache.Options{
+		TTL: options.TTL,
+	}, &cache.LRUOptions{})
 	l := &Limiter{
 		options:  *options,
 		channels: channels,
@@ -63,6 +68,7 @@ func (l *Limiter) createLock(key string, limit int) (lock *lockData) {
 	if v == nil {
 		ch := make(chan struct{}, limit)
 		lock = &lockData{ch: ch}
+
 		l.channels.Set(key, lock)
 	} else {
 		lock = v.(*lockData)
@@ -92,7 +98,7 @@ func (l *Limiter) Lock(ctx context.Context, key string, limit int) error {
 
 	defer atomic.AddInt32(&lock.queue, -1)
 
-	if atomic.AddInt32(&lock.queue, 1) > l.options.Queue {
+	if int(atomic.AddInt32(&lock.queue, 1)) > l.options.Queue {
 		return ErrMaxQueueSizeReached
 	}
 
