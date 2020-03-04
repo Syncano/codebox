@@ -45,6 +45,9 @@ type ServerOptions struct {
 	WorkerKeepalive      time.Duration
 	WorkerMinReady       int
 	WorkerErrorThreshold uint32
+
+	// Limiter
+	LimiterOptions limiter.Options
 }
 
 // DefaultOptions holds default options values for LB server.
@@ -237,15 +240,6 @@ func (s *Server) processRun(stream pb.ScriptRunner_RunServer, runMeta *pb.RunReq
 
 	logger.Debug("grpc:lb:Run start")
 
-	if runMeta != nil && runMeta.ConcurrencyLimit > 0 {
-		if err := s.limiter.Lock(ctx, runMeta.ConcurrencyKey, int(runMeta.ConcurrencyLimit)); err != nil {
-			logger.WithError(err).Warn("Lock error")
-			return status.Error(codes.ResourceExhausted, err.Error())
-		}
-
-		defer s.limiter.Unlock(runMeta.ConcurrencyKey, int(runMeta.ConcurrencyLimit))
-	}
-
 	script := s.createScriptInfo(scriptMeta)
 	retry := 0
 
@@ -258,9 +252,18 @@ func (s *Server) processRun(stream pb.ScriptRunner_RunServer, runMeta *pb.RunReq
 		}
 
 		// Grab worker.
-		cont, fromCache := s.grabWorker(script)
+		cont, conns, fromCache := s.grabWorker(script)
 		if cont == nil {
 			return true, ErrNoWorkersAvailable
+		}
+
+		// Limiter.
+		if conns == 1 && runMeta != nil && runMeta.ConcurrencyLimit > 0 {
+			if err := s.limiter.Lock(ctx, runMeta.ConcurrencyKey, int(runMeta.ConcurrencyLimit)); err != nil {
+				return true, status.Error(codes.ResourceExhausted, err.Error())
+			}
+
+			defer s.limiter.Unlock(runMeta.ConcurrencyKey, int(runMeta.ConcurrencyLimit))
 		}
 
 		logger = logger.WithFields(logrus.Fields{"container": cont, "script": &script, "try": retry, "fromCache": fromCache})
@@ -285,6 +288,7 @@ func (s *Server) processRun(stream pb.ScriptRunner_RunServer, runMeta *pb.RunReq
 				if response == nil {
 					response = v
 				}
+
 				if err = stream.Send(v); err != nil {
 					logger.WithField("res", v).Warn("Sending data error")
 					return true, err
@@ -294,6 +298,7 @@ func (s *Server) processRun(stream pb.ScriptRunner_RunServer, runMeta *pb.RunReq
 				// Retry on worker error.
 				logger.WithError(v).Warn("Worker error")
 				s.handleWorkerError(cont, v)
+
 				return false, v
 			}
 		}
@@ -360,17 +365,20 @@ func (s *Server) processWorkerRun(ctx context.Context, logger logrus.FieldLogger
 
 // grabWorker finds worker with container in cache and highest amount of free CPU.
 // Fallback to any worker with highest amount of free CPU.
-func (s *Server) grabWorker(script ScriptInfo) (*WorkerContainer, bool) { // nolint: gocyclo
+func (s *Server) grabWorker(script ScriptInfo) (*WorkerContainer, int, bool) { // nolint: gocyclo
 	var (
-		workerMax *Worker
 		container *WorkerContainer
+		conns     int
 		fromCache bool
+
+		workerMax *Worker
 		freeCPU   int32
 	)
 
 	blacklist := make(map[string]struct{})
 
 	s.mu.Lock()
+
 	for {
 		freeCPU = 0
 
@@ -384,7 +392,7 @@ func (s *Server) grabWorker(script ScriptInfo) (*WorkerContainer, bool) { // nol
 				}
 
 				// Choose alive container with worker that has the highest free CPU or has free async connection.
-				if (script.Async <= 1 && cpu > freeCPU) || (script.Async > 1 && cont.Conns() < script.Async) {
+				if s.workers.Get(cont.Worker.ID) != nil && (script.Async <= 1 && cpu > freeCPU) || (script.Async > 1 && cont.Conns() < script.Async) {
 					fromCache = true
 					container = cont
 					freeCPU = cpu
@@ -405,9 +413,9 @@ func (s *Server) grabWorker(script ScriptInfo) (*WorkerContainer, bool) { // nol
 			}
 		}
 
-		if s.workers.Get(container.Worker.ID) != nil && container.Reserve() {
+		if conns = container.Reserve(); conns > 0 {
 			break
-		} else {
+		} else if container.ID != "" {
 			blacklist[container.ID] = struct{}{}
 			container = nil
 		}
@@ -415,7 +423,7 @@ func (s *Server) grabWorker(script ScriptInfo) (*WorkerContainer, bool) { // nol
 
 	s.mu.Unlock()
 
-	return container, fromCache
+	return container, conns, fromCache
 }
 
 func (s *Server) handleWorkerError(cont *WorkerContainer, err error) {

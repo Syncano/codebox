@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
+export DOCKERIMAGE=${DOCKERIMAGE:-syncano/codebox}
 export APP=codebox
 export VERSION="$2"
 
-export DOCKERIMAGE=${DOCKERIMAGE:-syncano/codebox}
 TARGET="$1"
 LB_TOTAL_NUM=1
 

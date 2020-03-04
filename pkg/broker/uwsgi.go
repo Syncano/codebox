@@ -282,8 +282,13 @@ func (s *Server) processRequestData(r *http.Request, request *brokerpb.RunReques
 
 	// Parse GET/POST params.
 	dataMap := make(map[string]interface{})
-	for k := range r.Form {
-		dataMap[k] = r.Form.Get(k)
+
+	for k, v := range r.Form {
+		if len(v) == 1 {
+			dataMap[k] = v[0]
+		} else {
+			dataMap[k] = v
+		}
 	}
 
 	if strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {

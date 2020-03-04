@@ -394,14 +394,14 @@ func (w *WorkerContainer) Run(ctx context.Context, meta *scriptpb.RunRequest_Met
 	return ch, nil
 }
 
-// Reserve calls reserve on worker and increases connection count if successful.
-func (w *WorkerContainer) Reserve() bool {
+// Reserve calls reserve on worker and increases connection count if successful. Returns new connection count.
+func (w *WorkerContainer) Reserve() int {
 	conns := atomic.AddUint32(&w.conns, 1)
 
 	// Disallow reservation higher than async value in async mode.
 	if w.async > 1 && conns > w.async {
 		atomic.AddUint32(&w.conns, ^uint32(0))
-		return false
+		return -1
 	}
 
 	// If CPU requirements are met, require reservation to be successful.
@@ -409,10 +409,10 @@ func (w *WorkerContainer) Reserve() bool {
 
 	if !w.Worker.reserve(w.mCPU, conns, require) {
 		atomic.AddUint32(&w.conns, ^uint32(0))
-		return false
+		return -1
 	}
 
-	return true
+	return int(conns)
 }
 
 // Release resources reserved.

@@ -17,6 +17,7 @@ import (
 	repopb "github.com/Syncano/codebox/pkg/filerepo/proto"
 	"github.com/Syncano/codebox/pkg/lb"
 	lbpb "github.com/Syncano/codebox/pkg/lb/proto"
+	"github.com/Syncano/codebox/pkg/limiter"
 	"github.com/Syncano/codebox/pkg/sys"
 	"github.com/Syncano/codebox/pkg/version"
 )
@@ -67,6 +68,15 @@ As there is no authentication, always run it in a private network.`,
 		cli.IntFlag{
 			Name: "worker-min-ready", Usage: "number of retries on failed worker run",
 			EnvVar: "WORKER_MIN_READY", Destination: &lbOptions.WorkerMinReady,
+		},
+		// LB Limiter options.
+		cli.DurationFlag{
+			Name: "limiter-ttl", Usage: "limiter ttl",
+			EnvVar: "LIMITER_TTL", Value: limiter.DefaultOptions.TTL, Destination: &lbOptions.LimiterOptions.TTL,
+		},
+		cli.IntFlag{
+			Name: "limiter-queue", Usage: "limiter queue",
+			EnvVar: "LIMITER_QUEUE", Value: limiter.DefaultOptions.Queue, Destination: &lbOptions.LimiterOptions.Queue,
 		},
 
 		// Autoscaler options.
