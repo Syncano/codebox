@@ -284,10 +284,10 @@ func (s *Server) processRequestData(r *http.Request, request *brokerpb.RunReques
 	dataMap := make(map[string]interface{})
 
 	for k, v := range r.Form {
-		if len(v) == 1 {
-			dataMap[k] = v[0]
+		if len(k) > 2 && strings.HasSuffix(k, "[]") {
+			dataMap[k[:len(k)-2]] = v
 		} else {
-			dataMap[k] = v
+			dataMap[k] = v[0]
 		}
 	}
 
