@@ -6,6 +6,9 @@ metadata:
     app: codebox-docker
     version: "1"
 spec:
+  selector:
+    matchLabels:
+      name: codebox-docker
   updateStrategy:
     type: RollingUpdate
   template:
