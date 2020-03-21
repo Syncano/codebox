@@ -240,6 +240,10 @@ func (m *StdManager) ContainerCreate(ctx context.Context, image, user string, cm
 		Runtime: m.runtime,
 	}
 
+	if len(hostConfig.ExtraHosts) == 0 {
+		hostConfig.ExtraHosts = nil
+	}
+
 	if m.storageLimitSupported && constraints.StorageLimit != "" {
 		hostConfig.StorageOpt = map[string]string{"size": constraints.StorageLimit}
 	}
