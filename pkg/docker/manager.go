@@ -245,7 +245,10 @@ func (m *StdManager) ContainerCreate(ctx context.Context, image, user string, cm
 		hostConfig.ExtraHosts = nil
 	}
 
-	fmt.Println(hostConfig)
+	fmt.Println("BINDS", hostConfig.Binds)
+	fmt.Println("DNS", hostConfig.DNS)
+	fmt.Println("HOSTS", hostConfig.ExtraHosts)
+	fmt.Println("hostConfig", hostConfig)
 
 	if m.storageLimitSupported && constraints.StorageLimit != "" {
 		hostConfig.StorageOpt = map[string]string{"size": constraints.StorageLimit}

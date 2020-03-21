@@ -28,8 +28,11 @@ if [ "${SETUP_FILTERING:-1}" = "1" ]; then
     iptables -t nat -C PREROUTING -j CODEBOX 2>&1 || iptables -t nat -I PREROUTING -j CODEBOX
 
     # Setup filtering
+    IFS=','
     if [ -n "${DOCKER_WHITELIST}" ]; then
-        iptables -t nat -A CODEBOX -s 172.25.0.0/16 -d "${DOCKER_WHITELIST}" -p tcp -m multiport --dports 80,443 -j RETURN
+        for DEST in $DOCKER_WHITELIST; do
+            iptables -t nat -A CODEBOX -s 172.25.0.0/16 -d "${DEST}" -p tcp -m multiport --dports 80,443 -j RETURN
+        done
     fi
 
     iptables -t nat -A CODEBOX -s 172.25.0.0/16 -d 172.16.0.0/12 -j KUBE-MARK-DROP
