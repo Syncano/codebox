@@ -65,8 +65,6 @@ spec:
               value: "{{ LB_ADDR }}"
             - name: SERVICE_NAME
               value: codebox-worker
-            - name: DOCKER_EXTRA_HOSTS
-              value: "{{ DOCKER_EXTRA_HOSTS }}"
           envFrom:
             - configMapRef:
                 name: codebox

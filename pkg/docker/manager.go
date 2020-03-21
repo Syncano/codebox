@@ -3,7 +3,6 @@ package docker
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"io/ioutil"
 	"time"
@@ -241,20 +240,12 @@ func (m *StdManager) ContainerCreate(ctx context.Context, image, user string, cm
 		Runtime: m.runtime,
 	}
 
-	if len(m.options.ExtraHosts) > 0 {
-		fmt.Println(m.options.ExtraHosts)
-		hostConfig.ExtraHosts = m.options.ExtraHosts
-	}
-
-	fmt.Println("HOSTS", m.options.ExtraHosts, len(m.options.ExtraHosts))
-
 	if m.storageLimitSupported && constraints.StorageLimit != "" {
 		hostConfig.StorageOpt = map[string]string{"size": constraints.StorageLimit}
 	}
 
 	resp, err := m.client.ContainerCreate(ctx, &containerConfig, &hostConfig, nil, "")
 	if err != nil {
-		fmt.Println("CREATERRR!", resp, err)
 		return "", err
 	}
 
