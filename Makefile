@@ -111,7 +111,7 @@ build: ## Build
 	go build -ldflags "$(LDFLAGS)" -o ./build/$(EXECNAME)
 
 build-wrapper: ## Build static version of wrapper
-	cd codewrapper; go build -ldflags "$(LDFLAGS)" -o ../build/$(WRAPPERNAME)
+	cd codewrapper; GOOS=linux GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o ../build/$(WRAPPERNAME)
 
 build-in-docker: require-docker-compose ## Build in docker environment
 	docker-compose run --no-deps --rm -e CGO_ENABLED=0 app make build build-wrapper

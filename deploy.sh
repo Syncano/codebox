@@ -107,12 +107,6 @@ OLD_LB_TOTAL_NUM=$(( $(kubectl get deploy -l app=codebox,type=lb | wc -l) - 1 ))
 [ $LB_TOTAL_NUM -lt $OLD_LB_TOTAL_NUM ] && deploy_broker
 
 
-# Prepare Docker Extra Hosts settings.
-INTERNAL_WEB_IP=$(kubectl get svc platform-ingress-internal -o jsonpath='{.spec.clusterIP}')
-export INTERNAL_WEB_IP
-export DOCKER_EXTRA_HOSTS="${INTERNAL_WEB_HOST}:${INTERNAL_WEB_IP}"
-
-
 # Deploy worker startup daemonset.
 kubectl create configmap codebox-dind --from-file=deploy/dind-run.sh -o yaml --dry-run | kubectl apply -f -
 kubectl create configmap codebox-startup --from-file=deploy/worker-setup.sh -o yaml --dry-run | kubectl apply -f -
