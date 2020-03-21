@@ -224,9 +224,9 @@ func (m *StdManager) ContainerCreate(ctx context.Context, image, user string, cm
 	}
 
 	hostConfig := container.HostConfig{
-		Binds:       binds,
-		DNS:         hostDNS,
-		ExtraHosts:  m.options.ExtraHosts,
+		Binds: binds,
+		DNS:   hostDNS,
+		// ExtraHosts:  m.options.ExtraHosts,
 		NetworkMode: container.NetworkMode(m.options.Network),
 		Resources: container.Resources{
 			Memory:               constraints.MemoryLimit,
@@ -245,9 +245,7 @@ func (m *StdManager) ContainerCreate(ctx context.Context, image, user string, cm
 		hostConfig.ExtraHosts = nil
 	}
 
-	fmt.Println("BINDS", hostConfig.Binds)
-	fmt.Println("DNS", hostConfig.DNS)
-	fmt.Println("HOSTS", hostConfig.ExtraHosts)
+	fmt.Println("HOSTS", m.options.ExtraHosts, len(m.options.ExtraHosts))
 	fmt.Println("hostConfig", hostConfig)
 
 	if m.storageLimitSupported && constraints.StorageLimit != "" {
