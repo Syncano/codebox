@@ -1,12 +1,12 @@
 #!/bin/sh
-set -eo pipefail
+set -e
 
 rm -rf /var/run/docker.*
 
 # Install runsc (gVisor)
-if [ ! -z "${RUNSC_RELEASE}" ] && [ ! -f /usr/local/bin/runsc ]; then
-    wget https://storage.googleapis.com/gvisor/releases/nightly/${RUNSC_RELEASE}/runsc
-    wget https://storage.googleapis.com/gvisor/releases/nightly/${RUNSC_RELEASE}/runsc.sha512
+if [ -n "${RUNSC_RELEASE}" ] && [ ! -f /usr/local/bin/runsc ]; then
+    wget https://storage.googleapis.com/gvisor/releases/nightly/"${RUNSC_RELEASE}"/runsc
+    wget https://storage.googleapis.com/gvisor/releases/nightly/"${RUNSC_RELEASE}"/runsc.sha512
     sha512sum -c runsc.sha512 || exit 1
     chmod +x runsc
     mv runsc /usr/local/bin
@@ -16,7 +16,7 @@ if [ ! -z "${RUNSC_RELEASE}" ] && [ ! -f /usr/local/bin/runsc ]; then
 fi
 
 # Setup iptables
-if [ "${SETUP_FILTERING:-1}" == "1" ]; then
+if [ "${SETUP_FILTERING:-1}" = "1" ]; then
     if iptables -t nat -n --list CODEBOX > /dev/null 2>&1; then
         # Flush chain if it already exists
         iptables -t nat -F CODEBOX
@@ -28,7 +28,10 @@ if [ "${SETUP_FILTERING:-1}" == "1" ]; then
     iptables -t nat -C PREROUTING -j CODEBOX 2>&1 || iptables -t nat -I PREROUTING -j CODEBOX
 
     # Setup filtering
-    [ ! -z "${INTERNAL_WEB_IP}" ] && iptables -t nat -A CODEBOX -s 172.25.0.0/16 -d ${INTERNAL_WEB_IP} -p tcp -m multiport --dports 80,443 -j RETURN
+    if [ -n "${DOCKER_WHITELIST}" ]; then
+        iptables -t nat -A CODEBOX -s 172.25.0.0/16 -d "${DOCKER_WHITELIST}" -p tcp -m multiport --dports 80,443 -j RETURN
+    fi
+
     iptables -t nat -A CODEBOX -s 172.25.0.0/16 -d 172.16.0.0/12 -j KUBE-MARK-DROP
     iptables -t nat -A CODEBOX -s 172.25.0.0/16 -d 192.168.0.0/16 -j KUBE-MARK-DROP
     iptables -t nat -A CODEBOX -s 172.25.0.0/16 -d 10.0.0.0/8 -j KUBE-MARK-DROP
@@ -40,4 +43,4 @@ exec dockerd \
     -H unix:///var/run/docker.sock \
     --log-level=error \
     --storage-driver=overlay2 \
-    --iptables=${IPTABLES:-0}
+    --iptables="${IPTABLES:-0}"

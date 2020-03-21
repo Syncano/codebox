@@ -69,8 +69,8 @@ spec:
           securityContext:
             privileged: true
           env:
-            - name: INTERNAL_WEB_IP
-              value: "{{ INTERNAL_WEB_IP }}"
+            - name: DOCKER_WHITELIST
+              value: "{{ DOCKER_WHITELIST }}"
           volumeMounts:
             - name: dind-scripts
               mountPath: /scripts
