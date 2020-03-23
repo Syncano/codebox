@@ -1,12 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-if [ "$#" -eq 0 ]; then
-    EXEC=(nsenter -t 1 -m -u -i -n -p --)
-    "${EXEC[@]}" bash "$0" "nsenter"
-    exit
-fi
-
+STARTUP_SCRIPT='
 # If dpkg is present, install fuse and xfs
 if hash dpkg 2>/dev/null; then
     FUSE_INSTALLED=$(dpkg -s fuse | grep Status)
@@ -39,3 +34,7 @@ if ! mount | grep -q /mnt/codebox; then
     mkfs.xfs -f "$DOCKER_DEVICE"
     mount -o pquota "$DOCKER_DEVICE" /mnt/codebox
 fi
+'
+
+EXEC=(nsenter -t 1 -m -u -i -n -p --)
+"${EXEC[@]}" bash -c "$STARTUP_SCRIPT"
