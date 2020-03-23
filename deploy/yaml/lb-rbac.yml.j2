@@ -1,29 +1,34 @@
 apiVersion: rbac.authorization.k8s.io/v1beta1
-kind: ClusterRole
+kind: Role
 metadata:
   name: codebox-lb
+  namespace: default
 rules:
   - apiGroups:
-      - extensions
+      - apps
     resources:
       - deployments/scale
     verbs:
       - get
       - patch
       - update
+
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: codebox-lb
+  namespace: default
+
 ---
 apiVersion: rbac.authorization.k8s.io/v1beta1
-kind: ClusterRoleBinding
+kind: RoleBinding
 metadata:
   name: codebox-lb
+  namespace: default
 roleRef:
   apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
+  kind: Role
   name: codebox-lb
 subjects:
   - kind: ServiceAccount

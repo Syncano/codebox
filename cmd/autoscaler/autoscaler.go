@@ -100,7 +100,7 @@ func New(options *Options) (*Autoscaler, error) {
 		return nil, err
 	}
 
-	u.Path = path.Join(u.Path, "apis/extensions/v1beta1/namespaces", string(namespace), "deployments", options.Deployment, "scale")
+	u.Path = path.Join(u.Path, "apis/apps/v1/namespaces", string(namespace), "deployments", options.Deployment, "scale")
 
 	return &Autoscaler{
 		client: &http.Client{
