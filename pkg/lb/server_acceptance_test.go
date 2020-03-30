@@ -49,7 +49,7 @@ func TestLBAcceptance(t *testing.T) {
 		lbCmd.Start()
 
 		// Start worker.
-		workerCmd := exec.Command("build/codebox", "--debug", "-p", "9180", "worker")
+		workerCmd := exec.Command("build/codebox", "--debug", "-p", "9180", "worker", "--lb", "127.0.0.1:9000")
 		workerCmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 		wStderr, _ := workerCmd.StderrPipe()
 		workerCmd.Start()
