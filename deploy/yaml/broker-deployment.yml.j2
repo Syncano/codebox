@@ -22,12 +22,18 @@ spec:
       terminationGracePeriodSeconds: 360
       imagePullSecrets:
         - name: syncano-k8s-pull-secret
+      securityContext:
+        fsGroup: 101
       containers:
         - name: codebox-broker
           image: {{ IMAGE }}
           command:
             - "codebox"
             - "broker"
+          securityContext:
+            runAsGroup: 101
+            runAsNonRoot: true
+            runAsUser: 100
           resources:
             requests:
               memory: "64Mi"

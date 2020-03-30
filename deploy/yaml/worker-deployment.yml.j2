@@ -45,6 +45,8 @@ spec:
           hostPath:
             path: /mnt/codebox/run
 
+      securityContext:
+        fsGroup: 101
       containers:
         - name: codebox
           image: {{ IMAGE }}

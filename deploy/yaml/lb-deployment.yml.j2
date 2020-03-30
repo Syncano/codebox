@@ -29,6 +29,8 @@ spec:
         - name: script-storage
           hostPath:
             path: /tmp/codebox
+      securityContext:
+        fsGroup: 101
       containers:
         - name: codebox-lb-{{ LB_NUM }}
           image: {{ IMAGE }}
@@ -36,7 +38,9 @@ spec:
             - "codebox"
             - "lb"
           securityContext:
-            runAsUser: 0
+            runAsGroup: 101
+            runAsNonRoot: true
+            runAsUser: 100
           resources:
             requests:
               memory: "256Mi"
