@@ -41,7 +41,7 @@ envsubst() {
 
 deploy_broker() {
     # Deploy broker.
-    LB_ADDRS=$(seq -s, -f "codebox-lb-%02g.default:9000" 1 $LB_TOTAL_NUM)
+    LB_ADDRS=$(seq -s, -f "codebox-lb-%02g.default:80" 1 $LB_TOTAL_NUM)
     export LB_ADDRS=${LB_ADDRS%,}
     REPLICAS=$(kubectl get deployment/codebox-broker -o jsonpath='{.spec.replicas}' 2>/dev/null || echo "${BROKER_MIN}")
     export REPLICAS

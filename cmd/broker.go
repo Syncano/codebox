@@ -51,7 +51,7 @@ As there is no authentication, always run it in a private network.`,
 		// Broker Server options.
 		cli.StringSliceFlag{
 			Name: "lb-addrs", Usage: "load balancer TCP addresses",
-			EnvVar: "LB_ADDRS", Value: &cli.StringSlice{"127.0.0.1:9000"},
+			EnvVar: "LB_ADDRS", Value: &cli.StringSlice{"127.0.0.1:80"},
 		},
 		cli.IntFlag{
 			Name: "lb-retry", Usage: "number of retries on failed lb run",
@@ -97,7 +97,7 @@ As there is no authentication, always run it in a private network.`,
 			return err
 		}
 
-		lis, err := net.Listen("tcp", fmt.Sprintf(":%d", c.Int("grpc-port")))
+		lis, err := net.Listen("tcp", fmt.Sprintf(":%d", c.Int("port")))
 		if err != nil {
 			return err
 		}
@@ -112,7 +112,7 @@ As there is no authentication, always run it in a private network.`,
 				logrus.WithError(err).Fatal("GRPC serve error")
 			}
 		}()
-		logrus.WithField("port", c.Int("grpc-port")).Info("Serving gRPC")
+		logrus.WithField("port", c.Int("port")).Info("Serving gRPC")
 
 		// Start uwsgi server.
 		uwsgiListener, err := net.Listen("tcp", fmt.Sprintf(":%d", c.Int("uwsgi-port")))

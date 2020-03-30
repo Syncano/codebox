@@ -39,4 +39,4 @@ COPY codewrapper ${WRAPPERPATH}
 
 WORKDIR /home/codebox
 USER codebox
-EXPOSE 9000
+EXPOSE 80
