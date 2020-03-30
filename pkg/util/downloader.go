@@ -90,6 +90,11 @@ func (d *HTTPDownloader) downloadURL(ctx context.Context, url string) ([]byte, e
 	err = RetryWithCritical(d.options.RetryCount, d.options.RetrySleep, func() (bool, error) {
 		var e error
 		resp, e := d.client.Do(req)
+
+		if resp.StatusCode != 200 {
+			fmt.Println("ERROR DOWNLOADING", url)
+		}
+
 		if e == nil {
 			data, e = ioutil.ReadAll(resp.Body)
 			resp.Body.Close()
