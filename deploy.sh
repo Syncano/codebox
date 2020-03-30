@@ -149,7 +149,7 @@ for (( LB_NUM=1; LB_NUM <= LB_TOTAL_NUM; LB_NUM++ )); do
 
 
     # Deploy workers.
-    LB_ADDR=codebox-lb-internal-${LB_NUM}.default:9000
+    LB_ADDR=codebox-lb-internal-${LB_NUM}.default:80
     export LB_ADDR
     REPLICAS=$(kubectl get deployment/codebox-worker-"${LB_NUM}" -o jsonpath='{.spec.replicas}' 2>/dev/null || echo "${SCALING_MIN}")
     export REPLICAS
