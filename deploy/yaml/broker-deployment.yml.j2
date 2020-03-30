@@ -30,16 +30,16 @@ spec:
             - "broker"
           resources:
             requests:
-              memory: "128Mi"
-              cpu: 250m
+              memory: "64Mi"
+              cpu: 100m
             limits:
-              memory: "512Mi"
-              cpu: 1000m
+              memory: "256Mi"
+              cpu: 250m
           ports:
+            - name: grpc
+              containerPort: 80
             - name: uwsgi
               containerPort: 8080
-            - name: grpc
-              containerPort: 9000
             - name: http-metrics
               containerPort: 9080
           env:
