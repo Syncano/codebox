@@ -8,10 +8,10 @@ services:
     depends_on:
       - lb
     ports:
-      - "9000:9000"
+      - "9000:80"
       - "8080:8080"
     environment:
-      - LB_ADDRS=lb:9000
+      - LB_ADDRS=lb:80
       - SERVICE_NAME=codebox-broker
       - BROKER_URL=
       - ZIPKIN_ADDR
@@ -22,7 +22,7 @@ services:
     image: syncano/codebox
     build: .
     ports:
-      - "9001:9000"
+      - "9001:80"
     environment:
       - SERVICE_NAME=codebox-lb
       - ZIPKIN_ADDR
@@ -40,6 +40,6 @@ services:
       - /tmp/storage:/home/codebox/storage
     environment:
       - HOST_STORAGE_PATH=/tmp/storage
-      - LB_ADDR=lb:9000
+      - LB_ADDR=lb:80
       - SERVICE_NAME=codebox-worker
       - ZIPKIN_ADDR
