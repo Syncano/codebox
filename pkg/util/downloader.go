@@ -90,20 +90,18 @@ func (d *HTTPDownloader) downloadURL(ctx context.Context, url string) ([]byte, e
 	err = RetryWithCritical(d.options.RetryCount, d.options.RetrySleep, func() (bool, error) {
 		var e error
 		resp, e := d.client.Do(req)
-
-		if resp.StatusCode != 200 {
-			fmt.Println("ERROR DOWNLOADING", url)
-		}
-
-		if e == nil {
-			data, e = ioutil.ReadAll(resp.Body)
-			resp.Body.Close()
-		}
 		if e != nil {
 			// If it was not a context error - it is not a critical one.
 			return ctx.Err() != nil, e
 		}
-		return false, nil
+
+		if resp.StatusCode != 200 {
+			return false, fmt.Errorf("error downloading URL: %s. Status: %d", url, resp.StatusCode)
+		}
+
+		data, e = ioutil.ReadAll(resp.Body)
+		resp.Body.Close()
+		return ctx.Err() != nil, e
 	})
 
 	return data, err
