@@ -35,7 +35,7 @@ As there is no authentication, always run it in a private network.`,
 	Flags: []cli.Flag{
 		cli.IntFlag{
 			Name: "port, p", Usage: "port for grpc server",
-			EnvVar: "PORT", Value: 80,
+			EnvVar: "PORT", Value: 8000,
 		},
 		cli.IntFlag{
 			Name: "uwsgi-port", Usage: "port for uwsgi server",
@@ -51,7 +51,7 @@ As there is no authentication, always run it in a private network.`,
 		// Broker Server options.
 		cli.StringSliceFlag{
 			Name: "lb-addrs", Usage: "load balancer TCP addresses",
-			EnvVar: "LB_ADDRS", Value: &cli.StringSlice{"127.0.0.1:80"},
+			EnvVar: "LB_ADDRS", Value: &cli.StringSlice{"127.0.0.1:8000"},
 		},
 		cli.IntFlag{
 			Name: "lb-retry", Usage: "number of retries on failed lb run",

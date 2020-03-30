@@ -35,7 +35,7 @@ As there is no authentication, always run it in a private network.`,
 	Flags: []cli.Flag{
 		cli.IntFlag{
 			Name: "port, p", Usage: "port for grpc server",
-			EnvVar: "PORT", Value: 80,
+			EnvVar: "PORT", Value: 8000,
 		},
 
 		// File Repo options.
