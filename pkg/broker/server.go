@@ -354,6 +354,7 @@ func uploadChunks(stream repopb.Repo_UploadClient, key string, resCh <-chan *uti
 }
 
 func (s *Server) uploadFiles(ctx context.Context, lb *loadBalancer, key string, files map[string]string) error {
+	fmt.Println("FILES", files)
 	exists, err := lb.repoCli.Exists(ctx, &repopb.ExistsRequest{Key: key}, grpc.WaitForReady(true))
 	if err != nil {
 		return err
