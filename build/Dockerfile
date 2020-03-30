@@ -26,7 +26,7 @@ RUN set -ex \
     \
     # Install requirements
     && addgroup -S codebox \
-    && adduser -S -G codebox codebox \
+    && adduser -S -D -G codebox codebox \
     && apk --no-cache add \
         lzo \
         lz4-libs \
