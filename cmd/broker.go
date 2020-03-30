@@ -34,7 +34,7 @@ var brokerCmd = cli.Command{
 As there is no authentication, always run it in a private network.`,
 	Flags: []cli.Flag{
 		cli.IntFlag{
-			Name: "port", Usage: "port for grpc server",
+			Name: "port, p", Usage: "port for grpc server",
 			EnvVar: "PORT", Value: 80,
 		},
 		cli.IntFlag{
