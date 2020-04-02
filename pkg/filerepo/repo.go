@@ -82,8 +82,8 @@ const (
 	fileStorageName   = "files"
 	volumeStorageName = "volumes"
 	fusermountCmd     = "fusermount"
-	squashfuseCmd     = "squashfuse"
-	squashfuseMount   = "squashfuse"
+	squashfuseCmd     = "squashfuse_ll"
+	squashfuseMount   = "squashfuse_ll"
 )
 
 // New initializes a new file repo.

@@ -3,6 +3,7 @@ package filerepo
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"math"
@@ -482,12 +483,12 @@ func TestRepoWithMocks(t *testing.T) {
 				fs.On("Mkdir", mock.Anything, mock.Anything).Return(nil)
 
 				Convey("propagates Run error", func() {
-					commander.On("Run", "squashfuse", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(err)
+					commander.On("Run", squashfuseCmd, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(err)
 					e := repo.Mount("volkey", "reskey", "file", "dest")
 					So(e, ShouldEqual, err)
 				})
 				Convey("given successful Run", func() {
-					commander.On("Run", "squashfuse", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+					commander.On("Run", squashfuseCmd, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
 					Convey("sets up volume mounts", func() {
 						e := repo.Mount("volkey", "reskey", "file", "dest")
@@ -505,14 +506,14 @@ func TestRepoWithMocks(t *testing.T) {
 		Convey("cleanupMounts calls unmount on all squashfuse mount", func() {
 			file, _ := ioutil.TempFile("", "")
 			file.WriteString(
-				`proc /proc/asound proc ro,relatime 0 0
+				fmt.Sprintf(`proc /proc/asound proc ro,relatime 0 0
 tmpfs /proc/acpi tmpfs ro,relatime 0 0
-squashfuse /tmp/storage/abc fuse.squashfuse rw,nosuid,nodev,relatime,user_id=0,group_id=0 0 0
-`)
+%s /tmp/storage/abc fuse.squashfuse rw,nosuid,nodev,relatime,user_id=0,group_id=0 0 0
+`, squashfuseMount))
 			file.Seek(0, 0)
 
 			fs.On("OpenFile", "/proc/mounts", os.O_RDONLY, os.ModePerm).Return(file, nil)
-			commander.On("Run", "fusermount", "-uz", mock.Anything).Return(nil).Once()
+			commander.On("Run", fusermountCmd, "-uz", mock.Anything).Return(nil).Once()
 			repo.cleanupMounts()
 
 			file.Close()
