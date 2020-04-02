@@ -26,17 +26,17 @@ spec:
       imagePullSecrets:
         - name: syncano-k8s-pull-secret
       securityContext:
-        fsGroup: 101
+        fsGroup: 1000
       containers:
         - name: codebox-lb-{{ LB_NUM }}
           image: {{ IMAGE }}
-          command:
-            - "codebox"
-            - "lb"
+          args:
+            - codebox
+            - lb
           securityContext:
-            runAsGroup: 101
+            runAsGroup: 1000
             runAsNonRoot: true
-            runAsUser: 100
+            runAsUser: 1000
           resources:
             requests:
               memory: "256Mi"

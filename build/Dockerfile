@@ -1,4 +1,8 @@
 FROM alpine:3.11
+
+ARG UID=1000
+ARG GID=1000
+
 ENV SQUASHFUSE_VERSION 0.1.103
 ENV WRAPPERPATH /usr/local/bin/codewrapper
 
@@ -25,14 +29,16 @@ RUN set -ex \
     && apk del .build-deps \
     \
     # Install requirements
-    && addgroup -S codebox \
-    && adduser -S -D -G codebox codebox \
+    && addgroup -S -g $GID codebox \
+    && adduser -S -D -G codebox -u $UID codebox \
     && apk --no-cache add \
         lzo \
         lz4-libs \
         xz-libs \
         fuse \
-        ca-certificates
+        ca-certificates \
+        # tini to avoid zombies and to properly process squashfuse umounts
+        tini
 
 COPY codebox /usr/local/bin/codebox
 COPY codewrapper ${WRAPPERPATH}
@@ -40,3 +46,5 @@ COPY codewrapper ${WRAPPERPATH}
 WORKDIR /home/codebox
 USER codebox
 EXPOSE 8000
+CMD ["codebox"]
+ENTRYPOINT ["/sbin/tini", "--"]

@@ -46,13 +46,13 @@ spec:
             path: /mnt/codebox/run
 
       securityContext:
-        fsGroup: 101
+        fsGroup: 1000
       containers:
         - name: codebox
           image: {{ IMAGE }}
-          command:
-            - "codebox"
-            - "worker"
+          args:
+            - codebox
+            - worker
           securityContext:
             privileged: true
             runAsUser: 0

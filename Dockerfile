@@ -1,4 +1,5 @@
 FROM golang:1.14
+
 ENV SQUASHFUSE_VERSION=0.1.103 \
     GOPROXY=https://proxy.golang.org
 WORKDIR /opt/build
