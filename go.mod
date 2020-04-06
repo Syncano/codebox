@@ -51,9 +51,9 @@ require (
 	golang.org/x/crypto v0.0.0-20200403201458-baeed622b8d8
 	golang.org/x/net v0.0.0-20200324143707-d3edc9973b7e
 	golang.org/x/sync v0.0.0-20200317015054-43a5402ce75a
-	golang.org/x/sys v0.0.0-20200331124033-c3d80250170d // indirect
-	golang.org/x/tools v0.0.0-20200403190813-44a64ad78b9b
-	google.golang.org/genproto v0.0.0-20200403120447-c50568487044 // indirect
+	golang.org/x/sys v0.0.0-20200406113430-c6e801f48ba2 // indirect
+	golang.org/x/tools v0.0.0-20200406144418-7db14c95bfa9
+	google.golang.org/genproto v0.0.0-20200406120821-33397c535dc2 // indirect
 	google.golang.org/grpc v1.28.0
 	gopkg.in/go-playground/assert.v1 v1.2.1 // indirect
 	gopkg.in/go-playground/validator.v9 v9.31.0
