@@ -176,7 +176,7 @@ func init() {
 			logrus.WithError(err).Fatal("Unable to create tracer")
 		}
 
-		//Use zipkin-go-opentracing to wrap our tracer.
+		// Use zipkin-go-opentracing to wrap our tracer.
 		tracer := zipkinot.Wrap(nativeTracer)
 
 		opentracing.SetGlobalTracer(tracer)
