@@ -12,10 +12,12 @@ import (
 	"github.com/doloopwhile/logrusltsv"
 	"github.com/evalphobia/logrus_sentry"
 	opentracing "github.com/opentracing/opentracing-go"
-	zipkin "github.com/openzipkin/zipkin-go-opentracing"
+	zipkinot "github.com/openzipkin-contrib/zipkin-go-opentracing"
+	"github.com/openzipkin/zipkin-go"
+	zipkinhttp "github.com/openzipkin/zipkin-go/reporter/http"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v2"
 	"golang.org/x/crypto/ssh/terminal"
 	"google.golang.org/grpc/grpclog"
 
@@ -103,33 +105,33 @@ func init() {
 	App.Usage = "Application that enables running user provided unsecure code in a secure docker environment."
 	App.Compiled = version.Buildtime
 	App.Version = version.Current.String()
-	App.Authors = []cli.Author{
+	App.Authors = []*cli.Author{
 		{
 			Name:  "Robert Kopaczewski",
 			Email: "rk@23doors.com",
 		},
 	}
-	App.Copyright = "(c) 2017-2018 Syncano"
+	App.Copyright = "(c) 2017-2020 Syncano"
 	App.Flags = []cli.Flag{
-		cli.BoolFlag{
+		&cli.BoolFlag{
 			Name: "debug", Usage: "enable debug mode",
-			EnvVar: "DEBUG",
+			EnvVars: []string{"DEBUG"},
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name: "dsn", Usage: "enable sentry logging",
-			EnvVar: "SENTRY_DSN",
+			EnvVars: []string{"SENTRY_DSN"},
 		},
-		cli.IntFlag{
-			Name: "port, p", Usage: "port for expvar server",
-			EnvVar: "METRIC_PORT", Value: 9080,
+		&cli.IntFlag{
+			Name: "metric-port", Aliases: []string{"mp"}, Usage: "port for expvar server",
+			EnvVars: []string{"METRIC_PORT"}, Value: 9080,
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name: "zipkin-addr", Usage: "zipkin address",
-			EnvVar: "ZIPKIN_ADDR", Value: "zipkin",
+			EnvVars: []string{"ZIPKIN_ADDR"}, Value: "zipkin",
 		},
-		cli.StringFlag{
-			Name: "service-name, n", Usage: "service name",
-			EnvVar: "SERVICE_NAME", Value: "codebox",
+		&cli.StringFlag{
+			Name: "service-name", Aliases: []string{"n"}, Usage: "service name",
+			EnvVars: []string{"SERVICE_NAME"}, Value: "codebox",
 		},
 	}
 	App.Before = func(c *cli.Context) error {
@@ -145,10 +147,10 @@ func init() {
 		}
 
 		// Serve expvar and checks.
-		logrus.WithField("port", c.Int("port")).Info("Serving http for expvar and checks")
+		logrus.WithField("port", c.Int("metric-port")).Info("Serving http for expvar and checks")
 
 		go func() {
-			if err := http.ListenAndServe(fmt.Sprintf(":%d", c.Int("port")), nil); err != nil && err != http.ErrServerClosed {
+			if err := http.ListenAndServe(fmt.Sprintf(":%d", c.Int("metric-port")), nil); err != nil && err != http.ErrServerClosed {
 				logrus.WithError(err).Fatal("Serve error")
 			}
 		}()
@@ -157,17 +159,25 @@ func init() {
 		http.Handle("/metrics", promhttp.Handler())
 
 		// Initialize tracing.
-		collector, err := zipkin.NewHTTPCollector(fmt.Sprintf("http://%s:9411/api/v1/spans", c.String("zipkin-addr")))
+		reporter := zipkinhttp.NewReporter(fmt.Sprintf("http://%s:9411/api/v2/spans", c.String("zipkin-addr")))
+		defer reporter.Close()
+
+		endpoint, err := zipkin.NewEndpoint(c.String("service-name"), "")
 		if err != nil {
-			return err
+			logrus.WithError(err).Fatal("Unable to create local endpoint error")
 		}
 
-		recorder := zipkin.NewRecorder(collector, c.Bool("debug"), "0", c.String("service-name"))
-
-		tracer, err := zipkin.NewTracer(recorder, zipkin.ClientServerSameSpan(false))
+		// Initialize tracer.
+		nativeTracer, err := zipkin.NewTracer(reporter,
+			zipkin.WithLocalEndpoint(endpoint),
+			zipkin.WithSampler(zipkin.NewModuloSampler(uint64(1/c.Float64("tracing-sampling")))),
+		)
 		if err != nil {
-			return err
+			logrus.WithError(err).Fatal("Unable to create tracer")
 		}
+
+		// Use zipkin-go-opentracing to wrap our tracer.
+		tracer := zipkinot.Wrap(nativeTracer)
 
 		opentracing.SetGlobalTracer(tracer)
 

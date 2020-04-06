@@ -4,7 +4,7 @@ import (
 	"context"
 	"net"
 
-	"github.com/go-redis/redis"
+	"github.com/go-redis/redis/v7"
 	"github.com/hashicorp/yamux"
 	"github.com/sirupsen/logrus"
 )

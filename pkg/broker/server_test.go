@@ -16,12 +16,12 @@ import (
 	"testing"
 	"time"
 
-	redis "github.com/go-redis/redis"
+	redis "github.com/go-redis/redis/v7"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/sirupsen/logrus"
 	. "github.com/smartystreets/goconvey/convey"
 	"github.com/stretchr/testify/mock"
-	"github.com/vmihailenco/msgpack"
+	"github.com/vmihailenco/msgpack/v4"
 	"google.golang.org/grpc/grpclog"
 
 	"github.com/Syncano/codebox/pkg/broker/mocks"

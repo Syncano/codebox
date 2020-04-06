@@ -43,13 +43,13 @@ func TestLBAcceptance(t *testing.T) {
 
 	Convey("Given initialized lb and worker", t, func() {
 		// Start load balancer.
-		lbCmd := exec.Command("build/codebox", "--debug", "-p", "9080", "lb", "-p", "9000")
+		lbCmd := exec.Command("build/codebox", "--debug", "--metric-port", "9080", "lb", "-p", "9000")
 		lbCmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 		lbStderr, _ := lbCmd.StderrPipe()
 		lbCmd.Start()
 
 		// Start worker.
-		workerCmd := exec.Command("build/codebox", "--debug", "-p", "9180", "worker", "--lb", "127.0.0.1:9000")
+		workerCmd := exec.Command("build/codebox", "--debug", "--metric-port", "9180", "worker", "--lb", "127.0.0.1:9000")
 		workerCmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 		wStderr, _ := workerCmd.StderrPipe()
 		workerCmd.Start()

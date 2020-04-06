@@ -147,12 +147,12 @@ func (s *Server) Run(stream pb.ScriptRunner_RunServer) error {
 		return s.ParseError(err)
 	}
 
-	executionCounter.WithLabelValues(strconv.Itoa(ret.Code)).Inc()
-	executionDurationsHistogram.Observe(ret.Took.Seconds())
-	overheadDurationsHistogram.Observe(ret.Overhead.Seconds()) // docker overhead
-
 	// Send response if we got any.
 	if ret != nil {
+		executionCounter.WithLabelValues(strconv.Itoa(ret.Code)).Inc()
+		executionDurationsHistogram.Observe(ret.Took.Seconds())
+		overheadDurationsHistogram.Observe(ret.Overhead.Seconds()) // docker overhead
+
 		logger.WithField("ret", ret).Info("grpc:script:Run")
 
 		e := s.sendResponse(stream, ret)
