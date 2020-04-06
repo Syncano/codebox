@@ -3,7 +3,7 @@ package broker
 import (
 	"time"
 
-	"github.com/go-redis/redis"
+	"github.com/go-redis/redis/v7"
 	opentracing "github.com/opentracing/opentracing-go"
 )
 

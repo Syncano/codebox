@@ -10,10 +10,10 @@ import (
 	"time"
 
 	"github.com/docker/docker/client"
-	"github.com/go-redis/redis"
+	"github.com/go-redis/redis/v7"
 	grpc_retry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 	"github.com/sirupsen/logrus"
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v2"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -39,132 +39,132 @@ var (
 	scriptOptions = &script.Options{Constraints: new(docker.Constraints)}
 )
 
-var workerCmd = cli.Command{
+var workerCmd = &cli.Command{
 	Name:        "worker",
 	Usage:       "Starts worker for Codebox that is being controlled by load balancer.",
 	Description: "Worker runs user code in docker environment.",
 	Flags: []cli.Flag{
-		cli.DurationFlag{
+		&cli.DurationFlag{
 			Name: "heartbeat, b", Usage: "heartbeat sent to load balancer",
-			EnvVar: "HEARTBEAT", Value: 5 * time.Second,
+			EnvVars: []string{"HEARTBEAT"}, Value: 5 * time.Second,
 		},
 
 		// Redis options.
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name: "redis-addr", Usage: "redis TCP address",
-			EnvVar: "REDIS_ADDR", Value: "redis:6379",
+			EnvVars: []string{"REDIS_ADDR"}, Value: "redis:6379",
 		},
 
 		// Script Runner general options.
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name: "host-storage-path, hpath", Usage: "runner host storage path",
-			EnvVar: "HOST_STORAGE_PATH", Value: script.DefaultOptions.HostStoragePath, Destination: &scriptOptions.HostStoragePath,
+			EnvVars: []string{"HOST_STORAGE_PATH"}, Value: script.DefaultOptions.HostStoragePath, Destination: &scriptOptions.HostStoragePath,
 		},
-		cli.BoolFlag{
+		&cli.BoolFlag{
 			Name: "prune-images", Usage: "prune unused images on start if set",
-			EnvVar: "PRUNE_IMAGES", Destination: &scriptOptions.PruneImages,
+			EnvVars: []string{"PRUNE_IMAGES"}, Destination: &scriptOptions.PruneImages,
 		},
-		cli.BoolFlag{
+		&cli.BoolFlag{
 			Name: "use-existing-images", Usage: "check if images exist and only download if they are missing",
-			EnvVar: "USE_EXISTING_IMAGES", Destination: &scriptOptions.UseExistingImages,
+			EnvVars: []string{"USE_EXISTING_IMAGES"}, Destination: &scriptOptions.UseExistingImages,
 		},
 
 		// Script Runner limits.
-		cli.UintFlag{
+		&cli.UintFlag{
 			Name: "concurrency, c", Usage: "script concurrency",
-			EnvVar: "CONCURRENCY", Value: script.DefaultOptions.Concurrency, Destination: &scriptOptions.Concurrency,
+			EnvVars: []string{"CONCURRENCY"}, Value: script.DefaultOptions.Concurrency, Destination: &scriptOptions.Concurrency,
 		},
-		cli.UintFlag{
+		&cli.UintFlag{
 			Name: "cpu", Usage: "runner total cpu limit (in millicpus)",
-			EnvVar: "MCPU", Value: script.DefaultOptions.MCPU, Destination: &scriptOptions.MCPU,
+			EnvVars: []string{"MCPU"}, Value: script.DefaultOptions.MCPU, Destination: &scriptOptions.MCPU,
 		},
-		cli.Uint64Flag{
+		&cli.Uint64Flag{
 			Name: "iops", Usage: "runner total iops limit",
-			EnvVar: "IOPS", Value: script.DefaultOptions.NodeIOPS, Destination: &scriptOptions.NodeIOPS,
+			EnvVars: []string{"IOPS"}, Value: script.DefaultOptions.NodeIOPS, Destination: &scriptOptions.NodeIOPS,
 		},
-		cli.Int64Flag{
+		&cli.Int64Flag{
 			Name: "memory-limit, m", Usage: "script memory limit",
-			EnvVar: "MEMORY", Value: script.DefaultOptions.Constraints.MemoryLimit, Destination: &scriptOptions.Constraints.MemoryLimit,
+			EnvVars: []string{"MEMORY"}, Value: script.DefaultOptions.Constraints.MemoryLimit, Destination: &scriptOptions.Constraints.MemoryLimit,
 		},
-		cli.Uint64Flag{
+		&cli.Uint64Flag{
 			Name: "memory-margin", Usage: "runner memory margin",
-			EnvVar: "MEMORY_MARGIN", Value: script.DefaultOptions.MemoryMargin, Destination: &scriptOptions.MemoryMargin,
+			EnvVars: []string{"MEMORY_MARGIN"}, Value: script.DefaultOptions.MemoryMargin, Destination: &scriptOptions.MemoryMargin,
 		},
 
 		// Script Runner creation options.
-		cli.DurationFlag{
+		&cli.DurationFlag{
 			Name: "create-timeout", Usage: "container create timeout",
-			EnvVar: "CREATE_TIMEOUT", Value: script.DefaultOptions.CreateTimeout, Destination: &scriptOptions.CreateTimeout,
+			EnvVars: []string{"CREATE_TIMEOUT"}, Value: script.DefaultOptions.CreateTimeout, Destination: &scriptOptions.CreateTimeout,
 		},
-		cli.IntFlag{
+		&cli.IntFlag{
 			Name: "create-retry-count", Usage: "container create retry count",
-			EnvVar: "CREATE_RETRY_COUNT", Value: script.DefaultOptions.CreateRetryCount, Destination: &scriptOptions.CreateRetryCount,
+			EnvVars: []string{"CREATE_RETRY_COUNT"}, Value: script.DefaultOptions.CreateRetryCount, Destination: &scriptOptions.CreateRetryCount,
 		},
-		cli.DurationFlag{
+		&cli.DurationFlag{
 			Name: "create-retry-sleep", Usage: "container create retry sleep",
-			EnvVar: "CREATE_RETRY_SLEEP", Value: script.DefaultOptions.CreateRetrySleep, Destination: &scriptOptions.CreateRetrySleep,
+			EnvVars: []string{"CREATE_RETRY_SLEEP"}, Value: script.DefaultOptions.CreateRetrySleep, Destination: &scriptOptions.CreateRetrySleep,
 		},
 
 		// Script Runner container cache options.
-		cli.DurationFlag{
+		&cli.DurationFlag{
 			Name: "container-ttl, l", Usage: "container ttl",
-			EnvVar: "CONTAINER_TTL", Value: script.DefaultOptions.ContainerTTL, Destination: &scriptOptions.ContainerTTL,
+			EnvVars: []string{"CONTAINER_TTL"}, Value: script.DefaultOptions.ContainerTTL, Destination: &scriptOptions.ContainerTTL,
 		},
-		cli.IntFlag{
+		&cli.IntFlag{
 			Name: "containers-capacity, cap", Usage: "containers capacity",
-			EnvVar: "CONTAINERS_CAPACITY", Value: script.DefaultOptions.ContainersCapacity, Destination: &scriptOptions.ContainersCapacity,
+			EnvVars: []string{"CONTAINERS_CAPACITY"}, Value: script.DefaultOptions.ContainersCapacity, Destination: &scriptOptions.ContainersCapacity,
 		},
-		cli.IntFlag{
+		&cli.IntFlag{
 			Name: "stream-max-length", Usage: "stream (stdout/stderr) max length",
-			EnvVar: "STREAM_MAX_LENGTH", Value: script.DefaultOptions.StreamMaxLength, Destination: &scriptOptions.StreamMaxLength,
+			EnvVars: []string{"STREAM_MAX_LENGTH"}, Value: script.DefaultOptions.StreamMaxLength, Destination: &scriptOptions.StreamMaxLength,
 		},
 
 		// Docker options.
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name: "docker-network", Usage: "docker network to use",
-			EnvVar: "DOCKER_NETWORK", Value: docker.DefaultOptions.Network, Destination: &dockerOptions.Network,
+			EnvVars: []string{"DOCKER_NETWORK"}, Value: docker.DefaultOptions.Network, Destination: &dockerOptions.Network,
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name: "docker-network-subnet", Usage: "docker network subnet to create (if network is missing)",
-			EnvVar: "DOCKER_NETWORK_SUBNET", Value: docker.DefaultOptions.NetworkSubnet, Destination: &dockerOptions.NetworkSubnet,
+			EnvVars: []string{"DOCKER_NETWORK_SUBNET"}, Value: docker.DefaultOptions.NetworkSubnet, Destination: &dockerOptions.NetworkSubnet,
 		},
-		cli.UintFlag{
+		&cli.UintFlag{
 			Name: "docker-reserved-cpu", Usage: "reserved cpu for docker runner (in millicpu)",
-			EnvVar: "DOCKER_RESERVED_CPU", Value: docker.DefaultOptions.ReservedMCPU, Destination: &dockerOptions.ReservedMCPU,
+			EnvVars: []string{"DOCKER_RESERVED_CPU"}, Value: docker.DefaultOptions.ReservedMCPU, Destination: &dockerOptions.ReservedMCPU,
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name: "docker-blkio-device", Usage: "docker blkio device to limit iops",
-			EnvVar: "DOCKER_DEVICE", Value: docker.DefaultOptions.BlkioDevice, Destination: &dockerOptions.BlkioDevice,
+			EnvVars: []string{"DOCKER_DEVICE"}, Value: docker.DefaultOptions.BlkioDevice, Destination: &dockerOptions.BlkioDevice,
 		},
-		cli.StringSliceFlag{
+		&cli.StringSliceFlag{
 			Name: "docker-dns", Usage: "docker DNS",
-			EnvVar: "DOCKER_DNS", Value: (*cli.StringSlice)(&docker.DefaultOptions.DNS),
+			EnvVars: []string{"DOCKER_DNS"}, Value: cli.NewStringSlice(docker.DefaultOptions.DNS...),
 		},
-		cli.StringSliceFlag{
+		&cli.StringSliceFlag{
 			Name: "docker-extra-hosts", Usage: "docker extra hosts",
-			EnvVar: "DOCKER_EXTRA_HOSTS",
+			EnvVars: []string{"DOCKER_EXTRA_HOSTS"},
 		},
 
 		// File Repo options.
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name: "repo-path, rpath", Usage: "path for file repo storage",
-			EnvVar: "REPO_PATH", Value: filerepo.DefaultOptions.BasePath, Destination: &repoOptions.BasePath,
+			EnvVars: []string{"REPO_PATH"}, Value: filerepo.DefaultOptions.BasePath, Destination: &repoOptions.BasePath,
 		},
-		cli.Float64Flag{
+		&cli.Float64Flag{
 			Name: "repo-max-disk-usage, rdu", Usage: "max allowed file repo max disk usage",
-			EnvVar: "REPO_MAX_DISK_USAGE", Value: filerepo.DefaultOptions.MaxDiskUsage, Destination: &repoOptions.MaxDiskUsage,
+			EnvVars: []string{"REPO_MAX_DISK_USAGE"}, Value: filerepo.DefaultOptions.MaxDiskUsage, Destination: &repoOptions.MaxDiskUsage,
 		},
-		cli.DurationFlag{
+		&cli.DurationFlag{
 			Name: "repo-ttl, rttl", Usage: "ttl for file repo storage",
-			EnvVar: "REPO_TTL", Value: filerepo.DefaultOptions.TTL, Destination: &repoOptions.TTL,
+			EnvVars: []string{"REPO_TTL"}, Value: filerepo.DefaultOptions.TTL, Destination: &repoOptions.TTL,
 		},
-		cli.IntFlag{
+		&cli.IntFlag{
 			Name: "repo-capacity, rcap", Usage: "max capacity for file repo storage",
-			EnvVar: "REPO_CAPACITY", Value: filerepo.DefaultOptions.Capacity, Destination: &repoOptions.Capacity,
+			EnvVars: []string{"REPO_CAPACITY"}, Value: filerepo.DefaultOptions.Capacity, Destination: &repoOptions.Capacity,
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name: "lb-addr, lb", Usage: "load balancer TCP address",
-			EnvVar: "LB_ADDR", Value: "127.0.0.1:8000",
+			EnvVars: []string{"LB_ADDR"}, Value: "127.0.0.1:8000",
 		},
 	},
 	Action: func(c *cli.Context) error {

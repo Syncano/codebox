@@ -13,7 +13,7 @@ import (
 
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/sirupsen/logrus"
-	"github.com/vmihailenco/msgpack"
+	"github.com/vmihailenco/msgpack/v4"
 
 	brokerpb "github.com/Syncano/codebox/pkg/broker/proto"
 	lbpb "github.com/Syncano/codebox/pkg/lb/proto"
