@@ -34,31 +34,31 @@ var lbCmd = &cli.Command{
 As there is no authentication, always run it in a private network.`,
 	Flags: []cli.Flag{
 		&cli.IntFlag{
-			Name: "port, p", Usage: "port for grpc server",
+			Name: "port", Aliases: []string{"p"}, Usage: "port for grpc server",
 			EnvVars: []string{"PORT"}, Value: 8000,
 		},
 
 		// File Repo options.
 		&cli.StringFlag{
-			Name: "repo-path, path", Usage: "path for file repo storage",
+			Name: "repo-path", Aliases: []string{"path"}, Usage: "path for file repo storage",
 			EnvVars: []string{"REPO_PATH"}, Value: filerepo.DefaultOptions.BasePath, Destination: &repoOptions.BasePath,
 		},
 		&cli.Float64Flag{
-			Name: "repo-max-disk-usage, u", Usage: "max allowed file repo max disk usage",
+			Name: "repo-max-disk-usage", Aliases: []string{"u"}, Usage: "max allowed file repo max disk usage",
 			EnvVars: []string{"REPO_MAX_DISK_USAGE"}, Value: filerepo.DefaultOptions.MaxDiskUsage, Destination: &repoOptions.MaxDiskUsage,
 		},
 		&cli.DurationFlag{
-			Name: "repo-ttl, l", Usage: "ttl for file repo storage",
+			Name: "repo-ttl", Aliases: []string{"l"}, Usage: "ttl for file repo storage",
 			EnvVars: []string{"REPO_TTL"}, Value: filerepo.DefaultOptions.TTL, Destination: &repoOptions.TTL,
 		},
 		&cli.IntFlag{
-			Name: "repo-capacity, c", Usage: "max capacity for file repo storage",
+			Name: "repo-capacity", Aliases: []string{"c"}, Usage: "max capacity for file repo storage",
 			EnvVars: []string{"REPO_CAPACITY"}, Value: filerepo.DefaultOptions.Capacity, Destination: &repoOptions.Capacity,
 		},
 
 		// LB Server options.
 		&cli.DurationFlag{
-			Name: "worker-keepalive, k", Usage: "max allowed worker keepalive",
+			Name: "worker-keepalive", Aliases: []string{"k"}, Usage: "max allowed worker keepalive",
 			EnvVars: []string{"WORKER_KEEPALIVE"}, Value: lb.DefaultOptions.WorkerKeepalive, Destination: &lbOptions.WorkerKeepalive,
 		},
 		&cli.IntFlag{

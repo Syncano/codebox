@@ -12,7 +12,7 @@ var (
 	Current      semver.Version
 	GitSHA       = "dev"
 	buildtimeStr string
-	versionStr   = "1.2.0"
+	versionStr   = "1.3.0"
 )
 
 func mustParseBuildtime(buildtimeStr string) time.Time {

@@ -111,7 +111,7 @@ func init() {
 			Email: "rk@23doors.com",
 		},
 	}
-	App.Copyright = "(c) 2017-2018 Syncano"
+	App.Copyright = "(c) 2017-2020 Syncano"
 	App.Flags = []cli.Flag{
 		&cli.BoolFlag{
 			Name: "debug", Usage: "enable debug mode",
@@ -122,7 +122,7 @@ func init() {
 			EnvVars: []string{"SENTRY_DSN"},
 		},
 		&cli.IntFlag{
-			Name: "port, p", Usage: "port for expvar server",
+			Name: "metric-port", Aliases: []string{"mp"}, Usage: "port for expvar server",
 			EnvVars: []string{"METRIC_PORT"}, Value: 9080,
 		},
 		&cli.StringFlag{
@@ -130,7 +130,7 @@ func init() {
 			EnvVars: []string{"ZIPKIN_ADDR"}, Value: "zipkin",
 		},
 		&cli.StringFlag{
-			Name: "service-name, n", Usage: "service name",
+			Name: "service-name", Aliases: []string{"n"}, Usage: "service name",
 			EnvVars: []string{"SERVICE_NAME"}, Value: "codebox",
 		},
 	}
@@ -147,10 +147,10 @@ func init() {
 		}
 
 		// Serve expvar and checks.
-		logrus.WithField("port", c.Int("port")).Info("Serving http for expvar and checks")
+		logrus.WithField("port", c.Int("metric-port")).Info("Serving http for expvar and checks")
 
 		go func() {
-			if err := http.ListenAndServe(fmt.Sprintf(":%d", c.Int("port")), nil); err != nil && err != http.ErrServerClosed {
+			if err := http.ListenAndServe(fmt.Sprintf(":%d", c.Int("metric-port")), nil); err != nil && err != http.ErrServerClosed {
 				logrus.WithError(err).Fatal("Serve error")
 			}
 		}()

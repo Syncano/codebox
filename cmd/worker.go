@@ -45,7 +45,7 @@ var workerCmd = &cli.Command{
 	Description: "Worker runs user code in docker environment.",
 	Flags: []cli.Flag{
 		&cli.DurationFlag{
-			Name: "heartbeat, b", Usage: "heartbeat sent to load balancer",
+			Name: "heartbeat", Aliases: []string{"b"}, Usage: "heartbeat sent to load balancer",
 			EnvVars: []string{"HEARTBEAT"}, Value: 5 * time.Second,
 		},
 
@@ -57,7 +57,7 @@ var workerCmd = &cli.Command{
 
 		// Script Runner general options.
 		&cli.StringFlag{
-			Name: "host-storage-path, hpath", Usage: "runner host storage path",
+			Name: "host-storage-path", Aliases: []string{"hpath"}, Usage: "runner host storage path",
 			EnvVars: []string{"HOST_STORAGE_PATH"}, Value: script.DefaultOptions.HostStoragePath, Destination: &scriptOptions.HostStoragePath,
 		},
 		&cli.BoolFlag{
@@ -71,7 +71,7 @@ var workerCmd = &cli.Command{
 
 		// Script Runner limits.
 		&cli.UintFlag{
-			Name: "concurrency, c", Usage: "script concurrency",
+			Name: "concurrency", Aliases: []string{"c"}, Usage: "script concurrency",
 			EnvVars: []string{"CONCURRENCY"}, Value: script.DefaultOptions.Concurrency, Destination: &scriptOptions.Concurrency,
 		},
 		&cli.UintFlag{
@@ -83,7 +83,7 @@ var workerCmd = &cli.Command{
 			EnvVars: []string{"IOPS"}, Value: script.DefaultOptions.NodeIOPS, Destination: &scriptOptions.NodeIOPS,
 		},
 		&cli.Int64Flag{
-			Name: "memory-limit, m", Usage: "script memory limit",
+			Name: "memory-limit", Aliases: []string{"m"}, Usage: "script memory limit",
 			EnvVars: []string{"MEMORY"}, Value: script.DefaultOptions.Constraints.MemoryLimit, Destination: &scriptOptions.Constraints.MemoryLimit,
 		},
 		&cli.Uint64Flag{
@@ -107,11 +107,11 @@ var workerCmd = &cli.Command{
 
 		// Script Runner container cache options.
 		&cli.DurationFlag{
-			Name: "container-ttl, l", Usage: "container ttl",
+			Name: "container-ttl", Aliases: []string{"l"}, Usage: "container ttl",
 			EnvVars: []string{"CONTAINER_TTL"}, Value: script.DefaultOptions.ContainerTTL, Destination: &scriptOptions.ContainerTTL,
 		},
 		&cli.IntFlag{
-			Name: "containers-capacity, cap", Usage: "containers capacity",
+			Name: "containers-capacity", Aliases: []string{"cap"}, Usage: "containers capacity",
 			EnvVars: []string{"CONTAINERS_CAPACITY"}, Value: script.DefaultOptions.ContainersCapacity, Destination: &scriptOptions.ContainersCapacity,
 		},
 		&cli.IntFlag{
@@ -147,23 +147,23 @@ var workerCmd = &cli.Command{
 
 		// File Repo options.
 		&cli.StringFlag{
-			Name: "repo-path, rpath", Usage: "path for file repo storage",
+			Name: "repo-path", Aliases: []string{"rpath"}, Usage: "path for file repo storage",
 			EnvVars: []string{"REPO_PATH"}, Value: filerepo.DefaultOptions.BasePath, Destination: &repoOptions.BasePath,
 		},
 		&cli.Float64Flag{
-			Name: "repo-max-disk-usage, rdu", Usage: "max allowed file repo max disk usage",
+			Name: "repo-max-disk-usage", Aliases: []string{"rdu"}, Usage: "max allowed file repo max disk usage",
 			EnvVars: []string{"REPO_MAX_DISK_USAGE"}, Value: filerepo.DefaultOptions.MaxDiskUsage, Destination: &repoOptions.MaxDiskUsage,
 		},
 		&cli.DurationFlag{
-			Name: "repo-ttl, rttl", Usage: "ttl for file repo storage",
+			Name: "repo-ttl", Aliases: []string{"rttl"}, Usage: "ttl for file repo storage",
 			EnvVars: []string{"REPO_TTL"}, Value: filerepo.DefaultOptions.TTL, Destination: &repoOptions.TTL,
 		},
 		&cli.IntFlag{
-			Name: "repo-capacity, rcap", Usage: "max capacity for file repo storage",
+			Name: "repo-capacity", Aliases: []string{"rcap"}, Usage: "max capacity for file repo storage",
 			EnvVars: []string{"REPO_CAPACITY"}, Value: filerepo.DefaultOptions.Capacity, Destination: &repoOptions.Capacity,
 		},
 		&cli.StringFlag{
-			Name: "lb-addr, lb", Usage: "load balancer TCP address",
+			Name: "lb-addr", Aliases: []string{"lb"}, Usage: "load balancer TCP address",
 			EnvVars: []string{"LB_ADDR"}, Value: "127.0.0.1:8000",
 		},
 	},
