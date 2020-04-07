@@ -14,6 +14,7 @@ import (
 	opentracing "github.com/opentracing/opentracing-go"
 	zipkinot "github.com/openzipkin-contrib/zipkin-go-opentracing"
 	"github.com/openzipkin/zipkin-go"
+	"github.com/openzipkin/zipkin-go/reporter"
 	zipkinhttp "github.com/openzipkin/zipkin-go/reporter/http"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
@@ -31,6 +32,8 @@ var (
 
 	// App is the main structure of a cli application.
 	App = cli.NewApp()
+
+	tracingReporter reporter.Reporter
 )
 
 type logrusWrapper struct {
@@ -125,9 +128,15 @@ func init() {
 			Name: "metric-port", Aliases: []string{"mp"}, Usage: "port for expvar server",
 			EnvVars: []string{"METRIC_PORT"}, Value: 9080,
 		},
+
+		// Tracing options.
 		&cli.StringFlag{
 			Name: "zipkin-addr", Usage: "zipkin address",
 			EnvVars: []string{"ZIPKIN_ADDR"}, Value: "zipkin",
+		},
+		&cli.Float64Flag{
+			Name: "tracing-sampling", Usage: "tracing sampling value",
+			EnvVars: []string{"TRACING_SAMPLING"}, Value: 0,
 		},
 		&cli.StringFlag{
 			Name: "service-name", Aliases: []string{"n"}, Usage: "service name",
@@ -159,8 +168,7 @@ func init() {
 		http.Handle("/metrics", promhttp.Handler())
 
 		// Initialize tracing.
-		reporter := zipkinhttp.NewReporter(fmt.Sprintf("http://%s:9411/api/v2/spans", c.String("zipkin-addr")))
-		defer reporter.Close()
+		tracingReporter = zipkinhttp.NewReporter(fmt.Sprintf("http://%s:9411/api/v2/spans", c.String("zipkin-addr")))
 
 		endpoint, err := zipkin.NewEndpoint(c.String("service-name"), "")
 		if err != nil {
@@ -168,7 +176,7 @@ func init() {
 		}
 
 		// Initialize tracer.
-		nativeTracer, err := zipkin.NewTracer(reporter,
+		nativeTracer, err := zipkin.NewTracer(tracingReporter,
 			zipkin.WithLocalEndpoint(endpoint),
 			zipkin.WithSampler(zipkin.NewModuloSampler(uint64(1/c.Float64("tracing-sampling")))),
 		)
@@ -180,6 +188,12 @@ func init() {
 		tracer := zipkinot.Wrap(nativeTracer)
 
 		opentracing.SetGlobalTracer(tracer)
+
+		return nil
+	}
+	App.After = func(c *cli.Context) error {
+		// Close tracing reporter.
+		tracingReporter.Close()
 
 		return nil
 	}
