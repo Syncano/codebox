@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	grpc_opentracing "github.com/grpc-ecosystem/go-grpc-middleware/tracing/opentracing"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli/v2"
 	"google.golang.org/grpc"
@@ -131,7 +132,16 @@ As there is no authentication, always run it in a private network.`,
 		if err != nil {
 			return err
 		}
-		grpcServer := grpc.NewServer(sys.DefaultGRPCServerOptions...)
+		grpcServer := grpc.NewServer(
+			grpc.UnaryInterceptor(
+				grpc_opentracing.UnaryServerInterceptor(),
+			),
+			grpc.StreamInterceptor(
+				grpc_opentracing.StreamServerInterceptor(),
+			),
+			grpc.MaxRecvMsgSize(sys.MaxGRPCMessageSize),
+			grpc.MaxSendMsgSize(sys.MaxGRPCMessageSize),
+		)
 
 		// Register all servers.
 		lbpb.RegisterWorkerPlugServer(grpcServer, lbServer)

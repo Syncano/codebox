@@ -34,6 +34,7 @@ var (
 	App = cli.NewApp()
 
 	tracingReporter reporter.Reporter
+	tracer          opentracing.Tracer
 )
 
 type logrusWrapper struct {
@@ -185,7 +186,7 @@ func init() {
 		}
 
 		// Use zipkin-go-opentracing to wrap our tracer.
-		tracer := zipkinot.Wrap(nativeTracer)
+		tracer = zipkinot.Wrap(nativeTracer)
 
 		opentracing.SetGlobalTracer(tracer)
 

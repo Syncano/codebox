@@ -10,6 +10,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	grpc_opentracing "github.com/grpc-ecosystem/go-grpc-middleware/tracing/opentracing"
 	"github.com/spf13/afero"
 	"google.golang.org/grpc"
 
@@ -52,7 +53,16 @@ const (
 
 // NewWorker initializes new worker info along with worker connection.
 func NewWorker(id string, addr net.TCPAddr, mCPU, defaultMCPU uint32, memory uint64) *Worker {
-	conn, err := grpc.Dial(addr.String(), sys.DefaultGRPCDialOptions...)
+	conn, err := grpc.Dial(addr.String(),
+		grpc.WithInsecure(),
+		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(sys.MaxGRPCMessageSize)),
+		grpc.WithUnaryInterceptor(
+			grpc_opentracing.UnaryClientInterceptor(),
+		),
+		grpc.WithStreamInterceptor(
+			grpc_opentracing.StreamClientInterceptor(),
+		),
+	)
 	util.Must(err)
 
 	w := Worker{
