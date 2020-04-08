@@ -8,9 +8,7 @@ import (
 	"sync"
 	"time"
 
-	scriptpb "github.com/Syncano/codebox/pkg/script/proto"
-	"github.com/Syncano/codebox/pkg/sys"
-
+	grpc_opentracing "github.com/grpc-ecosystem/go-grpc-middleware/tracing/opentracing"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
@@ -20,6 +18,8 @@ import (
 	brokerpb "github.com/Syncano/codebox/pkg/broker/proto"
 	repopb "github.com/Syncano/codebox/pkg/filerepo/proto"
 	lbpb "github.com/Syncano/codebox/pkg/lb/proto"
+	scriptpb "github.com/Syncano/codebox/pkg/script/proto"
+	"github.com/Syncano/codebox/pkg/sys"
 	"github.com/Syncano/codebox/pkg/util"
 )
 
@@ -109,7 +109,16 @@ func NewServer(redisClient RedisClient, options *ServerOptions) (*Server, error)
 	// Initialize all load balancer connections.
 	for _, addr := range options.LBAddr {
 		logrus.WithField("addr", addr).Info("Initializing connection to Load Balancer")
-		conn, err := grpc.Dial(addr, sys.DefaultGRPCDialOptions...)
+		conn, err := grpc.Dial(addr,
+			grpc.WithInsecure(),
+			grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(sys.MaxGRPCMessageSize)),
+			grpc.WithUnaryInterceptor(
+				grpc_opentracing.UnaryClientInterceptor(),
+			),
+			grpc.WithStreamInterceptor(
+				grpc_opentracing.StreamClientInterceptor(),
+			),
+		)
 		util.Must(err)
 
 		lbServers = append(lbServers, &loadBalancer{
