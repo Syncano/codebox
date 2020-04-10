@@ -21,7 +21,6 @@ const (
 	celeryUpdateTraceTask = "apps.codeboxes.tasks.UpdateTraceTask"
 	celerySaveTraceTask   = "apps.codeboxes.tasks.SaveTraceTask"
 	successStatus         = "success"
-	errorStatus           = "error"
 	blockedStatus         = "blocked"
 	failureStatus         = "failure"
 	timeoutStatus         = "timeout"
