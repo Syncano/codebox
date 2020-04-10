@@ -184,7 +184,7 @@ func (s *Server) RunHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	trace, _ := s.processResponse(logger, start, request.Meta, stream, nil)
+	trace, _ := s.processResponse(ctx, logger, start, request.Meta, stream, nil)
 	took := time.Duration(trace.Duration) * time.Millisecond
 
 	logger.WithFields(logrus.Fields{

@@ -17,7 +17,6 @@ import (
 	"time"
 
 	redis "github.com/go-redis/redis/v7"
-	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/sirupsen/logrus"
 	. "github.com/smartystreets/goconvey/convey"
 	"github.com/stretchr/testify/mock"
@@ -39,15 +38,12 @@ import (
 )
 
 var (
-	tracer *mocks.Tracer
 	amqpCh *celerymocks.AMQPChannel
 )
 
 func TestMain(m *testing.M) {
 	grpclog.SetLoggerV2(grpclog.NewLoggerV2(ioutil.Discard, ioutil.Discard, ioutil.Discard))
 	logrus.SetOutput(ioutil.Discard)
-	tracer = new(mocks.Tracer)
-	opentracing.SetGlobalTracer(tracer)
 
 	amqpCh = new(celerymocks.AMQPChannel)
 	celery.Init(amqpCh)
@@ -321,9 +317,6 @@ func TestServerMethods(t *testing.T) {
 			rr := httptest.NewRecorder()
 			handler := http.HandlerFunc(s.RunHandler)
 
-			noopSpan := opentracing.NoopTracer{}.StartSpan("op")
-			tracer.On("Extract", mock.Anything, mock.Anything).Return(noopSpan.Context(), nil).Once()
-			tracer.On("StartSpan", mock.Anything, mock.Anything).Return(noopSpan)
 			req, _ := http.NewRequest("GET", "/", nil)
 
 			Convey("returns correct CORS headers", func() {
@@ -621,8 +614,6 @@ func TestServerMethods(t *testing.T) {
 					So(string(trace1.Result.Stderr), ShouldEqual, string(trace2.Result.Stderr))
 				})
 			})
-
-			tracer.AssertExpectations(t)
 		})
 		Convey("multipart http request with files is correctly parsed", func() {
 			expectedArgs := `{"field":"value"}`

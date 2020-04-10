@@ -6,5 +6,4 @@ debug*
 *.swagger.json
 *.unenc
 python/
-.env*
 _storage/

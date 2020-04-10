@@ -12,9 +12,9 @@ import (
 	"github.com/docker/docker/client"
 	"github.com/go-redis/redis/v7"
 	grpc_retry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
-	grpc_opentracing "github.com/grpc-ecosystem/go-grpc-middleware/tracing/opentracing"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli/v2"
+	"go.opencensus.io/plugin/ocgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -302,12 +302,7 @@ func startServer(
 
 	// Serve a new gRPC server.
 	grpcServer := grpc.NewServer(
-		grpc.UnaryInterceptor(
-			grpc_opentracing.UnaryServerInterceptor(),
-		),
-		grpc.StreamInterceptor(
-			grpc_opentracing.StreamServerInterceptor(),
-		),
+		grpc.StatsHandler(&ocgrpc.ServerHandler{}),
 		grpc.MaxRecvMsgSize(sys.MaxGRPCMessageSize),
 		grpc.MaxSendMsgSize(sys.MaxGRPCMessageSize),
 	)
@@ -329,12 +324,7 @@ func startServer(
 	conn, err := grpc.Dial(lbAddr,
 		grpc.WithInsecure(),
 		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(sys.MaxGRPCMessageSize)),
-		grpc.WithUnaryInterceptor(
-			grpc_opentracing.UnaryClientInterceptor(),
-		),
-		grpc.WithStreamInterceptor(
-			grpc_opentracing.StreamClientInterceptor(),
-		),
+		grpc.WithStatsHandler(&ocgrpc.ClientHandler{}),
 	)
 	if err != nil {
 		return false, err

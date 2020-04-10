@@ -2,12 +2,12 @@ package script
 
 import (
 	"io"
-	"strconv"
 	"sync"
 	"time"
 
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
+	"go.opencensus.io/stats"
+	"go.opencensus.io/stats/view"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -23,23 +23,18 @@ const (
 )
 
 var (
-	initOnceScript              sync.Once
-	executionDurationsHistogram = prometheus.NewHistogram(prometheus.HistogramOpts{
-		Name:    "codebox_execution_duration_seconds",
-		Help:    "Codebox execution latency distributions.",
-		Buckets: []float64{.1, .25, .5, 1, 2.5, 10, 30, 60, 120, 180},
-	})
-	overheadDurationsHistogram = prometheus.NewHistogram(prometheus.HistogramOpts{
-		Name: "codebox_overhead_duration_seconds",
-		Help: "Codebox overhead latency distributions.",
-	})
-	executionCounter = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "codebox_executions_total",
-			Help: "Codebox executions.",
-		},
-		[]string{"code"},
-	)
+	initOnceScript   sync.Once
+	overheadDuration = stats.Float64(
+		"codebox/overhead/duration/seconds",
+		"Codebox overhead duration.",
+		stats.UnitSeconds)
+
+	overheadDurationView = &view.View{
+		Name:        "codebox/overhead/duration/seconds",
+		Description: "Codebox overhead distribution.",
+		Measure:     overheadDuration,
+		Aggregation: view.Distribution(.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10),
+	}
 )
 
 // Server describes a Script Runner server.
@@ -55,11 +50,7 @@ var _ pb.ScriptRunnerServer = (*Server)(nil)
 func NewServer(runner Runner) *Server {
 	// Register prometheus exports.
 	initOnceScript.Do(func() {
-		prometheus.MustRegister(
-			executionDurationsHistogram,
-			overheadDurationsHistogram,
-			executionCounter,
-		)
+		util.Must(view.Register(overheadDurationView))
 	})
 
 	return &Server{Runner: runner}
@@ -149,9 +140,7 @@ func (s *Server) Run(stream pb.ScriptRunner_RunServer) error {
 
 	// Send response if we got any.
 	if ret != nil {
-		executionCounter.WithLabelValues(strconv.Itoa(ret.Code)).Inc()
-		executionDurationsHistogram.Observe(ret.Took.Seconds())
-		overheadDurationsHistogram.Observe(ret.Overhead.Seconds()) // docker overhead
+		stats.Record(stream.Context(), overheadDuration.M(ret.Overhead.Seconds())) //  docker overhead
 
 		logger.WithField("ret", ret).Info("grpc:script:Run")
 

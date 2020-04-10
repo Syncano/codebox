@@ -8,9 +8,9 @@ import (
 	"os/signal"
 	"syscall"
 
-	grpc_opentracing "github.com/grpc-ecosystem/go-grpc-middleware/tracing/opentracing"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli/v2"
+	"go.opencensus.io/plugin/ocgrpc"
 	"google.golang.org/grpc"
 
 	"github.com/Syncano/codebox/cmd/autoscaler"
@@ -133,12 +133,7 @@ As there is no authentication, always run it in a private network.`,
 			return err
 		}
 		grpcServer := grpc.NewServer(
-			grpc.UnaryInterceptor(
-				grpc_opentracing.UnaryServerInterceptor(),
-			),
-			grpc.StreamInterceptor(
-				grpc_opentracing.StreamServerInterceptor(),
-			),
+			grpc.StatsHandler(&ocgrpc.ServerHandler{}),
 			grpc.MaxRecvMsgSize(sys.MaxGRPCMessageSize),
 			grpc.MaxSendMsgSize(sys.MaxGRPCMessageSize),
 		)

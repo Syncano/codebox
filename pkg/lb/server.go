@@ -10,8 +10,10 @@ import (
 	"time"
 
 	"github.com/imdario/mergo"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
+	"go.opencensus.io/metric"
+	"go.opencensus.io/metric/metricdata"
+	"go.opencensus.io/metric/metricproducer"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -58,38 +60,11 @@ var DefaultOptions = &ServerOptions{
 }
 
 var (
-	initOnce        sync.Once
-	workerCounter   *expvar.Int
-	freeCPUCounter  *expvar.Int
-	expvarCollector = prometheus.NewExpvarCollector(map[string]*prometheus.Desc{
-		"workers": prometheus.NewDesc(
-			"codebox_workers",
-			"Codebox workers connected.",
-			nil, nil,
-		),
-		"cpu": prometheus.NewDesc(
-			"codebox_cpu",
-			"Codebox free mcpu.",
-			nil, nil,
-		),
-		"memory": prometheus.NewDesc(
-			"codebox_memory",
-			"Codebox free memory.",
-			nil, nil,
-		),
-	})
-	workerCPU = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "worker_cpu",
-		Help: "Available mCPU of worker.",
-	},
-		[]string{"id"},
-	)
-	workerMemory = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "worker_memory",
-		Help: "Available memory of worker.",
-	},
-		[]string{"id"},
-	)
+	initOnce       sync.Once
+	workerCounter  *expvar.Int
+	freeCPUCounter *expvar.Int
+	workerCPU      *metric.Int64GaugeEntry
+	workerMemory   *metric.Int64GaugeEntry
 
 	// ErrUnknownWorkerID signals that we received a message for unknown worker.
 	ErrUnknownWorkerID = status.Error(codes.InvalidArgument, "unknown worker id")
@@ -109,11 +84,26 @@ func NewServer(fileRepo filerepo.Repo, options *ServerOptions) *Server {
 	initOnce.Do(func() {
 		workerCounter = expvar.NewInt("workers")
 		freeCPUCounter = expvar.NewInt("cpu")
-		prometheus.MustRegister(
-			expvarCollector,
-			workerCPU,
-			workerMemory,
+		r := metric.NewRegistry()
+		metricproducer.GlobalManager().AddProducer(r)
+
+		memoryGauge, err := r.AddInt64Gauge(
+			"codebox/worker/memory",
+			metric.WithDescription("Codebox worker free memory."),
+			metric.WithUnit(metricdata.UnitBytes),
 		)
+		util.Must(err)
+		workerMemory, err = memoryGauge.GetEntry()
+		util.Must(err)
+
+		cpuGauge, err := r.AddInt64Gauge(
+			"codebox/worker/cpu",
+			metric.WithDescription("Codebox worker free mcpu."),
+			metric.WithUnit(metricdata.UnitDimensionless),
+		)
+		util.Must(err)
+		workerCPU, err = cpuGauge.GetEntry()
+		util.Must(err)
 	})
 	mergo.Merge(options, DefaultOptions) // nolint - error not possible
 
@@ -462,8 +452,8 @@ func (s *Server) Register(ctx context.Context, in *pb.RegisterRequest) (*pb.Regi
 	peerAddr := util.PeerAddr(ctx)
 	addr := net.TCPAddr{IP: peerAddr.(*net.TCPAddr).IP, Port: int(in.Port)}
 
-	workerMemory.WithLabelValues(in.Id).Set(float64(in.Memory))
-	workerCPU.WithLabelValues(in.Id).Set(float64(in.MCPU))
+	workerCPU.Add(int64(in.MCPU))
+	workerMemory.Add(int64(in.Memory))
 
 	w := NewWorker(in.Id, addr, in.MCPU, in.DefaultMCPU, in.Memory)
 
@@ -480,7 +470,7 @@ func (s *Server) Heartbeat(ctx context.Context, in *pb.HeartbeatRequest) (*pb.He
 		return nil, ErrUnknownWorkerID
 	}
 
-	workerMemory.WithLabelValues(in.Id).Set(float64(in.Memory))
+	workerMemory.Set(int64(in.Memory))
 	w.(*Worker).Heartbeat(in.Memory)
 
 	return &pb.HeartbeatResponse{}, nil
@@ -505,8 +495,8 @@ func (s *Server) onEvictedWorkerHandler(key string, val interface{}) {
 	logrus.WithField("worker", w).Info("Worker removed")
 	s.mu.Unlock()
 
-	workerCPU.DeleteLabelValues(key)
-	workerMemory.DeleteLabelValues(key)
+	workerCPU.Add(-int64(w.FreeCPU()))
+	workerMemory.Add(-int64(w.FreeMemory()))
 }
 
 // ReadyHandler returns 200 ok when worker number is satisfied.
