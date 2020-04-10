@@ -149,7 +149,7 @@ func (s *Server) Run(request *brokerpb.RunRequest, stream brokerpb.ScriptRunner_
 	}
 
 	scriptMeta := request.GetRequest()[0].GetMeta()
-	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+	ctx, cancel := context.WithTimeout(stream.Context(), defaultTimeout)
 
 	if request.LbMeta == nil {
 		request.LbMeta = &lbpb.RunRequest_MetaMessage{}
