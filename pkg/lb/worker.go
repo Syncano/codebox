@@ -10,8 +10,8 @@ import (
 	"sync"
 	"sync/atomic"
 
-	grpc_opentracing "github.com/grpc-ecosystem/go-grpc-middleware/tracing/opentracing"
 	"github.com/spf13/afero"
+	"go.opencensus.io/plugin/ocgrpc"
 	"google.golang.org/grpc"
 
 	repopb "github.com/Syncano/codebox/pkg/filerepo/proto"
@@ -56,12 +56,7 @@ func NewWorker(id string, addr net.TCPAddr, mCPU, defaultMCPU uint32, memory uin
 	conn, err := grpc.Dial(addr.String(),
 		grpc.WithInsecure(),
 		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(sys.MaxGRPCMessageSize)),
-		grpc.WithUnaryInterceptor(
-			grpc_opentracing.UnaryClientInterceptor(),
-		),
-		grpc.WithStreamInterceptor(
-			grpc_opentracing.StreamClientInterceptor(),
-		),
+		grpc.WithStatsHandler(&ocgrpc.ClientHandler{}),
 	)
 	util.Must(err)
 

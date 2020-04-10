@@ -7,25 +7,26 @@ services:
     build: .
     depends_on:
       - lb
+      - rabbitmq
+      - redis
     ports:
       - "9000:80"
       - "8080:8080"
     environment:
       - LB_ADDRS=lb:80
       - SERVICE_NAME=codebox-broker
-      - BROKER_URL=
-      - ZIPKIN_ADDR
-      - REDIS_ADDR
+      - TRACING_SAMPLING=1
 
   lb:
     command: codebox --debug lb
     image: syncano/codebox
     build: .
+    depends_on:
+      - redis
     ports:
       - "9001:80"
     environment:
       - SERVICE_NAME=codebox-lb
-      - ZIPKIN_ADDR
 
   worker:
     command: codebox --debug worker
@@ -35,6 +36,8 @@ services:
     build: .
     depends_on:
       - lb
+      - redis
+      - dind
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /tmp/storage:/home/codebox/storage
@@ -42,4 +45,3 @@ services:
       - HOST_STORAGE_PATH=/tmp/storage
       - LB_ADDR=lb:80
       - SERVICE_NAME=codebox-worker
-      - ZIPKIN_ADDR

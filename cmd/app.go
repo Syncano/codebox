@@ -9,16 +9,16 @@ import (
 	"runtime"
 	"time"
 
+	"contrib.go.opencensus.io/exporter/jaeger"
+	"contrib.go.opencensus.io/exporter/prometheus"
 	"github.com/doloopwhile/logrusltsv"
 	"github.com/evalphobia/logrus_sentry"
-	opentracing "github.com/opentracing/opentracing-go"
-	zipkinot "github.com/openzipkin-contrib/zipkin-go-opentracing"
-	"github.com/openzipkin/zipkin-go"
-	"github.com/openzipkin/zipkin-go/reporter"
-	zipkinhttp "github.com/openzipkin/zipkin-go/reporter/http"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli/v2"
+	"go.opencensus.io/plugin/ocgrpc"
+	"go.opencensus.io/plugin/ochttp"
+	"go.opencensus.io/stats/view"
+	"go.opencensus.io/trace"
 	"golang.org/x/crypto/ssh/terminal"
 	"google.golang.org/grpc/grpclog"
 
@@ -33,8 +33,7 @@ var (
 	// App is the main structure of a cli application.
 	App = cli.NewApp()
 
-	tracingReporter reporter.Reporter
-	tracer          opentracing.Tracer
+	jaegerExporter *jaeger.Exporter
 )
 
 type logrusWrapper struct {
@@ -132,11 +131,11 @@ func init() {
 
 		// Tracing options.
 		&cli.StringFlag{
-			Name: "zipkin-addr", Usage: "zipkin address",
-			EnvVars: []string{"ZIPKIN_ADDR"}, Value: "zipkin",
+			Name: "jaeger-collector-endpoint", Usage: "jaeger collector endpoint",
+			EnvVars: []string{"JAEGER_COLLECTOR_ENDPOINT"}, Value: "http://jaeger:14268/api/traces",
 		},
 		&cli.Float64Flag{
-			Name: "tracing-sampling", Usage: "tracing sampling value",
+			Name: "tracing-sampling", Usage: "tracing sampling probability value",
 			EnvVars: []string{"TRACING_SAMPLING"}, Value: 0,
 		},
 		&cli.StringFlag{
@@ -166,35 +165,48 @@ func init() {
 		}()
 
 		// Setup prometheus handler.
-		http.Handle("/metrics", promhttp.Handler())
+		exporter, err := prometheus.NewExporter(prometheus.Options{})
+		if err != nil {
+			logrus.WithError(err).Fatal("Prometheus exporter misconfiguration")
+		}
+
+		var views []*view.View
+		views = append(views, ochttp.DefaultClientViews...)
+		views = append(views, ochttp.DefaultServerViews...)
+		views = append(views, ocgrpc.DefaultClientViews...)
+		views = append(views, ocgrpc.DefaultServerViews...)
+
+		if err := view.Register(views...); err != nil {
+			logrus.WithError(err).Fatal("Opencensus views registration failed")
+		}
+
+		// Serve prometheus metrics.
+		http.Handle("/metrics", exporter)
 
 		// Initialize tracing.
-		tracingReporter = zipkinhttp.NewReporter(fmt.Sprintf("http://%s:9411/api/v2/spans", c.String("zipkin-addr")))
-
-		endpoint, err := zipkin.NewEndpoint(c.String("service-name"), "")
+		jaegerExporter, err = jaeger.NewExporter(jaeger.Options{
+			CollectorEndpoint: c.String("jaeger-collector-endpoint"),
+			Process: jaeger.Process{
+				ServiceName: c.String("service-name"),
+			},
+			OnError: func(err error) {
+				logrus.WithError(err).Warn("Jaeger tracing error")
+			},
+		})
 		if err != nil {
-			logrus.WithError(err).Fatal("Unable to create local endpoint error")
+			logrus.WithError(err).Fatal("Jaeger exporter misconfiguration")
 		}
 
-		// Initialize tracer.
-		nativeTracer, err := zipkin.NewTracer(tracingReporter,
-			zipkin.WithLocalEndpoint(endpoint),
-			zipkin.WithSampler(zipkin.NewModuloSampler(uint64(1/c.Float64("tracing-sampling")))),
-		)
-		if err != nil {
-			logrus.WithError(err).Fatal("Unable to create tracer")
-		}
-
-		// Use zipkin-go-opentracing to wrap our tracer.
-		tracer = zipkinot.Wrap(nativeTracer)
-
-		opentracing.SetGlobalTracer(tracer)
+		trace.RegisterExporter(jaegerExporter)
+		trace.ApplyConfig(trace.Config{
+			DefaultSampler: trace.ProbabilitySampler(c.Float64("tracing-sampling")),
+		})
 
 		return nil
 	}
 	App.After = func(c *cli.Context) error {
 		// Close tracing reporter.
-		tracingReporter.Close()
+		jaegerExporter.Flush()
 
 		return nil
 	}

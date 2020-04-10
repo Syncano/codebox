@@ -140,4 +140,4 @@ decrypt: ## Decrypt files.
 	find deploy -name "*.gpg" -exec sh -c 'gpg --batch --yes --passphrase "$(CODEBOX_VAULT_PASS)" --decrypt -o "$${1%.gpg}.unenc" "$$1"' _ {} \;
 
 start: require-docker-compose ## Run docker-compose of an app.
-	docker-compose -f build/docker-compose.yml up
+	docker-compose -f docker-compose.yml -f build/docker-compose.yml up

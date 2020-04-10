@@ -30,5 +30,36 @@ services:
       - SETUP_FILTERING=0
       # - RUNSC_RELEASE=2018-11-22
 
+  redis:
+    image: redis:3.2-alpine
+    volumes:
+      - data-redis:/data
+    ports:
+      - "6379"
+
+  rabbitmq:
+    image: rabbitmq:3.8-alpine
+    volumes:
+      - data-rabbitmq:/data
+    ports:
+      - "5672"
+      - "15672"
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.17
+    environment:
+      - COLLECTOR_ZIPKIN_HTTP_PORT=9411
+    ports:
+      - "5775"
+      - "6831"
+      - "6832"
+      - "5778"
+      - "16686:16686"
+      - "14268:14268"
+      - "14250"
+      - "9411:9411"
+
 volumes:
   varrun:
+  data-rabbitmq:
+  data-redis:

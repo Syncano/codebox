@@ -8,9 +8,10 @@ import (
 	"sync"
 	"time"
 
-	grpc_opentracing "github.com/grpc-ecosystem/go-grpc-middleware/tracing/opentracing"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
+	"go.opencensus.io/plugin/ocgrpc"
+	"go.opencensus.io/stats"
+	"go.opencensus.io/stats/view"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -66,23 +67,18 @@ var (
 	// ErrInvalidArgument signals that there are no suitable workers at this moment.
 	ErrInvalidArgument = status.Error(codes.InvalidArgument, "invalid argument")
 
-	initOnce                    sync.Once
-	executionDurationsHistogram = prometheus.NewHistogram(prometheus.HistogramOpts{
-		Name:    "codebox_execution_duration_seconds",
-		Help:    "Codebox execution latency distributions.",
-		Buckets: []float64{.1, .25, .5, 1, 2.5, 10, 30, 60, 120, 180},
-	})
-	overheadDurationsHistogram = prometheus.NewHistogram(prometheus.HistogramOpts{
-		Name: "codebox_overhead_duration_seconds",
-		Help: "Codebox overhead latency distributions.",
-	})
-	executionCounter = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "codebox_executions_total",
-			Help: "Codebox executions.",
-		},
-		[]string{"status"},
-	)
+	initOnce         sync.Once
+	overheadDuration = stats.Float64(
+		"codebox/overhead/duration/seconds",
+		"Codebox overhead duration.",
+		stats.UnitSeconds)
+
+	overheadDurationView = &view.View{
+		Name:        "codebox/overhead/duration/seconds",
+		Description: "Codebox overhead distribution.",
+		Measure:     overheadDuration,
+		Aggregation: view.Distribution(.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10),
+	}
 )
 
 const (
@@ -97,11 +93,7 @@ const (
 func NewServer(redisClient RedisClient, options *ServerOptions) (*Server, error) {
 	// Register prometheus exports.
 	initOnce.Do(func() {
-		prometheus.MustRegister(
-			executionDurationsHistogram,
-			overheadDurationsHistogram,
-			executionCounter,
-		)
+		util.Must(view.Register(overheadDurationView))
 	})
 
 	lbServers := make([]*loadBalancer, 0, len(options.LBAddr))
@@ -112,12 +104,7 @@ func NewServer(redisClient RedisClient, options *ServerOptions) (*Server, error)
 		conn, err := grpc.Dial(addr,
 			grpc.WithInsecure(),
 			grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(sys.MaxGRPCMessageSize)),
-			grpc.WithUnaryInterceptor(
-				grpc_opentracing.UnaryClientInterceptor(),
-			),
-			grpc.WithStreamInterceptor(
-				grpc_opentracing.StreamClientInterceptor(),
-			),
+			grpc.WithStatsHandler(&ocgrpc.ClientHandler{}),
 		)
 		util.Must(err)
 
@@ -195,7 +182,7 @@ func (s *Server) Run(request *brokerpb.RunRequest, stream brokerpb.ScriptRunner_
 	var retStream brokerpb.ScriptRunner_RunServer
 
 	processFunc := func() error {
-		trace, err := s.processResponse(logger, start, request.GetMeta(), runStream, retStream)
+		trace, err := s.processResponse(ctx, logger, start, request.GetMeta(), runStream, retStream)
 
 		cancel()
 
@@ -281,7 +268,6 @@ func (s *Server) processRun(ctx context.Context, logger logrus.FieldLogger, requ
 		}
 		return stream.CloseSend()
 	}); e != nil {
-		executionCounter.WithLabelValues(errorStatus).Inc()
 		return nil, e
 	}
 
@@ -431,7 +417,7 @@ func (s *Server) uploadFiles(ctx context.Context, lb *loadBalancer, key string, 
 	return err
 }
 
-func (s *Server) processResponse(logger logrus.FieldLogger, start time.Time, meta *brokerpb.RunRequest_MetaMessage,
+func (s *Server) processResponse(ctx context.Context, logger logrus.FieldLogger, start time.Time, meta *brokerpb.RunRequest_MetaMessage,
 	stream lbpb.ScriptRunner_RunClient, retStream brokerpb.ScriptRunner_RunServer) (*ScriptTrace, error) {
 	retSend := func(r *scriptpb.RunResponse) {
 		if retStream != nil {
@@ -470,12 +456,10 @@ func (s *Server) processResponse(logger logrus.FieldLogger, start time.Time, met
 	}
 
 	// Update prometheus stats.
-	executionCounter.WithLabelValues(updatedTrace.Status).Inc()
 
 	if result != nil {
 		durationSeconds := float64(updatedTrace.Duration) / 1e3
-		executionDurationsHistogram.Observe(durationSeconds)
-		overheadDurationsHistogram.Observe(time.Since(start).Seconds() - durationSeconds) // network + docker overhead
+		stats.Record(ctx, overheadDuration.M(time.Since(start).Seconds()-durationSeconds)) // network + docker overhead
 	}
 
 	return updatedTrace, err
