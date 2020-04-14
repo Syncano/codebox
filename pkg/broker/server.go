@@ -12,6 +12,7 @@ import (
 	"go.opencensus.io/plugin/ocgrpc"
 	"go.opencensus.io/stats"
 	"go.opencensus.io/stats/view"
+	census_trace "go.opencensus.io/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -149,7 +150,9 @@ func (s *Server) Run(request *brokerpb.RunRequest, stream brokerpb.ScriptRunner_
 	}
 
 	scriptMeta := request.GetRequest()[0].GetMeta()
-	ctx, cancel := context.WithTimeout(stream.Context(), defaultTimeout)
+	ctx, cancel := context.WithTimeout(
+		census_trace.NewContext(context.Background(), census_trace.FromContext(stream.Context())),
+		defaultTimeout)
 
 	if request.LbMeta == nil {
 		request.LbMeta = &lbpb.RunRequest_MetaMessage{}

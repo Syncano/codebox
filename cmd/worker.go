@@ -17,7 +17,6 @@ import (
 	"go.opencensus.io/plugin/ocgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/status"
 
 	"github.com/Syncano/codebox/pkg/docker"
@@ -306,10 +305,6 @@ func startServer(
 		grpc.StatsHandler(&ocgrpc.ServerHandler{}),
 		grpc.MaxRecvMsgSize(sys.MaxGRPCMessageSize),
 		grpc.MaxSendMsgSize(sys.MaxGRPCMessageSize),
-		grpc.KeepaliveParams(keepalive.ServerParameters{
-			Time:    sys.KeepaliveParamsTime,
-			Timeout: sys.KeepaliveParamsTimeout,
-		}),
 	)
 	repopb.RegisterRepoServer(grpcServer, &filerepo.Server{Repo: repo})
 	scriptpb.RegisterScriptRunnerServer(grpcServer, script.NewServer(runner))
