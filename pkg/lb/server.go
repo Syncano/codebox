@@ -421,6 +421,10 @@ func (s *Server) handleWorkerError(cont *WorkerContainer, err error) {
 		return
 	}
 
+	if s, ok := status.FromError(err); ok && s.Code() == codes.Canceled {
+		return
+	}
+
 	if cont.Worker.IncreaseErrorCount() >= s.options.WorkerErrorThreshold {
 		s.workers.Delete(cont.Worker.ID)
 	}
