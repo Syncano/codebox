@@ -153,13 +153,12 @@ func (s *Server) Run(request *brokerpb.RunRequest, stream brokerpb.ScriptRunner_
 	scriptMeta := request.GetRequest()[0].GetMeta()
 
 	// In async mode, create new context and add trace metadata to it.
+	cancel := context.CancelFunc(func() {})
+
 	if !request.GetMeta().Sync {
-		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(
 			census_trace.NewContext(context.Background(), census_trace.FromContext(stream.Context())),
 			defaultTimeout)
-
-		defer cancel()
 	}
 
 	if request.LbMeta == nil {
@@ -185,12 +184,15 @@ func (s *Server) Run(request *brokerpb.RunRequest, stream brokerpb.ScriptRunner_
 	runStream, err := s.processRun(ctx, logger, request)
 	if err != nil {
 		logger.WithError(err).Warn("grpc:broker:Run")
+		cancel()
 
 		return err
 	}
 
 	processFunc := func(ctx context.Context, retStream brokerpb.ScriptRunner_RunServer) error {
 		trace, err := s.processResponse(ctx, logger, start, request.GetMeta(), runStream, retStream)
+
+		cancel()
 
 		took := time.Duration(trace.Duration) * time.Millisecond
 		logger = logger.WithFields(logrus.Fields{
