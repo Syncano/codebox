@@ -102,12 +102,13 @@ func writeTraceResponse(w http.ResponseWriter, trace *ScriptTrace) {
 	ret, _ := json.Marshal(trace)
 	trace.Weight = tmp
 
+	w.Header().Set("Content-Type", jsonContentType)
+
 	httpCode, ok := statusToHTTPCode[trace.Status]
 	if ok {
 		w.WriteHeader(httpCode)
 	}
 
-	w.Header().Set("Content-Type", jsonContentType)
 	w.Write(ret) // nolint - ignore error
 }
 

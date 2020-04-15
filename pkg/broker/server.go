@@ -140,6 +140,7 @@ func (s *Server) Shutdown() {
 
 // Run runs script in secure environment.
 func (s *Server) Run(request *brokerpb.RunRequest, stream brokerpb.ScriptRunner_RunServer) error {
+	ctx := stream.Context()
 	peerAddr := util.PeerAddr(stream.Context())
 	start := time.Now()
 	logger := logrus.WithField("peer", peerAddr)
@@ -150,9 +151,16 @@ func (s *Server) Run(request *brokerpb.RunRequest, stream brokerpb.ScriptRunner_
 	}
 
 	scriptMeta := request.GetRequest()[0].GetMeta()
-	ctx, cancel := context.WithTimeout(
-		census_trace.NewContext(context.Background(), census_trace.FromContext(stream.Context())),
-		defaultTimeout)
+
+	// In async mode, create new context and add trace metadata to it.
+	if !request.GetMeta().Sync {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(
+			census_trace.NewContext(context.Background(), census_trace.FromContext(stream.Context())),
+			defaultTimeout)
+
+		defer cancel()
+	}
 
 	if request.LbMeta == nil {
 		request.LbMeta = &lbpb.RunRequest_MetaMessage{}
@@ -177,17 +185,12 @@ func (s *Server) Run(request *brokerpb.RunRequest, stream brokerpb.ScriptRunner_
 	runStream, err := s.processRun(ctx, logger, request)
 	if err != nil {
 		logger.WithError(err).Warn("grpc:broker:Run")
-		cancel()
 
 		return err
 	}
 
-	var retStream brokerpb.ScriptRunner_RunServer
-
-	processFunc := func() error {
+	processFunc := func(ctx context.Context, retStream brokerpb.ScriptRunner_RunServer) error {
 		trace, err := s.processResponse(ctx, logger, start, request.GetMeta(), runStream, retStream)
-
-		cancel()
 
 		took := time.Duration(trace.Duration) * time.Millisecond
 		logger = logger.WithFields(logrus.Fields{
@@ -206,12 +209,11 @@ func (s *Server) Run(request *brokerpb.RunRequest, stream brokerpb.ScriptRunner_
 
 	if request.GetMeta().Sync {
 		// Process response synchronously.
-		retStream = stream
-		return processFunc()
+		return processFunc(ctx, stream)
 	}
 
 	// Process response asynchronously.
-	go processFunc() // nolint: errcheck
+	go processFunc(ctx, nil) // nolint: errcheck
 
 	return nil
 }
