@@ -309,8 +309,8 @@ func (w *Worker) Shutdown(cache ContainerWorkerCache) {
 
 	// Wait for all calls to finish and close connection in goroutine.
 	go func() {
-		freeCPUCounter.Add(-int64(w.FreeCPU()))
 		w.waitGroup.Wait()
+		freeCPUCounter.Add(-int64(w.FreeCPU()))
 		w.conn.Close() // nolint
 	}()
 }
