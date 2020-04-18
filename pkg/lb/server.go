@@ -217,6 +217,7 @@ func (s *Server) processRun(stream pb.ScriptRunner_RunServer, runMeta *pb.RunReq
 		if cont == nil {
 			return true, ErrNoWorkersAvailable
 		}
+		defer cont.Release()
 
 		// Limiter.
 		if conns == 1 && runMeta != nil && runMeta.ConcurrencyLimit > 0 {
@@ -230,7 +231,6 @@ func (s *Server) processRun(stream pb.ScriptRunner_RunServer, runMeta *pb.RunReq
 		logger = logger.WithFields(logrus.Fields{"container": cont, "script": &script, "try": retry, "fromCache": fromCache})
 
 		resCh, err := s.processWorkerRun(ctx, logger, cont, scriptMeta, scriptChunk)
-		defer cont.Release()
 
 		if err != nil {
 			logger.WithError(err).Warn("Worker processing Run failed")

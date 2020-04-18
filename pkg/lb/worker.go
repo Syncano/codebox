@@ -138,10 +138,11 @@ func (w *Worker) release(mCPU, conns uint32) {
 		return
 	}
 
-	w.metrics.WorkerCPU().Add(int64(mCPU))
-
 	w.mu.Lock()
-	w.freeCPU += int32(mCPU)
+	if w.alive {
+		w.freeCPU += int32(mCPU)
+		w.metrics.WorkerCPU().Add(int64(mCPU))
+	}
 	w.mu.Unlock()
 
 	w.waitGroup.Done()
@@ -302,13 +303,12 @@ func (w *Worker) Shutdown(cache ContainerWorkerCache) {
 		}
 	}
 
+	w.metrics.WorkerCPU().Add(-int64(w.freeCPU))
 	w.mu.Unlock()
 
 	// Wait for all calls to finish and close connection in goroutine.
 	go func() {
 		w.waitGroup.Wait()
-
-		w.metrics.WorkerCPU().Add(-int64(w.freeCPU))
 
 		w.conn.Close() // nolint
 	}()
