@@ -131,23 +131,18 @@ func (w *Worker) reserve(mCPU, conns uint32, require bool) bool {
 
 // Release resources reserved.
 func (w *Worker) release(mCPU, conns uint32) {
-	w.waitGroup.Done()
-
 	if conns != 0 {
+		w.waitGroup.Done()
 		return
 	}
+
+	freeCPUCounter.Add(int64(mCPU))
 
 	w.mu.Lock()
-
-	if !w.alive {
-		w.mu.Unlock()
-		return
-	}
-
 	w.freeCPU += int32(mCPU)
 	w.mu.Unlock()
 
-	freeCPUCounter.Add(int64(mCPU))
+	w.waitGroup.Done()
 }
 
 // IncreaseErrorCount increases error count of worker.

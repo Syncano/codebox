@@ -16,6 +16,7 @@ import (
 	"go.opencensus.io/plugin/ocgrpc"
 	"go.opencensus.io/plugin/ochttp"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/keepalive"
 
 	"github.com/Syncano/codebox/cmd/amqp"
 	"github.com/Syncano/codebox/pkg/broker"
@@ -107,6 +108,10 @@ As there is no authentication, always run it in a private network.`,
 			grpc.StatsHandler(&ocgrpc.ServerHandler{}),
 			grpc.MaxRecvMsgSize(sys.MaxGRPCMessageSize),
 			grpc.MaxSendMsgSize(sys.MaxGRPCMessageSize),
+			grpc.KeepaliveParams(keepalive.ServerParameters{
+				Time:    sys.KeepaliveParamsTime,
+				Timeout: sys.KeepaliveParamsTimeout,
+			}),
 		)
 
 		// Register all servers.
