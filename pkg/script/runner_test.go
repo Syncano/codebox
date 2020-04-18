@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"expvar"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -411,9 +410,6 @@ func TestNewRunner(t *testing.T) {
 
 func TestRunnerMethods(t *testing.T) {
 	logrus.SetOutput(ioutil.Discard)
-	initOnceRunner.Do(func() {
-		freeCPUCounter = expvar.NewInt("cpu")
-	})
 
 	Convey("Given Runner with mocked docker manager, sys checker and filerepo", t, func() {
 		dockerMgr := new(dockermock.Manager)
@@ -426,6 +422,7 @@ func TestRunnerMethods(t *testing.T) {
 			dockerMgr:      dockerMgr,
 			options:        *opts,
 			containerCache: cache.NewLRUSetCache(&cache.Options{}),
+			metrics:        Metrics(),
 		}
 		err := errors.New("some error")
 

@@ -45,6 +45,7 @@ func TestWorker(t *testing.T) {
 			scriptCli:  scriptCli,
 			containers: make(map[string]*WorkerContainer),
 			scripts:    make(map[ScriptInfo]int),
+			metrics:    Metrics(),
 		}
 		cont := &WorkerContainer{Worker: worker}
 

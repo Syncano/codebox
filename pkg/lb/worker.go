@@ -39,6 +39,7 @@ type Worker struct {
 	scriptCli  scriptpb.ScriptRunnerClient
 	scripts    map[ScriptInfo]int
 	containers map[string]*WorkerContainer
+	metrics    *MetricsData
 
 	// These are processed atomically.
 	errorCount uint32
@@ -52,7 +53,7 @@ const (
 )
 
 // NewWorker initializes new worker info along with worker connection.
-func NewWorker(id string, addr net.TCPAddr, mCPU, defaultMCPU uint32, memory uint64) *Worker {
+func NewWorker(id string, addr net.TCPAddr, mCPU, defaultMCPU uint32, memory uint64, metrics *MetricsData) *Worker {
 	conn, err := grpc.Dial(addr.String(),
 		grpc.WithInsecure(),
 		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(sys.MaxGRPCMessageSize)),
@@ -72,12 +73,13 @@ func NewWorker(id string, addr net.TCPAddr, mCPU, defaultMCPU uint32, memory uin
 		defaultMCPU: defaultMCPU,
 		freeMemory:  memory,
 		freeCPU:     int32(mCPU),
+		metrics:     metrics,
 
 		repoCli:   repopb.NewRepoClient(conn),
 		scriptCli: scriptpb.NewScriptRunnerClient(conn),
 	}
 
-	freeCPUCounter.Add(int64(mCPU))
+	w.metrics.WorkerCPU().Add(int64(mCPU))
 
 	return &w
 }
@@ -124,7 +126,7 @@ func (w *Worker) reserve(mCPU, conns uint32, require bool) bool {
 	w.waitGroup.Add(1)
 	w.mu.Unlock()
 
-	freeCPUCounter.Add(-int64(mCPU))
+	w.metrics.WorkerCPU().Add(-int64(mCPU))
 
 	return true
 }
@@ -136,7 +138,7 @@ func (w *Worker) release(mCPU, conns uint32) {
 		return
 	}
 
-	freeCPUCounter.Add(int64(mCPU))
+	w.metrics.WorkerCPU().Add(int64(mCPU))
 
 	w.mu.Lock()
 	w.freeCPU += int32(mCPU)
@@ -305,7 +307,9 @@ func (w *Worker) Shutdown(cache ContainerWorkerCache) {
 	// Wait for all calls to finish and close connection in goroutine.
 	go func() {
 		w.waitGroup.Wait()
-		freeCPUCounter.Add(-int64(w.FreeCPU()))
+
+		w.metrics.WorkerCPU().Add(-int64(w.freeCPU))
+
 		w.conn.Close() // nolint
 	}()
 }

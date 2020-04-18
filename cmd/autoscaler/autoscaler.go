@@ -6,7 +6,6 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"errors"
-	"expvar"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -17,6 +16,8 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"golang.org/x/net/http2"
+
+	"github.com/Syncano/codebox/pkg/lb"
 )
 
 // Options holds settable options for LB Autoscaler.
@@ -48,6 +49,7 @@ type Autoscaler struct {
 	url     string
 	token   string
 	options Options
+	metrics *lb.MetricsData
 }
 
 const (
@@ -55,7 +57,7 @@ const (
 )
 
 // New initializes new Load Balancer Autoscaler.
-func New(options *Options) (*Autoscaler, error) {
+func New(metrics *lb.MetricsData, options *Options) (*Autoscaler, error) {
 	// Create the in-cluster config.
 	host, port := os.Getenv("KUBERNETES_SERVICE_HOST"), os.Getenv("KUBERNETES_SERVICE_PORT")
 	if host == "" || port == "" {
@@ -110,6 +112,7 @@ func New(options *Options) (*Autoscaler, error) {
 		url:     u.String(),
 		token:   string(token),
 		options: *options,
+		metrics: metrics,
 	}, nil
 }
 
@@ -177,8 +180,8 @@ func (a *Autoscaler) updateReplicas(updated int) error {
 func (a *Autoscaler) Start() chan struct{} { // nolint: gocyclo, gocognit
 	stop := make(chan struct{})
 	ticker := time.NewTicker(checkPeriod)
-	freeCPUCounter := expvar.Get("cpu").(*expvar.Int)
-	workerCounter := expvar.Get("workers").(*expvar.Int)
+	workerCPUCounter := a.metrics.WorkerCPU()
+	workerCounter := a.metrics.WorkerCount()
 	upscaleConsecutive := 0
 	downscaleConsecutive := 0
 
@@ -194,7 +197,7 @@ func (a *Autoscaler) Start() chan struct{} { // nolint: gocyclo, gocognit
 					continue
 				}
 
-				freeCPU := uint(freeCPUCounter.Value())
+				freeCPU := uint(workerCPUCounter.Value())
 
 				replicaSpec, err := a.getReplicas()
 				if err != nil {
