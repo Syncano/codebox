@@ -3,8 +3,9 @@ package lb_test
 import (
 	"bufio"
 	"context"
-	"encoding/json"
+	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"os/exec"
@@ -24,13 +25,14 @@ import (
 	scriptpb "github.com/Syncano/codebox/pkg/script/proto"
 )
 
-func readJSON(url string) map[string]interface{} {
-	r, _ := http.Get(url)
-	defer r.Body.Close()
+func readURL(url string) ([]byte, error) {
+	r, err := http.Get(url)
+	if err != nil {
+		return nil, err
+	}
 
-	target := make(map[string]interface{})
-	json.NewDecoder(r.Body).Decode(&target)
-	return target
+	defer r.Body.Close()
+	return ioutil.ReadAll(r.Body)
 }
 
 func TestLBAcceptance(t *testing.T) {
@@ -205,10 +207,10 @@ setTimeout(function() {
 			})
 		})
 		Convey("expvar is correctly exposed", func() {
-			lbVars := readJSON("http://localhost:9080/debug/vars")
-			workerVars := readJSON("http://localhost:9180/debug/vars")
-			So(lbVars["workers"].(float64), ShouldEqual, 1)
-			So(workerVars["cpu"].(float64), ShouldEqual, script.DefaultOptions.MCPU-docker.DefaultOptions.ReservedMCPU)
+			lbVars, _ := readURL("http://localhost:9080/metrics")
+			workerVars, _ := readURL("http://localhost:9180/metrics")
+			So(string(lbVars), ShouldContainSubstring, "codebox_worker_count 1")
+			So(string(workerVars), ShouldContainSubstring, fmt.Sprintf("codebox_worker_cpu %d", script.DefaultOptions.MCPU-docker.DefaultOptions.ReservedMCPU))
 		})
 
 		// Kill started processes and their children.

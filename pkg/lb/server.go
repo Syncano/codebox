@@ -2,7 +2,6 @@ package lb
 
 import (
 	"context"
-	"expvar"
 	"io"
 	"net"
 	"net/http"
@@ -11,9 +10,6 @@ import (
 
 	"github.com/imdario/mergo"
 	"github.com/sirupsen/logrus"
-	"go.opencensus.io/metric"
-	"go.opencensus.io/metric/metricdata"
-	"go.opencensus.io/metric/metricproducer"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -35,6 +31,7 @@ type Server struct {
 	fileRepo filerepo.Repo
 	options  ServerOptions
 	limiter  *limiter.Limiter
+	metrics  *MetricsData
 }
 
 // Assert that Server is compatible with proto interface.
@@ -60,12 +57,6 @@ var DefaultOptions = &ServerOptions{
 }
 
 var (
-	initOnce       sync.Once
-	workerCounter  *expvar.Int
-	freeCPUCounter *expvar.Int
-	workerCPU      *metric.Int64GaugeEntry
-	workerMemory   *metric.Int64GaugeEntry
-
 	// ErrUnknownWorkerID signals that we received a message for unknown worker.
 	ErrUnknownWorkerID = status.Error(codes.InvalidArgument, "unknown worker id")
 	// ErrNoWorkersAvailable signals that there are no suitable workers at this moment.
@@ -80,31 +71,6 @@ const (
 
 // NewServer initializes new LB server.
 func NewServer(fileRepo filerepo.Repo, options *ServerOptions) *Server {
-	// Register expvar and prometheus exports.
-	initOnce.Do(func() {
-		workerCounter = expvar.NewInt("workers")
-		freeCPUCounter = expvar.NewInt("cpu")
-		r := metric.NewRegistry()
-		metricproducer.GlobalManager().AddProducer(r)
-
-		memoryGauge, err := r.AddInt64Gauge(
-			"codebox/worker/memory",
-			metric.WithDescription("Codebox worker free memory."),
-			metric.WithUnit(metricdata.UnitBytes),
-		)
-		util.Must(err)
-		workerMemory, err = memoryGauge.GetEntry()
-		util.Must(err)
-
-		cpuGauge, err := r.AddInt64Gauge(
-			"codebox/worker/cpu",
-			metric.WithDescription("Codebox worker free mcpu."),
-			metric.WithUnit(metricdata.UnitDimensionless),
-		)
-		util.Must(err)
-		workerCPU, err = cpuGauge.GetEntry()
-		util.Must(err)
-	})
 	mergo.Merge(options, DefaultOptions) // nolint - error not possible
 
 	workers := cache.NewLRUCache(&cache.Options{
@@ -118,6 +84,7 @@ func NewServer(fileRepo filerepo.Repo, options *ServerOptions) *Server {
 		workerContainerCache: make(ContainerWorkerCache),
 		fileRepo:             fileRepo,
 		limiter:              limiter.New(&limiter.Options{}),
+		metrics:              Metrics(),
 	}
 	workers.OnValueEvicted(s.onEvictedWorkerHandler)
 
@@ -129,9 +96,13 @@ func (s *Server) Options() ServerOptions {
 	return s.options
 }
 
+func (s *Server) Metrics() *MetricsData {
+	return s.metrics
+}
+
 // Shutdown stops everything.
 func (s *Server) Shutdown() {
-	workerCounter.Set(0)
+	s.metrics.WorkerCount().Set(0)
 
 	// Stop cache janitor.
 	s.workers.StopJanitor()
@@ -451,15 +422,13 @@ func (s *Server) ContainerRemoved(ctx context.Context, in *pb.ContainerRemovedRe
 
 // Register is sent at the beginning by the worker.
 func (s *Server) Register(ctx context.Context, in *pb.RegisterRequest) (*pb.RegisterResponse, error) {
-	workerCounter.Add(1) // Increase worker count.
+	// Increase worker count.
+	s.metrics.WorkerCount().Add(1)
 
 	peerAddr := util.PeerAddr(ctx)
 	addr := net.TCPAddr{IP: peerAddr.(*net.TCPAddr).IP, Port: int(in.Port)}
 
-	workerCPU.Add(int64(in.MCPU))
-	workerMemory.Add(int64(in.Memory))
-
-	w := NewWorker(in.Id, addr, in.MCPU, in.DefaultMCPU, in.Memory)
+	w := NewWorker(in.Id, addr, in.MCPU, in.DefaultMCPU, in.Memory, s.metrics)
 
 	logrus.WithFields(logrus.Fields{"worker": w, "mcpu": in.MCPU, "defaultMCPU": in.DefaultMCPU, "memory": in.Memory}).Info("grpc:lb:Register")
 	s.workers.Set(in.Id, w)
@@ -474,7 +443,6 @@ func (s *Server) Heartbeat(ctx context.Context, in *pb.HeartbeatRequest) (*pb.He
 		return nil, ErrUnknownWorkerID
 	}
 
-	workerMemory.Set(int64(in.Memory))
 	w.(*Worker).Heartbeat(in.Memory)
 
 	return &pb.HeartbeatResponse{}, nil
@@ -490,7 +458,8 @@ func (s *Server) Disconnect(ctx context.Context, in *pb.DisconnectRequest) (*pb.
 }
 
 func (s *Server) onEvictedWorkerHandler(key string, val interface{}) {
-	workerCounter.Add(-1) // Decrease worker count.
+	// Decrease worker count.
+	s.metrics.WorkerCount().Add(-1)
 
 	w := val.(*Worker)
 
@@ -498,14 +467,11 @@ func (s *Server) onEvictedWorkerHandler(key string, val interface{}) {
 	w.Shutdown(s.workerContainerCache)
 	logrus.WithField("worker", w).Info("Worker removed")
 	s.mu.Unlock()
-
-	workerCPU.Add(-int64(w.FreeCPU()))
-	workerMemory.Add(-int64(w.FreeMemory()))
 }
 
 // ReadyHandler returns 200 ok when worker number is satisfied.
 func (s *Server) ReadyHandler(w http.ResponseWriter, r *http.Request) {
-	if workerCounter.Value() >= int64(s.options.WorkerMinReady) {
+	if s.metrics.WorkerCount().Value() >= int64(s.options.WorkerMinReady) {
 		w.WriteHeader(200)
 	} else {
 		w.WriteHeader(400)

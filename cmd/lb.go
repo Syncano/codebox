@@ -165,7 +165,7 @@ As there is no authentication, always run it in a private network.`,
 		// Start autoscaler.
 		if c.Bool("scaling-enabled") {
 			logrus.Info("Starting autoscaler")
-			scaler, err := autoscaler.New(autoscalerOptions)
+			scaler, err := autoscaler.New(lbServer.Metrics(), autoscalerOptions)
 			if err != nil {
 				return err
 			}

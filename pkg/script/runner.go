@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"errors"
-	"expvar"
 	"fmt"
 	"io"
 	"math"
@@ -48,6 +47,7 @@ type DockerRunner struct {
 	sys       sys.SystemChecker
 	redisCli  RedisClient
 	options   Options
+	metrics   *MetricsData
 }
 
 // Options holds settable options for script runner.
@@ -139,9 +139,6 @@ func (ro *RunOptions) String() string {
 }
 
 var (
-	initOnceRunner sync.Once
-	freeCPUCounter *expvar.Int
-
 	// ErrUnsupportedRuntime signals prohibited usage of unknown runtime.
 	ErrUnsupportedRuntime = errors.New("unsupported runtime")
 	// ErrPoolNotRunning signals pool is not yet running.
@@ -175,9 +172,6 @@ const (
 
 // NewRunner initializes a new script runner.
 func NewRunner(options *Options, dockerMgr docker.Manager, checker sys.SystemChecker, repo filerepo.Repo, redisClient RedisClient) (*DockerRunner, error) {
-	initOnceRunner.Do(func() {
-		freeCPUCounter = expvar.NewInt("cpu")
-	})
 	mergo.Merge(options, DefaultOptions) // nolint - error not possible
 
 	// Set concurrency limits on docker.
@@ -217,6 +211,7 @@ func NewRunner(options *Options, dockerMgr docker.Manager, checker sys.SystemChe
 		options:        *options,
 		containerCache: containerCache,
 		redisCli:       redisClient,
+		metrics:        Metrics(),
 	}
 	r.containerCache.OnValueEvicted(r.onEvictedContainerHandler)
 	r.containerWait = make(map[string]chan struct{})
@@ -575,7 +570,7 @@ func (r *DockerRunner) CreatePool() (string, error) {
 	}
 
 	// Set free resources counter.
-	freeCPUCounter.Set(int64(r.options.MCPU - r.dockerMgr.Options().ReservedMCPU))
+	r.metrics.WorkerCPU().Set(int64(r.options.MCPU - r.dockerMgr.Options().ReservedMCPU))
 
 	// Create and fill container pool.
 	r.containerPool = make(map[string]chan *Container)
@@ -645,7 +640,7 @@ func (r *DockerRunner) StopPool() {
 	r.setRunning(false)
 	logrus.Info("Stopping pool")
 	// Reset free resources counter.
-	freeCPUCounter.Set(0)
+	r.metrics.WorkerCPU().Set(0)
 
 	// Wait for all tasks to be done and cleanup all containers.
 	r.taskWaitGroup.Wait()
@@ -694,7 +689,7 @@ func (r *DockerRunner) reserveContainer(ctx context.Context, cont *Container, co
 				return ErrSemaphoreNotAcquired
 			}
 
-			freeCPUCounter.Add(-int64(options.MCPU))
+			r.metrics.WorkerCPU().Add(-int64(options.MCPU))
 
 			// Set CPU/Memory resources for async container or if using higher weight for new non-async container.
 			if options.Async > 1 || (newCont && options.Weight > 1) {
@@ -721,7 +716,7 @@ func (r *DockerRunner) releaseContainer(cont *Container, requestID string, optio
 	if err := cont.Release(requestID, func(numConns int) error {
 		if numConns == 0 {
 			r.poolSemaphore.Release(int64(options.Weight))
-			freeCPUCounter.Add(int64(options.MCPU))
+			r.metrics.WorkerCPU().Add(int64(options.MCPU))
 
 			// Freeze CPU resources for async container.
 			if options.Async > 1 {

@@ -115,6 +115,7 @@ func TestServerMethods(t *testing.T) {
 						containers: make(map[string]*WorkerContainer),
 						scripts:    make(map[ScriptInfo]int),
 						conn:       conn,
+						metrics:    Metrics(),
 					}
 					stdout := []byte("stdout")
 					s.workers.Set("id", &worker)
@@ -278,9 +279,9 @@ func TestServerMethods(t *testing.T) {
 			ci := ScriptInfo{SourceHash: "hash", UserID: "user"}
 
 			Convey("returns worker with max free slots", func() {
-				s.workers.Set("id1", NewWorker("id1", net.TCPAddr{}, 1, 1, 128))
-				s.workers.Set("id2", NewWorker("id2", net.TCPAddr{}, 2, 2, 128))
-				s.workers.Set("id3", NewWorker("id2", net.TCPAddr{}, 1, 2, 128))
+				s.workers.Set("id1", NewWorker("id1", net.TCPAddr{}, 1, 1, 128, s.metrics))
+				s.workers.Set("id2", NewWorker("id2", net.TCPAddr{}, 2, 2, 128, s.metrics))
+				s.workers.Set("id3", NewWorker("id2", net.TCPAddr{}, 1, 2, 128, s.metrics))
 
 				wi, conns, fromCache := s.grabWorker(ci)
 				So(wi.Worker.ID, ShouldEqual, "id2")
@@ -288,8 +289,8 @@ func TestServerMethods(t *testing.T) {
 				So(fromCache, ShouldBeFalse)
 			})
 			Convey("prefers worker from container cache if available and slots>0", func() {
-				w2 := NewWorker("id2", net.TCPAddr{}, 1, 1, 128)
-				s.workers.Set("id1", NewWorker("id1", net.TCPAddr{}, 2, 2, 128))
+				w2 := NewWorker("id2", net.TCPAddr{}, 1, 1, 128, s.metrics)
+				s.workers.Set("id1", NewWorker("id1", net.TCPAddr{}, 2, 2, 128, s.metrics))
 				s.workers.Set("id2", w2)
 
 				w2.AddCache(s.workerContainerCache, ci, "id2", &WorkerContainer{Worker: w2})
@@ -299,8 +300,8 @@ func TestServerMethods(t *testing.T) {
 				So(fromCache, ShouldBeTrue)
 			})
 			Convey("skips worker from container cache if it's missing from cache", func() {
-				w2 := NewWorker("id2", net.TCPAddr{}, 1, 1, 128)
-				s.workers.Set("id1", NewWorker("id1", net.TCPAddr{}, 2, 2, 128))
+				w2 := NewWorker("id2", net.TCPAddr{}, 1, 1, 128, s.metrics)
+				s.workers.Set("id1", NewWorker("id1", net.TCPAddr{}, 2, 2, 128, s.metrics))
 
 				w2.AddCache(s.workerContainerCache, ci, "id1", &WorkerContainer{Worker: w2})
 				w, conns, fromCache := s.grabWorker(ci)
@@ -309,8 +310,8 @@ func TestServerMethods(t *testing.T) {
 				So(fromCache, ShouldBeFalse)
 			})
 			Convey("prefers worker from container cache with higher free cpu/conns", func() {
-				w1 := NewWorker("id1", net.TCPAddr{}, 2, 2, 128)
-				w2 := NewWorker("id2", net.TCPAddr{}, 1, 2, 128)
+				w1 := NewWorker("id1", net.TCPAddr{}, 2, 2, 128, s.metrics)
+				w2 := NewWorker("id2", net.TCPAddr{}, 1, 2, 128, s.metrics)
 				s.workers.Set("id1", w1)
 				s.workers.Set("id2", w2)
 
@@ -334,7 +335,7 @@ func TestServerMethods(t *testing.T) {
 			So(wi, ShouldBeNil)
 		})
 		Convey("findWorkerWithMaxFreeCPU returns worker even if free CPU is negative", func() {
-			wi := NewWorker("id1", net.TCPAddr{}, 1, 1, 128)
+			wi := NewWorker("id1", net.TCPAddr{}, 1, 1, 128, s.metrics)
 			wi.freeCPU = -10
 			s.workers.Set("id1", wi)
 
@@ -342,9 +343,9 @@ func TestServerMethods(t *testing.T) {
 			So(wi.ID, ShouldEqual, "id1")
 		})
 		Convey("findWorkerWithMaxFreeCPU finds a worker with highest free CPU", func() {
-			s.workers.Set("id1", NewWorker("id1", net.TCPAddr{}, 1, 1, 128))
-			s.workers.Set("id2", NewWorker("id2", net.TCPAddr{}, 2, 2, 128))
-			s.workers.Set("id3", NewWorker("id3", net.TCPAddr{}, 1, 1, 128))
+			s.workers.Set("id1", NewWorker("id1", net.TCPAddr{}, 1, 1, 128, s.metrics))
+			s.workers.Set("id2", NewWorker("id2", net.TCPAddr{}, 2, 2, 128, s.metrics))
+			s.workers.Set("id3", NewWorker("id3", net.TCPAddr{}, 1, 1, 128, s.metrics))
 
 			wi := s.findWorkerWithMaxFreeCPU()
 			So(wi.ID, ShouldEqual, "id2")
