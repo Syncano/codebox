@@ -140,7 +140,6 @@ func (s *Server) Shutdown() {
 
 // Run runs script in secure environment.
 func (s *Server) Run(request *brokerpb.RunRequest, stream brokerpb.ScriptRunner_RunServer) error {
-	ctx := stream.Context()
 	peerAddr := util.PeerAddr(stream.Context())
 	start := time.Now()
 	logger := logrus.WithField("peer", peerAddr)
@@ -153,13 +152,9 @@ func (s *Server) Run(request *brokerpb.RunRequest, stream brokerpb.ScriptRunner_
 	scriptMeta := request.GetRequest()[0].GetMeta()
 
 	// In async mode, create new context and add trace metadata to it.
-	cancel := context.CancelFunc(func() {})
-
-	if !request.GetMeta().Sync {
-		ctx, cancel = context.WithTimeout(
-			census_trace.NewContext(context.Background(), census_trace.FromContext(stream.Context())),
-			defaultTimeout)
-	}
+	ctx, cancel := context.WithTimeout(
+		census_trace.NewContext(context.Background(), census_trace.FromContext(stream.Context())),
+		defaultTimeout)
 
 	if request.LbMeta == nil {
 		request.LbMeta = &lbpb.RunRequest_MetaMessage{}
