@@ -482,10 +482,6 @@ func (r *DockerRunner) processContainerDone(runtime string, cont *Container, req
 			logFunc = logger.Error
 		}
 
-		if err == context.Canceled {
-			recreate = false
-		}
-
 		logFunc("Recovering from container error")
 		cont.StopAcceptingConnections()
 		r.containerCache.Delete(cont.Hash, cont)
