@@ -11,6 +11,7 @@ services:
       - /tmp/storage:/home/codebox/storage:rshared
     depends_on:
       - dind
+      - redis
     environment:
       - WRAPPERPATH=/opt/build/build/codewrapper
 
