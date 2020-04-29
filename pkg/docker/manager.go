@@ -73,7 +73,11 @@ const (
 
 // NewManager initializes a new manager for docker.
 func NewManager(options *Options, cli Client) (*StdManager, error) {
-	mergo.Merge(options, DefaultOptions) // nolint - error not possible
+	if options != nil {
+		mergo.Merge(options, DefaultOptions) // nolint - error not possible
+	} else {
+		options = DefaultOptions
+	}
 
 	// Get and save Info from docker.
 	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)

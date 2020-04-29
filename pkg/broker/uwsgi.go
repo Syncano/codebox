@@ -115,7 +115,7 @@ func writeTraceResponse(w http.ResponseWriter, trace *ScriptTrace) {
 // RunHandler processes uwsgi request and passes it to load balancer.
 func (s *Server) RunHandler(w http.ResponseWriter, r *http.Request) {
 	// Process zipkin span.
-	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), s.options.MaxTimeout)
 	defer cancel()
 
 	spanCtx, err := opentracing.GlobalTracer().Extract(opentracing.HTTPHeaders, opentracing.HTTPHeadersCarrier(r.Header))

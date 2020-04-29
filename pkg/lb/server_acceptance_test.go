@@ -45,13 +45,13 @@ func TestLBAcceptance(t *testing.T) {
 
 	Convey("Given initialized lb and worker", t, func() {
 		// Start load balancer.
-		lbCmd := exec.Command("build/codebox", "--debug", "--metric-port", "9080", "lb", "-p", "9000")
+		lbCmd := exec.Command("build/codebox", "--debug", "--metric-port", "10080", "lb", "-p", "10000")
 		lbCmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 		lbStderr, _ := lbCmd.StderrPipe()
 		lbCmd.Start()
 
 		// Start worker.
-		workerCmd := exec.Command("build/codebox", "--debug", "--metric-port", "9180", "worker", "--lb", "127.0.0.1:9000")
+		workerCmd := exec.Command("build/codebox", "--debug", "--metric-port", "10180", "worker", "--lb", "127.0.0.1:10000")
 		workerCmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 		wStderr, _ := workerCmd.StderrPipe()
 		workerCmd.Start()
@@ -65,7 +65,7 @@ func TestLBAcceptance(t *testing.T) {
 			}
 		}
 
-		conn, err := grpc.Dial("localhost:9000", grpc.WithInsecure(), grpc.WithBlock())
+		conn, err := grpc.Dial("localhost:10000", grpc.WithInsecure(), grpc.WithBlock())
 		So(err, ShouldBeNil)
 		defer conn.Close()
 
@@ -207,9 +207,11 @@ setTimeout(function() {
 			})
 		})
 		Convey("expvar is correctly exposed", func() {
-			lbVars, _ := readURL("http://localhost:9080/metrics")
-			workerVars, _ := readURL("http://localhost:9180/metrics")
+			lbVars, err := readURL("http://localhost:10080/metrics")
+			So(err, ShouldBeNil)
 			So(string(lbVars), ShouldContainSubstring, "codebox_worker_count 1")
+			workerVars, err := readURL("http://localhost:10180/metrics")
+			So(err, ShouldBeNil)
 			So(string(workerVars), ShouldContainSubstring, fmt.Sprintf("codebox_worker_cpu %d", script.DefaultOptions.MCPU-docker.DefaultOptions.ReservedMCPU))
 		})
 

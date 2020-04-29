@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/docker/docker/client"
+	"github.com/go-redis/redis/v7"
 	"github.com/sirupsen/logrus"
 	. "github.com/smartystreets/goconvey/convey"
 
@@ -78,7 +79,15 @@ func TestRunnerIntegration(t *testing.T) {
 			BasePath: os.Getenv("REPO_PATH"),
 		}, syschecker, new(filerepo.LinkFs), new(filerepo.Command))
 
-		redisCli := new(script.MockRedisClient)
+		redisAddr, ok := os.LookupEnv("REDIS_ADDR")
+		if !ok {
+			redisAddr = "redis:6379"
+		}
+		redisCli := redis.NewClient(&redis.Options{
+			Addr:     redisAddr,
+			Password: "",
+			DB:       0,
+		})
 
 		// Initialize script runner.
 		runner, err := script.NewRunner(&script.Options{
@@ -332,6 +341,25 @@ func TestRunnerIntegration(t *testing.T) {
 				So(res.Code, ShouldEqual, 1)
 				So(string(res.Stdout), ShouldEqual, "codebox\n")
 				So(string(res.Stderr), ShouldContainSubstring, "ReferenceError: abrakadabra is not defined\n")
+				So(res.Response, ShouldBeNil)
+			}
+		})
+
+		Convey("use cache in scripts", func() {
+			var tests = []scriptTest{
+				{"nodejs_v8", `exports.default = async (ctx) => { await ctx.cache.set('test', 'val'); let a = await ctx.cache.get('test'); console.log(a.toString()); }`},
+				{"nodejs_v12", `exports.default = async (ctx) => { await ctx.cache.set('test', 'val'); let a = await ctx.cache.get('test'); console.log(a.toString()); }`},
+			}
+			for _, data := range tests {
+				hash := util.GenerateKey()
+				err := uploadFile(repo, hash, []byte(data.script), script.SupportedRuntimes[data.runtime].DefaultEntryPoint)
+				So(err, ShouldBeNil)
+				res, err := runner.Run(context.Background(), logrus.StandardLogger(), data.runtime, "reqID", hash, "", "user", &script.RunOptions{})
+				So(err, ShouldBeNil)
+
+				So(res.Code, ShouldEqual, 0)
+				So(string(res.Stdout), ShouldEqual, "val\n")
+				So(res.Stderr, ShouldBeEmpty)
 				So(res.Response, ShouldBeNil)
 			}
 		})

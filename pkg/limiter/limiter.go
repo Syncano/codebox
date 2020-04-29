@@ -48,7 +48,11 @@ var (
 
 // New initializes new limiter.
 func New(options *Options) *Limiter {
-	mergo.Merge(options, DefaultOptions) // nolint - error not possible
+	if options != nil {
+		mergo.Merge(options, DefaultOptions) // nolint - error not possible
+	} else {
+		options = DefaultOptions
+	}
 
 	channels := cache.NewLRUCache(&cache.Options{
 		TTL: options.TTL,

@@ -32,15 +32,15 @@ func ContextReader(ctx context.Context, r io.Reader) io.Reader {
 		}
 	}
 
-	return reader{ctx, r}
+	return contextReader{ctx, r}
 }
 
-type reader struct {
+type contextReader struct {
 	ctx context.Context
 	r   io.Reader
 }
 
-func (r reader) Read(p []byte) (n int, err error) {
+func (r contextReader) Read(p []byte) (n int, err error) {
 	if err = r.ctx.Err(); err != nil {
 		return
 	}
@@ -50,7 +50,7 @@ func (r reader) Read(p []byte) (n int, err error) {
 			err = e
 		} else if e, ok := err.(*net.OpError); ok && e.Timeout() {
 			err = context.DeadlineExceeded
-		} else if err == yamux.ErrTimeout {
+		} else if errors.Is(err, yamux.ErrTimeout) {
 			err = context.DeadlineExceeded
 		}
 
@@ -110,27 +110,37 @@ func ReadLimited(ctx context.Context, r io.Reader, limit int) ([]byte, error) {
 	return ret, err
 }
 
-// SubscribeRateLimited subscribes to reader with bandwidth rate limiter and publishes data received through publish function.
-func SubscribeRateLimited(r io.Reader, bucket *ratelimit.Bucket, publish func(message []byte), errorFunc func(err error)) {
-	var (
-		n   int
-		err error
-	)
+var _ io.ReadWriter = (*rateLimitedReadWriter)(nil)
 
-	buf := make([]byte, 64*1024)
+type rateLimitedReadWriter struct {
+	rw     io.ReadWriter
+	bucket *ratelimit.Bucket
+}
 
-	for {
-		n, err = r.Read(buf)
-		if err != nil {
-			errorFunc(err)
-			return
-		}
-
-		if !bucket.WaitMaxDuration(int64(n), time.Minute) {
-			errorFunc(ErrLimitReached)
-			return
-		}
-
-		publish(buf[:n])
+func NewRateLimitedReadWriter(rw io.ReadWriter, bucket *ratelimit.Bucket) io.ReadWriter {
+	return &rateLimitedReadWriter{
+		rw:     rw,
+		bucket: bucket,
 	}
+}
+
+func (r *rateLimitedReadWriter) Read(buf []byte) (int, error) {
+	n, err := r.rw.Read(buf)
+	if err != nil {
+		return n, err
+	}
+
+	if !r.bucket.WaitMaxDuration(int64(n), time.Minute) {
+		return n, ErrLimitReached
+	}
+
+	return n, nil
+}
+
+func (r *rateLimitedReadWriter) Write(p []byte) (n int, err error) {
+	if !r.bucket.WaitMaxDuration(int64(len(p)), time.Minute) {
+		return n, ErrLimitReached
+	}
+
+	return r.rw.Write(p)
 }

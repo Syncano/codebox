@@ -6,6 +6,7 @@ const util = require('util')
 
 const APP_PATH = '/app/code'
 const APP_LISTEN = '/tmp/wrapper.sock'
+const CACHE_SOCK = '/tmp/cache.sock'
 const ENV_PATH = '/app/env'
 const STREAM_STDOUT = 0
 const STREAM_STDERR = 1
@@ -20,9 +21,10 @@ const SCRIPT_FUNC = new vm.Script(`
       meta: META,
       config: CONFIG,
       HttpResponse,
-      setResponse: (response) => { __run.setResponse(response) },
-      log: (data, ...args) => { __run.log(data, ...args) },
-      error: (data, ...args) => { __run.error(data, ...args) },
+      setResponse: (response) => __run.setResponse(response),
+      log: (data, ...args) => __run.log(data, ...args),
+      error: (data, ...args) => __run.error(data, ...args),
+      cache: __cache,
     })
   } catch (error) {
     __conn.handleError(error)
@@ -47,6 +49,7 @@ let asyncMode
 let setupDone = false
 let entryPoint
 let timeout
+let cache
 
 // Patch process.exit.
 function ExitError (code) {
@@ -58,7 +61,7 @@ process.exit = function (code) {
   throw new ExitError(code)
 }
 
-let commonCtx = {
+const commonCtx = {
   APP_PATH,
   ENV_PATH,
   __filename,
@@ -80,7 +83,7 @@ let commonCtx = {
 }
 
 // Inject globals to common context.
-commonCtx['global'] = commonCtx
+commonCtx.global = commonCtx
 
 // HttpResponse class.
 class HttpResponse {
@@ -92,7 +95,7 @@ class HttpResponse {
   }
 
   json () {
-    for (let k in this.headers) {
+    for (const k in this.headers) {
       this.headers[k] = String(this.headers[k])
     }
     return JSON.stringify({
@@ -102,7 +105,7 @@ class HttpResponse {
     })
   }
 }
-commonCtx['HttpResponse'] = HttpResponse
+commonCtx.HttpResponse = HttpResponse
 
 class ConnectionContext {
   constructor (socket, delim, runCtx) {
@@ -196,18 +199,124 @@ class RunContext {
   }
 }
 
-function sendData(socket, type, data) {
-    let len = Buffer.allocUnsafe(4)
-    len.writeUInt32LE(Buffer.byteLength(data))
+class Cache {
+  constructor () {
+    this.socket = null
+    this.callback_queue = []
+  }
 
-    socket.write(String.fromCharCode(type))
-    socket.write(len)
-    socket.write(data)
+  _processResponse (res) {
+    const cb = this.callback_queue.shift()
+    if (typeof cb === 'function') {
+      cb(res)
+    }
+
+    if (this.callback_queue.length === 0 && !asyncMode) {
+      this.socket.unref()
+    }
+  }
+
+  _socketData (socket, chunk, position = 0) {
+    if (position >= chunk.length) {
+      return
+    }
+
+    if (position > 0) {
+      chunk = chunk.slice(position)
+    }
+
+    if (socket.buffer === undefined) {
+      const totalSize = chunk.readInt32LE(0)
+
+      if (totalSize === -1) {
+        this._processResponse(null)
+        return
+      }
+
+      socket.offset = 0
+      socket.buffer = Buffer.allocUnsafe(totalSize)
+    }
+
+    position = chunk.copy(socket.buffer, socket.offset)
+    socket.offset += chunk.length
+
+    // If we're not done reading a packet, return.
+    if (socket.offset < socket.buffer.length) {
+      return
+    }
+
+    this._processResponse(socket.buffer.slice(4))
+
+    socket.buffer = undefined
+    this._socketData(socket, chunk, position)
+  }
+
+  _getSock () {
+    if (this.socket == null) {
+      this.socket = new net.Socket()
+      this.socket.connect(CACHE_SOCK)
+
+      if (!asyncMode) {
+        this.socket.unref()
+      }
+
+      this.socket.on('data', (chunk) => this._socketData(this.socket, chunk))
+    }
+
+    return this.socket
+  }
+
+  _sendCommand (cmdArray) {
+    return new Promise((resolve, reject) => {
+      const socket = this._getSock()
+
+      const len = Buffer.allocUnsafe(4)
+      len.writeUInt32LE(cmdArray.length)
+      socket.write(len)
+
+      for (const i in cmdArray) {
+        const cmd = cmdArray[i]
+        const len = Buffer.allocUnsafe(4)
+
+        len.writeUInt32LE(Buffer.byteLength(cmd))
+        socket.write(len)
+        socket.write(cmd)
+      }
+
+      if (!asyncMode && this.callback_queue.length === 0) {
+        this.socket.ref()
+      }
+
+      this.callback_queue.push(resolve)
+    })
+  }
+
+  set (key, value) {
+    return this._sendCommand(['SET', key, value])
+  }
+
+  get (key) {
+    return this._sendCommand(['GET', key])
+  }
+}
+
+function sendData (socket, type, data) {
+  const len = Buffer.allocUnsafe(4)
+  len.writeUInt32LE(Buffer.byteLength(data))
+
+  socket.write(String.fromCharCode(type))
+  socket.write(len)
+  socket.write(data)
 }
 
 // Main process script function.
 function processScript (socket, context) {
-  // Create script and context if it's the first run.
+  const runCtx = new RunContext()
+  const connCtx = new ConnectionContext(socket, context._delim, runCtx)
+
+  lastContext = connCtx
+
+  // Create script if it's the first run.
   if (script === undefined) {
     const scriptFilename = path.join(APP_PATH, entryPoint)
     const source = fs.readFileSync(scriptFilename)
@@ -222,33 +331,36 @@ function processScript (socket, context) {
   }
 
   // Prepare context.
-  let ctx = Object.assign({}, commonCtx)
+  const ctx = Object.assign({}, commonCtx)
 
-  for (let key in context) {
+  for (const key in context) {
     if (key.startsWith('_')) {
       continue
     }
+
     ctx[key] = context[key]
   }
 
-  const runCtx = new RunContext()
-  const connCtx = new ConnectionContext(socket, context._delim, runCtx)
+  if (cache === undefined) {
+    cache = new Cache()
+  }
 
-  ctx['__conn'] = lastContext = connCtx
-  ctx['__run'] = runCtx
+  ctx.__conn = connCtx
+  ctx.__run = runCtx
+  ctx.__cache = cache
   // For backwards compatibility.
-  ctx['setResponse'] = (r) => runCtx.setResponse(r)
+  ctx.setResponse = (r) => runCtx.setResponse(r)
 
   // Run script.
-  let opts = { timeout: timeout / 1e6 }
+  const opts = { timeout: timeout / 1e6 }
 
   try {
     if (scriptFunc === undefined) {
-      let ret = script.runInNewContext(ctx, opts)
+      const ret = script.runInNewContext(ctx, opts)
 
       if (typeof ret === 'function') {
         scriptFunc = ret
-        ctx['__func'] = commonCtx['__func'] = scriptFunc
+        ctx.__func = commonCtx.__func = scriptFunc
 
         SCRIPT_FUNC.runInNewContext(ctx, opts)
       } else if (asyncMode) {
@@ -272,12 +384,13 @@ function processData (socket, chunk, position = 0) {
   if (position >= chunk.length) {
     return
   }
+
   if (position > 0) {
     chunk = chunk.slice(position)
   }
 
   if (socket.buffer === undefined) {
-    let totalSize = chunk.readUInt32LE(0)
+    const totalSize = chunk.readUInt32LE(0)
     socket.offset = 0
     socket.buffer = Buffer.allocUnsafe(totalSize)
   }
@@ -291,9 +404,9 @@ function processData (socket, chunk, position = 0) {
 
   if (!setupDone) {
     // Read setup JSON.
-    let messageSize = socket.buffer.readUInt32LE(0)
-    let messageJSON = socket.buffer.slice(4, 4 + messageSize)
-    let message = JSON.parse(messageJSON)
+    const messageSize = socket.buffer.readUInt32LE(0)
+    const messageJSON = socket.buffer.slice(4, 4 + messageSize)
+    const message = JSON.parse(messageJSON)
 
     // Process setup package.
     entryPoint = message.entryPoint
@@ -318,9 +431,9 @@ function processData (socket, chunk, position = 0) {
     setupDone = true
   } else {
     // Read context JSON.
-    let contextSize = socket.buffer.readUInt32LE(4)
-    let contextJSON = socket.buffer.slice(8, 8 + contextSize)
-    let context = JSON.parse(contextJSON)
+    const contextSize = socket.buffer.readUInt32LE(4)
+    const contextJSON = socket.buffer.slice(8, 8 + contextSize)
+    const context = JSON.parse(contextJSON)
 
     // Process files into context.ARGS.
     if (context._files) {
@@ -328,8 +441,8 @@ function processData (socket, chunk, position = 0) {
       let cursor = 8 + contextSize
 
       for (let i = 0; i < context._files.length; i++) {
-        let file = context._files[i]
-        let buf = socket.buffer.slice(cursor, cursor + file.length)
+        const file = context._files[i]
+        const buf = socket.buffer.slice(cursor, cursor + file.length)
         buf.contentType = file.ct
         buf.filename = file.fname
         context.ARGS[file.name] = buf

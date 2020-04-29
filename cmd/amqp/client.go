@@ -117,12 +117,12 @@ func (ac *Channel) IsRunning() bool {
 	return atomic.LoadUint32(&ac.running) == 1
 }
 
-func (ac *Channel) setRunning(running bool) {
+func (ac *Channel) setRunning(running bool) bool {
 	if running {
-		atomic.StoreUint32(&ac.running, 1)
-	} else {
-		atomic.StoreUint32(&ac.running, 0)
+		return atomic.SwapUint32(&ac.running, 1) != 1
 	}
+
+	return atomic.SwapUint32(&ac.running, 0) != 0
 }
 
 // Publish sends a Publishing from the client to an exchange on the server.
@@ -150,7 +150,10 @@ func (ac *Channel) Publish(exchange, key string, mandatory, immediate bool, msg 
 
 // Shutdown stops gracefully Channel.
 func (ac *Channel) Shutdown() {
-	ac.setRunning(false)
+	if !ac.setRunning(false) {
+		return
+	}
+
 	ac.mu.Lock()
 	if ac.ch != nil {
 		ac.ch.Close()

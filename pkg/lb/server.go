@@ -71,7 +71,11 @@ const (
 
 // NewServer initializes new LB server.
 func NewServer(fileRepo filerepo.Repo, options *ServerOptions) *Server {
-	mergo.Merge(options, DefaultOptions) // nolint - error not possible
+	if options != nil {
+		mergo.Merge(options, DefaultOptions) // nolint - error not possible
+	} else {
+		options = DefaultOptions
+	}
 
 	workers := cache.NewLRUCache(&cache.Options{
 		TTL: options.WorkerKeepalive,
@@ -204,7 +208,7 @@ func (s *Server) processRun(stream pb.ScriptRunner_RunServer, runMeta *pb.RunReq
 	script := s.createScriptInfo(scriptMeta)
 	retry := 0
 
-	if runErr := util.RetryWithCritical(s.options.WorkerRetry, workerRetrySleep, func() (bool, error) {
+	_, runErr := util.RetryWithCritical(s.options.WorkerRetry, workerRetrySleep, func() (bool, error) {
 		retry++
 
 		// Check and refresh source and environment.
@@ -237,7 +241,7 @@ func (s *Server) processRun(stream pb.ScriptRunner_RunServer, runMeta *pb.RunReq
 			// Release worker resources as it failed prematurely.
 			s.handleWorkerError(cont, err)
 
-			return err == context.Canceled, err
+			return util.IsCancellation(err), err
 		}
 
 		cont.Worker.ResetErrorCount()
@@ -274,12 +278,13 @@ func (s *Server) processRun(stream pb.ScriptRunner_RunServer, runMeta *pb.RunReq
 		logger.WithField("took", time.Since(start)).Info("grpc:lb:Run")
 
 		return false, nil
-	}); runErr != nil {
+	})
+
+	if runErr != nil {
 		logger.WithError(runErr).Warn("grpc:lb:Run failed")
-		return runErr
 	}
 
-	return nil
+	return runErr
 }
 
 func (s *Server) createScriptInfo(meta *scriptpb.RunRequest_MetaMessage) ScriptInfo {
@@ -388,11 +393,7 @@ func (s *Server) grabWorker(script ScriptInfo) (*WorkerContainer, int, bool) { /
 }
 
 func (s *Server) handleWorkerError(cont *WorkerContainer, err error) {
-	if err == context.Canceled {
-		return
-	}
-
-	if s, ok := status.FromError(err); ok && s.Code() == codes.Canceled {
+	if util.IsCancellation(err) {
 		return
 	}
 

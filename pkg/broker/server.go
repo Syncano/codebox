@@ -55,6 +55,7 @@ type ServerOptions struct {
 	LBRetry             int
 	DownloadConcurrency uint
 	MaxPayloadSize      int64
+	MaxTimeout          time.Duration
 }
 
 // DefaultOptions holds default options values for Broker server.
@@ -62,6 +63,7 @@ var DefaultOptions = &ServerOptions{
 	DownloadConcurrency: 16,
 	LBRetry:             3,
 	MaxPayloadSize:      6 << 20,
+	MaxTimeout:          8 * time.Minute,
 }
 
 var (
@@ -86,7 +88,6 @@ const (
 	environmentFileName = "squashfs.img"
 	chunkSize           = 2 * 1024 * 1024
 	lbRetrySleep        = 3 * time.Millisecond
-	defaultTimeout      = 8 * time.Minute
 	downloadTimeout     = 2 * time.Minute
 )
 
@@ -151,10 +152,10 @@ func (s *Server) Run(request *brokerpb.RunRequest, stream brokerpb.ScriptRunner_
 
 	scriptMeta := request.GetRequest()[0].GetMeta()
 
-	// In async mode, create new context and add trace metadata to it.
+	// Create new context and add trace metadata to it to process traces even for canceled contexts.
 	ctx, cancel := context.WithTimeout(
 		census_trace.NewContext(context.Background(), census_trace.FromContext(stream.Context())),
-		defaultTimeout)
+		s.options.MaxTimeout)
 
 	if request.LbMeta == nil {
 		request.LbMeta = &lbpb.RunRequest_MetaMessage{}
@@ -222,40 +223,37 @@ func (s *Server) processRun(ctx context.Context, logger logrus.FieldLogger, requ
 
 	lbID := util.Hash(lbMeta.GetConcurrencyKey()) % uint32(len(s.lbServers))
 	lb := s.lbServers[lbID]
-	logger = logger.WithField("lb", lb)
+	logger = logger.WithFields(logrus.Fields{"lb": lb, "sourceHash": scriptMeta.SourceHash, "envHash": scriptMeta.Environment})
 
 	var stream lbpb.ScriptRunner_RunClient
 
 	// Start processing and retry in case of network error.
-	if e := util.Retry(s.options.LBRetry, lbRetrySleep, func() error {
+	canceled, err := util.RetryNotCancelled(s.options.LBRetry, lbRetrySleep, func() error {
 		// Upload script files if needed.
 		files := meta.GetFiles()
 		if err := s.uploadFiles(ctx, lb, scriptMeta.SourceHash, files); err != nil {
-			logger.WithError(err).WithField("key", scriptMeta.SourceHash).Error("File upload error")
-			return err
+			return fmt.Errorf("file upload error: %w", err)
 		}
 
 		// Upload environment file if needed.
 		envURL := meta.GetEnvironmentURL()
 		if envURL != "" {
 			if err := s.uploadFiles(ctx, lb, scriptMeta.Environment, map[string]string{envURL: environmentFileName}); err != nil {
-				logger.WithError(err).WithField("key", scriptMeta.Environment).Error("Environment upload error")
-				return err
+				return fmt.Errorf("environment upload error: %w", err)
 			}
 		}
 
 		var err error
 		stream, err = lb.lbCli.Run(ctx)
 		if err != nil {
-			return err
+			return fmt.Errorf("lb run error: %w", err)
 		}
 		if err := stream.Send(&lbpb.RunRequest{
 			Value: &lbpb.RunRequest_Meta{
 				Meta: lbMeta,
 			},
 		}); err != nil {
-			logger.WithError(err).Error("LB grpc:lb:Run sending LB meta failed")
-			return err
+			return fmt.Errorf("sending meta failed: %w", err)
 		}
 
 		for _, scriptReq := range request.GetRequest() {
@@ -264,13 +262,18 @@ func (s *Server) processRun(ctx context.Context, logger logrus.FieldLogger, requ
 					Request: scriptReq,
 				},
 			}); err != nil {
-				logger.WithError(err).Error("LB grpc:lb:Run sending Script request failed")
-				return err
+				return fmt.Errorf("sending script request failed: %w", err)
 			}
 		}
 		return stream.CloseSend()
-	}); e != nil {
-		return nil, e
+	})
+
+	if err != nil {
+		if !canceled {
+			logrus.WithError(err).Error("grpc:lb:Run error")
+		}
+
+		return nil, err
 	}
 
 	if err := s.updateTrace(meta.GetTraceID(), meta.GetTrace()); err != nil {
@@ -425,7 +428,7 @@ func (s *Server) processResponse(ctx context.Context, logger logrus.FieldLogger,
 		if retStream != nil {
 			e := retStream.Send(r)
 			if e != nil {
-				logger.WithError(e).Warn("LB grpc:broker:Send error")
+				logger.WithError(e).Warn("grpc:broker:Send error")
 
 				retStream = nil
 			}
@@ -434,7 +437,7 @@ func (s *Server) processResponse(ctx context.Context, logger logrus.FieldLogger,
 
 	result, err := stream.Recv()
 	if err != nil {
-		logger.WithError(err).Warn("LB grpc:lb:Run error")
+		logger.WithError(err).Warn("grpc:lb:Run error")
 	} else {
 		retSend(result)
 
@@ -443,7 +446,7 @@ func (s *Server) processResponse(ctx context.Context, logger logrus.FieldLogger,
 			chunk, e := stream.Recv()
 			if e != nil {
 				if e != io.EOF {
-					logger.WithError(e).Warn("LB grpc:lb:Recv error")
+					logger.WithError(e).Warn("grpc:lb:Recv error")
 				}
 				break
 			}

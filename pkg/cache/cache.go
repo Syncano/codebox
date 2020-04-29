@@ -35,7 +35,7 @@ type Options struct {
 	Capacity        int
 }
 
-var defaultOptions = Options{
+var defaultOptions = &Options{
 	TTL:             30 * time.Second,
 	CleanupInterval: 15 * time.Second,
 }
@@ -74,7 +74,12 @@ func (c *Cache) Init(options *Options, deleteHandler DeleteHandler) {
 		panic("init on cache cannot be called twice")
 	}
 
-	mergo.Merge(options, defaultOptions) // nolint - error not possible
+	if options != nil {
+		mergo.Merge(options, defaultOptions) // nolint - error not possible
+	} else {
+		options = defaultOptions
+	}
+
 	c.options = *options
 
 	if deleteHandler == nil {

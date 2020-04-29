@@ -122,7 +122,7 @@ func TestServerMethods(t *testing.T) {
 					uploadStream.On("Send", mock.Anything).Return(err)
 					repoCli.On("Exists", mock.Anything, mock.Anything, mock.Anything).Return(&repopb.ExistsResponse{Ok: false}, nil).Once()
 					e := s.Run(&runReq, stream)
-					So(e, ShouldResemble, err)
+					So(errors.Is(e, err), ShouldBeTrue)
 				})
 				Convey("given simple download result channel", func() {
 					dlCh <- &util.DownloadResult{Data: []byte("abc")}
@@ -133,7 +133,7 @@ func TestServerMethods(t *testing.T) {
 						uploadStream.On("Recv").Return(nil, err).Once()
 						repoCli.On("Exists", mock.Anything, mock.Anything).Return(&repopb.ExistsResponse{Ok: false}, nil).Once()
 						e := s.Run(&runReq, stream)
-						So(e, ShouldResemble, err)
+						So(errors.Is(e, err), ShouldBeTrue)
 					})
 					Convey("on last Recv error, propagates it", func() {
 						uploadStream.On("Send", mock.Anything).Return(nil)
@@ -141,14 +141,14 @@ func TestServerMethods(t *testing.T) {
 						uploadStream.On("Recv").Return(nil, err).Once()
 						repoCli.On("Exists", mock.Anything, mock.Anything).Return(&repopb.ExistsResponse{Ok: false}, nil).Once()
 						e := s.Run(&runReq, stream)
-						So(e, ShouldResemble, err)
+						So(errors.Is(e, err), ShouldBeTrue)
 					})
 					Convey("when upload is not accepted, moves to next file", func() {
 						uploadStream.On("Send", mock.Anything).Return(nil).Once()
 						uploadStream.On("Recv").Return(&repopb.UploadResponse{Accepted: false}, nil).Once()
 						repoCli.On("Exists", mock.Anything, &repopb.ExistsRequest{Key: env}, mock.Anything).Return(nil, err).Once()
 						e := s.Run(&runReq, stream)
-						So(e, ShouldResemble, err)
+						So(errors.Is(e, err), ShouldBeTrue)
 					})
 					Convey("on uploadChunks error, rechecks Exists and moves to next file if succeeds", func() {
 						uploadStream.On("Send", mock.Anything).Return(nil).Once()
@@ -156,7 +156,7 @@ func TestServerMethods(t *testing.T) {
 						repoCli.On("Exists", mock.Anything, mock.Anything).Return(&repopb.ExistsResponse{Ok: true}, nil).Once()
 						repoCli.On("Exists", mock.Anything, &repopb.ExistsRequest{Key: env}, mock.Anything).Return(nil, err).Once()
 						e := s.Run(&runReq, stream)
-						So(e, ShouldResemble, err)
+						So(errors.Is(e, err), ShouldBeTrue)
 					})
 					Convey("on chunk Send error, propagates it", func() {
 						uploadStream.On("Send", mock.Anything).Return(nil).Once()
@@ -164,7 +164,7 @@ func TestServerMethods(t *testing.T) {
 						uploadStream.On("Send", mock.Anything).Return(err)
 						repoCli.On("Exists", mock.Anything, mock.Anything).Return(nil, err).Once()
 						e := s.Run(&runReq, stream)
-						So(e, ShouldResemble, err)
+						So(errors.Is(e, err), ShouldBeTrue)
 					})
 					Convey("on chunk upload Send error, propagates it", func() {
 						uploadStream.On("Send", mock.Anything).Return(nil).Once()
@@ -172,7 +172,7 @@ func TestServerMethods(t *testing.T) {
 						uploadStream.On("Send", mock.Anything).Return(err)
 						repoCli.On("Exists", mock.Anything, mock.Anything).Return(&repopb.ExistsResponse{Ok: false}, nil).Once()
 						e := s.Run(&runReq, stream)
-						So(e, ShouldResemble, err)
+						So(errors.Is(e, err), ShouldBeTrue)
 					})
 					Convey("on upload Done Send error, propagates it", func() {
 						uploadStream.On("Send", mock.Anything).Return(nil).Once()
@@ -181,7 +181,7 @@ func TestServerMethods(t *testing.T) {
 						uploadStream.On("Send", mock.Anything).Return(err)
 						repoCli.On("Exists", mock.Anything, mock.Anything).Return(&repopb.ExistsResponse{Ok: false}, nil).Once()
 						e := s.Run(&runReq, stream)
-						So(e, ShouldResemble, err)
+						So(errors.Is(e, err), ShouldBeTrue)
 					})
 				})
 				Convey("on successful upload Send", func() {
@@ -228,7 +228,7 @@ func TestServerMethods(t *testing.T) {
 						dlCh <- &util.DownloadResult{Error: err}
 						close(dlCh)
 						e := s.Run(&runReq, stream)
-						So(e, ShouldResemble, err)
+						So(errors.Is(e, err), ShouldBeTrue)
 					})
 				})
 			})
@@ -236,21 +236,21 @@ func TestServerMethods(t *testing.T) {
 				repoCli.On("Exists", mock.Anything, mock.Anything, mock.Anything).Return(nil, err)
 				stream.On("Context").Return(context.Background())
 				e := s.Run(&runReq, stream)
-				So(e, ShouldResemble, err)
+				So(errors.Is(e, err), ShouldBeTrue)
 			})
 			Convey("propagates Exists error on environment upload", func() {
 				repoCli.On("Exists", mock.Anything, mock.Anything, mock.Anything).Return(&repopb.ExistsResponse{Ok: true}, nil).Once()
 				repoCli.On("Exists", mock.Anything, mock.Anything, mock.Anything).Return(nil, err).Once()
 				stream.On("Context").Return(context.Background())
 				e := s.Run(&runReq, stream)
-				So(e, ShouldResemble, err)
+				So(errors.Is(e, err), ShouldBeTrue)
 			})
 			Convey("propagates Upload error", func() {
 				repoCli.On("Exists", mock.Anything, mock.Anything, mock.Anything).Return(&repopb.ExistsResponse{Ok: false}, nil)
 				repoCli.On("Upload", mock.Anything).Return(nil, err)
 				stream.On("Context").Return(context.Background())
 				e := s.Run(&runReq, stream)
-				So(e, ShouldResemble, err)
+				So(errors.Is(e, err), ShouldBeTrue)
 			})
 			Convey("if concurrent upload happens, wait for it to finish", func() {
 				repoCli.On("Exists", mock.Anything, mock.Anything, mock.Anything).Return(&repopb.ExistsResponse{Ok: false}, nil)
@@ -267,14 +267,14 @@ func TestServerMethods(t *testing.T) {
 				Convey("and propagates Run error", func() {
 					lbCli.On("Run", mock.Anything).Return(nil, err)
 					e := s.Run(&runReq, stream)
-					So(e, ShouldResemble, err)
+					So(errors.Is(e, err), ShouldBeTrue)
 				})
 				Convey("and propagates Send error", func() {
 					runStream := new(lbmocks.ScriptRunner_RunClient)
 					lbCli.On("Run", mock.Anything).Return(runStream, nil)
 					runStream.On("Send", mock.Anything).Return(err)
 					e := s.Run(&runReq, stream)
-					So(e, ShouldResemble, err)
+					So(errors.Is(e, err), ShouldBeTrue)
 				})
 				Convey("and propagates Send request error", func() {
 					runStream := new(lbmocks.ScriptRunner_RunClient)
@@ -282,7 +282,7 @@ func TestServerMethods(t *testing.T) {
 					runStream.On("Send", mock.Anything).Return(nil).Once()
 					runStream.On("Send", mock.Anything).Return(err)
 					e := s.Run(&runReq, stream)
-					So(e, ShouldResemble, err)
+					So(errors.Is(e, err), ShouldBeTrue)
 				})
 			})
 			Convey("runs in sync when sync flag is true", func() {
