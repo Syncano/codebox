@@ -2,6 +2,7 @@ package util
 
 import (
 	"context"
+	"errors"
 	"hash/fnv"
 	"io"
 	"math/rand"
@@ -10,7 +11,9 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/peer"
+	"google.golang.org/grpc/status"
 )
 
 const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
@@ -54,10 +57,8 @@ func Retry(attempts int, sleep time.Duration, f func() error) (err error) {
 }
 
 // RetryWithCritical is similar to Retry but allows func to return true/false to mark if returned error is critical or not.
-func RetryWithCritical(attempts int, sleep time.Duration, f func() (bool, error)) (err error) {
+func RetryWithCritical(attempts int, sleep time.Duration, f func() (bool, error)) (critical bool, err error) {
 	for i := 0; ; i++ {
-		var critical bool
-
 		critical, err = f()
 		if err == nil || critical {
 			return
@@ -70,7 +71,38 @@ func RetryWithCritical(attempts int, sleep time.Duration, f func() (bool, error)
 		time.Sleep(sleep)
 	}
 
-	return err
+	return
+}
+
+func RetryNotCancelled(attempts int, sleep time.Duration, f func() error) (bool, error) {
+	canceled, err := RetryWithCritical(attempts, sleep, func() (bool, error) {
+		err := f()
+		return IsContextError(err), err
+	})
+
+	return canceled, err
+}
+
+func checkError(err, target error, code codes.Code) bool {
+	if errors.Is(err, target) {
+		return true
+	}
+
+	s, ok := status.FromError(err)
+
+	return ok && s.Code() == code
+}
+
+func IsContextError(err error) bool {
+	return IsCancellation(err) || IsDeadlineExceeded(err)
+}
+
+func IsCancellation(err error) bool {
+	return checkError(err, context.Canceled, codes.Canceled)
+}
+
+func IsDeadlineExceeded(err error) bool {
+	return checkError(err, context.DeadlineExceeded, codes.DeadlineExceeded)
 }
 
 // Must is a small helper that checks if err is nil. If it's not - panics.

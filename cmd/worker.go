@@ -16,9 +16,7 @@ import (
 	"github.com/urfave/cli/v2"
 	"go.opencensus.io/plugin/ocgrpc"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/keepalive"
-	"google.golang.org/grpc/status"
 
 	"github.com/Syncano/codebox/pkg/docker"
 	"github.com/Syncano/codebox/pkg/filerepo"
@@ -27,6 +25,7 @@ import (
 	"github.com/Syncano/codebox/pkg/script"
 	scriptpb "github.com/Syncano/codebox/pkg/script/proto"
 	"github.com/Syncano/codebox/pkg/sys"
+	"github.com/Syncano/codebox/pkg/util"
 	"github.com/Syncano/codebox/pkg/version"
 )
 
@@ -38,7 +37,8 @@ const (
 
 var (
 	dockerOptions = &docker.Options{}
-	scriptOptions = &script.Options{Constraints: new(docker.Constraints)}
+	scriptOptions = &script.Options{Constraints: new(docker.Constraints),
+		UserCacheConstraints: new(script.UserCacheConstraints)}
 )
 
 var workerCmd = &cli.Command{
@@ -91,6 +91,14 @@ var workerCmd = &cli.Command{
 		&cli.Uint64Flag{
 			Name: "memory-margin", Usage: "runner memory margin",
 			EnvVars: []string{"MEMORY_MARGIN"}, Value: script.DefaultOptions.MemoryMargin, Destination: &scriptOptions.MemoryMargin,
+		},
+		&cli.Int64Flag{
+			Name: "ratelimit-capacity", Usage: "capacity of per container stdout/stderr ratelimit",
+			EnvVars: []string{"RATELIMIT_CAPACITY"}, Value: script.DefaultOptions.StreamCapacityLimit, Destination: &scriptOptions.StreamCapacityLimit,
+		},
+		&cli.Int64Flag{
+			Name: "ratelimit-quantum", Usage: "quantum (per minute) of per container stdout/stderr ratelimit",
+			EnvVars: []string{"RATELIMIT_QUANTUM"}, Value: script.DefaultOptions.StreamPerMinuteQuantum, Destination: &scriptOptions.StreamPerMinuteQuantum,
 		},
 
 		// Script Runner creation options.
@@ -167,6 +175,36 @@ var workerCmd = &cli.Command{
 		&cli.StringFlag{
 			Name: "lb-addr", Aliases: []string{"lb"}, Usage: "load balancer TCP address",
 			EnvVars: []string{"LB_ADDR"}, Value: "127.0.0.1:8000",
+		},
+
+		// User Cache options.
+		&cli.IntFlag{
+			Name: "cache-max-key", Usage: "max allowed user cache key length",
+			EnvVars: []string{"CACHE_MAX_KEY"}, Value: script.DefaultUserCacheConstraints.MaxKeyLen, Destination: &scriptOptions.UserCacheConstraints.MaxKeyLen,
+		},
+		&cli.IntFlag{
+			Name: "cache-max-value", Usage: "max allowed user cache value length",
+			EnvVars: []string{"CACHE_MAX_VALUE"}, Value: script.DefaultUserCacheConstraints.MaxValueLen, Destination: &scriptOptions.UserCacheConstraints.MaxValueLen,
+		},
+		&cli.IntFlag{
+			Name: "cache-cardinality-limit", Usage: "max number of elements in user cache (per user)",
+			EnvVars: []string{"CACHE_CARDINALITY_LIMIT"}, Value: script.DefaultUserCacheConstraints.CardinalityLimit, Destination: &scriptOptions.UserCacheConstraints.CardinalityLimit,
+		},
+		&cli.IntFlag{
+			Name: "cache-size-limit", Usage: "max total size of elements in user cache (per user)",
+			EnvVars: []string{"CACHE_SIZE_LIMIT"}, Value: script.DefaultUserCacheConstraints.SizeLimit, Destination: &scriptOptions.UserCacheConstraints.SizeLimit,
+		},
+		&cli.DurationFlag{
+			Name: "cache-default-timeout", Usage: "default user cache timeout",
+			EnvVars: []string{"CACHE_DEFAULT_TIMEOUT"}, Value: script.DefaultUserCacheConstraints.DefaultTimeout, Destination: &scriptOptions.UserCacheConstraints.DefaultTimeout,
+		},
+		&cli.Int64Flag{
+			Name: "cache-ratelimit-capacity", Usage: "user cache capacity of per container ratelimit",
+			EnvVars: []string{"CACHE_RATELIMIT_CAPACITY"}, Value: script.DefaultOptions.UserCacheStreamCapacityLimit, Destination: &scriptOptions.UserCacheStreamCapacityLimit,
+		},
+		&cli.Int64Flag{
+			Name: "cache-ratelimit-quantum", Usage: "user cache quantum (per minute) of per container ratelimit",
+			EnvVars: []string{"CACHE_RATELIMIT_QUANTUM"}, Value: script.DefaultOptions.UserCacheStreamPerMinuteQuantum, Destination: &scriptOptions.UserCacheStreamPerMinuteQuantum,
 		},
 	},
 	Action: func(c *cli.Context) error {
@@ -248,7 +286,7 @@ var workerCmd = &cli.Command{
 
 				setupPool, err = startServer(poolID, c.String("lb-addr"), c.Duration("heartbeat"),
 					repo, runner, syschecker, stopServer)
-				if s, e := status.FromError(err); e && s.Code() == codes.DeadlineExceeded || err == context.DeadlineExceeded {
+				if util.IsDeadlineExceeded(err) {
 					logrus.WithError(err).Warn("Server error")
 				} else if err != nil {
 					logrus.WithError(err).Error("Server error")

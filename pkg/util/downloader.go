@@ -47,7 +47,7 @@ type DownloaderOptions struct {
 	RetrySleep  time.Duration
 }
 
-var defaultDownloaderOptions = DownloaderOptions{
+var defaultDownloaderOptions = &DownloaderOptions{
 	Concurrency: 2,
 	Timeout:     15 * time.Second,
 	RetryCount:  3,
@@ -56,7 +56,11 @@ var defaultDownloaderOptions = DownloaderOptions{
 
 // NewDownloader initializes a new downloader.
 func NewDownloader(options *DownloaderOptions) *HTTPDownloader {
-	mergo.Merge(options, defaultDownloaderOptions) // nolint - error not possible
+	if options != nil {
+		mergo.Merge(options, defaultDownloaderOptions) // nolint - error not possible
+	} else {
+		options = defaultDownloaderOptions
+	}
 
 	sem := make(chan bool, options.Concurrency)
 	client := &http.Client{
@@ -87,7 +91,7 @@ func (d *HTTPDownloader) downloadURL(ctx context.Context, url string) ([]byte, e
 	// Retry request if needed - stop when context error happens.
 	var data []byte
 
-	err = RetryWithCritical(d.options.RetryCount, d.options.RetrySleep, func() (bool, error) {
+	_, err = RetryWithCritical(d.options.RetryCount, d.options.RetrySleep, func() (bool, error) {
 		var e error
 		resp, e := d.client.Do(req)
 		if e != nil {

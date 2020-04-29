@@ -44,6 +44,10 @@ As there is no authentication, always run it in a private network.`,
 			Name: "uwsgi-port", Usage: "port for uwsgi server",
 			EnvVars: []string{"UWSGI_PORT"}, Value: 8080,
 		},
+		&cli.DurationFlag{
+			Name: "max-timeout", Usage: "max timeout for scripts",
+			EnvVars: []string{"MAX_TIMEOUT"}, Value: broker.DefaultOptions.MaxTimeout, Destination: &brokerOptions.MaxTimeout,
+		},
 
 		// Redis options.
 		&cli.StringFlag{

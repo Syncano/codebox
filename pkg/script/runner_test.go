@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/docker/docker/api/types"
+	"github.com/go-redis/redis/v7"
 	"github.com/sirupsen/logrus"
 	. "github.com/smartystreets/goconvey/convey"
 	"github.com/stretchr/testify/mock"
@@ -85,16 +86,19 @@ func TestNewRunner(t *testing.T) {
 		mc.On("Close").Return(nil)
 		stdoutConn := new(MockConn)
 		stderrConn := new(MockConn)
+		cacheConn := new(MockConn)
 		conn := new(MockConn)
 		yamuxSession := new(MockYamuxSession)
 		yamuxSession.On("Open").Return(conn, nil)
 		yamuxSession.On("Close").Return(nil)
 
+		redisCli.On("ScriptLoad", mock.Anything).Return(redis.NewStringResult("", nil))
+
 		cont := &Container{
 			ID:          cID,
 			Environment: envKey,
 			Runtime:     defaultRuntime,
-			ok:          1,
+			state:       1,
 			volumeKey:   volKey,
 			resp: types.HijackedResponse{
 				Conn:   mc,
@@ -103,8 +107,10 @@ func TestNewRunner(t *testing.T) {
 			session:   yamuxSession,
 			stdout:    stdoutConn,
 			stderr:    stderrConn,
+			cache:     cacheConn,
 			connLimit: 2,
 			conns:     make(map[string]struct{}),
+			userCache: NewUserCache("1", cacheConn, redisCli, &UserCacheConstraints{}),
 		}
 		dockerMgr.On("Info").Return(types.Info{NCPU: 1})
 		dockerMgr.On("Options").Return(docker.Options{})
@@ -149,6 +155,7 @@ func TestNewRunner(t *testing.T) {
 						stdoutConn.On("Write", mock.Anything).Return(0, nil)
 						stdoutConn.On("Read", mock.Anything).Return(0, io.EOF)
 						stderrConn.On("Read", mock.Anything).Return(0, io.EOF)
+						cacheConn.On("Read", mock.Anything).Return(0, io.EOF)
 						dockerMgr.On("ContainerStop", mock.Anything, cont.ID).Return(nil)
 						repo.On("DeleteVolume", mock.Anything).Return(nil)
 
@@ -173,14 +180,16 @@ func TestNewRunner(t *testing.T) {
 								So(cont2.ID, ShouldEqual, cID2)
 							})
 							Convey("from cache", func() {
-								r.containerCache.Set(fmt.Sprintf("hash/user//%x", util.Hash("main.js")), cont)
+								cont.Hash = fmt.Sprintf("hash/user//%x", util.Hash("main.js"))
+								r.containerCache.Set(cont.Hash, cont)
 								_, e := r.Run(context.Background(), logrus.StandardLogger(), defaultRuntime, "reqID", "hash", "", "user", &RunOptions{})
 								So(e, ShouldEqual, io.EOF)
 							})
 						})
 						Convey("with files", func() {
 							files := map[string]File{"file": {Data: []byte("content")}}
-							r.containerCache.Set(fmt.Sprintf("hash/user//%x", util.Hash("main.js")), cont)
+							cont.Hash = fmt.Sprintf("hash/user//%x", util.Hash("main.js"))
+							r.containerCache.Set(cont.Hash, cont)
 							_, e := r.Run(context.Background(), logrus.StandardLogger(), defaultRuntime, "reqID", "hash", "", "user", &RunOptions{Files: files})
 							So(e, ShouldEqual, io.EOF)
 						})
@@ -320,7 +329,7 @@ func TestNewRunner(t *testing.T) {
 			})
 
 			Convey("onEvictedHandler gets called on container removal from cache", func() {
-				cont := &Container{ID: "someId", volumeKey: "someKey", SourceHash: "sourceHash", UserID: "userID", ok: 1}
+				cont := &Container{ID: "someId", volumeKey: "someKey", SourceHash: "sourceHash", UserID: "userID", state: ContainerStateRunning}
 				r.containerCache.Set("hash", cont)
 				dockerMgr.On("ContainerStop", mock.Anything, "someId").Return(nil).Once()
 				repo.On("DeleteVolume", "someKey").Return(nil).Once()
@@ -424,6 +433,7 @@ func TestRunnerMethods(t *testing.T) {
 			containerCache: cache.NewLRUSetCache(&cache.Options{}),
 			metrics:        Metrics(),
 		}
+		r.containerCache.OnValueEvicted(r.onEvictedContainerHandler)
 		err := errors.New("some error")
 
 		Convey("Options returns a copy of options struct", func() {

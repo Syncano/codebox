@@ -12,8 +12,8 @@ import (
 )
 
 var (
-	initOnce sync.Once
-	metr     *MetricsData
+	initOnceMetrics sync.Once
+	metr            *MetricsData
 )
 
 type MetricsData struct {
@@ -21,7 +21,7 @@ type MetricsData struct {
 }
 
 func Metrics() *MetricsData {
-	initOnce.Do(func() {
+	initOnceMetrics.Do(func() {
 		r := metric.NewRegistry()
 		metricproducer.GlobalManager().AddProducer(r)
 

@@ -17,14 +17,18 @@ type LRUOptions struct {
 	AutoRefresh bool
 }
 
-var defaultLRUOptions = LRUOptions{
+var defaultLRUOptions = &LRUOptions{
 	AutoRefresh: true,
 }
 
 // NewLRUCache creates and initializes a new cache object.
 // This one is based on LRU KV with TTL
 func NewLRUCache(options *Options, lruOptions *LRUOptions) *LRUCache {
-	mergo.Merge(lruOptions, defaultLRUOptions) // nolint - error not possible
+	if lruOptions != nil {
+		mergo.Merge(lruOptions, defaultLRUOptions) // nolint - error not possible
+	} else {
+		lruOptions = defaultLRUOptions
+	}
 
 	cache := LRUCache{lruOptions: *lruOptions}
 

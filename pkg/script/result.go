@@ -53,10 +53,10 @@ func (ret *Result) Parse(data []byte, streamMaxLength int, processErr error) err
 	switch {
 	case processErr == nil && len(data) > 0:
 		ret.Code = int(data[0])
-	case processErr == context.DeadlineExceeded:
+	case errors.Is(processErr, context.DeadlineExceeded):
 		ret.Code = 124
 	default:
-		if processErr == util.ErrLimitReached {
+		if errors.Is(processErr, util.ErrLimitReached) {
 			ret.Stderr = LimitReachedText
 		}
 

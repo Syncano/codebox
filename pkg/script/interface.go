@@ -39,7 +39,7 @@ var _ YamuxSession = (*yamux.Session)(nil)
 // RedisClient defines redis client methods we are using.
 //go:generate go run github.com/vektra/mockery/cmd/mockery -inpkg -testonly -name RedisClient
 type RedisClient interface {
-	Publish(channel string, message interface{}) *redis.IntCmd
+	redis.Cmdable
 }
 
 // Assert that redis client is compatible with our interface.

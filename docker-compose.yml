@@ -11,6 +11,7 @@ services:
       - /tmp/storage:/home/codebox/storage:rshared
     depends_on:
       - dind
+      - redis
     environment:
       - WRAPPERPATH=/opt/build/build/codewrapper
 
@@ -31,7 +32,7 @@ services:
       # - RUNSC_RELEASE=2018-11-22
 
   redis:
-    image: redis:3.2-alpine
+    image: redis:5-alpine
     volumes:
       - data-redis:/data
     ports:

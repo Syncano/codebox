@@ -19,6 +19,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/semaphore"
 
+	codewrapper "github.com/Syncano/codebox/codewrapper/server"
 	"github.com/Syncano/codebox/pkg/cache"
 	"github.com/Syncano/codebox/pkg/docker"
 	"github.com/Syncano/codebox/pkg/filerepo"
@@ -60,12 +61,13 @@ type Options struct {
 	StreamMaxLength int
 
 	// Docker
-	CreateTimeout     time.Duration
-	CreateRetryCount  int
-	CreateRetrySleep  time.Duration
-	PruneImages       bool
-	UseExistingImages bool
-	Constraints       *docker.Constraints
+	CreateTimeout        time.Duration
+	CreateRetryCount     int
+	CreateRetrySleep     time.Duration
+	PruneImages          bool
+	UseExistingImages    bool
+	Constraints          *docker.Constraints
+	UserCacheConstraints *UserCacheConstraints
 
 	// Cache
 	ContainerTTL       time.Duration
@@ -75,8 +77,10 @@ type Options struct {
 	HostStoragePath string
 
 	// Rate limiting
-	StreamCapacityLimit    int64
-	StreamPerMinuteQuantum int64
+	StreamCapacityLimit             int64
+	StreamPerMinuteQuantum          int64
+	UserCacheStreamCapacityLimit    int64
+	UserCacheStreamPerMinuteQuantum int64
 }
 
 // DefaultOptions holds default options values for script runner.
@@ -102,8 +106,10 @@ var DefaultOptions = &Options{
 	ContainerTTL:       45 * time.Minute,
 	ContainersCapacity: 250,
 
-	StreamCapacityLimit:    5 << 20,
-	StreamPerMinuteQuantum: 1 << 20,
+	StreamCapacityLimit:             5 << 20,
+	StreamPerMinuteQuantum:          1 << 20,
+	UserCacheStreamCapacityLimit:    5 << 20,
+	UserCacheStreamPerMinuteQuantum: 5 << 20,
 
 	HostStoragePath: "/home/codebox/storage",
 }
@@ -171,8 +177,12 @@ const (
 )
 
 // NewRunner initializes a new script runner.
-func NewRunner(options *Options, dockerMgr docker.Manager, checker sys.SystemChecker, repo filerepo.Repo, redisClient RedisClient) (*DockerRunner, error) {
-	mergo.Merge(options, DefaultOptions) // nolint - error not possible
+func NewRunner(options *Options, dockerMgr docker.Manager, checker sys.SystemChecker, repo filerepo.Repo, redisCli RedisClient) (*DockerRunner, error) {
+	if options != nil {
+		mergo.Merge(options, DefaultOptions) // nolint - error not possible
+	} else {
+		options = DefaultOptions
+	}
 
 	// Set concurrency limits on docker.
 	dockerMCPU := uint(dockerMgr.Info().NCPU * 1000)
@@ -210,7 +220,7 @@ func NewRunner(options *Options, dockerMgr docker.Manager, checker sys.SystemChe
 		sys:            checker,
 		options:        *options,
 		containerCache: containerCache,
-		redisCli:       redisClient,
+		redisCli:       redisCli,
 		metrics:        Metrics(),
 	}
 	r.containerCache.OnValueEvicted(r.onEvictedContainerHandler)
@@ -344,6 +354,7 @@ func (r *DockerRunner) processRun(ctx context.Context, logger logrus.FieldLogger
 	}
 
 	logger.WithField("ret", ret).Info("Run finished")
+	cont.IncreaseCalls()
 
 	return ret, cont, newContainer, err
 }
@@ -454,16 +465,18 @@ func (r *DockerRunner) processContainerDone(runtime string, cont *Container, req
 	recreate := newContainer
 
 	switch {
-	case err == filerepo.ErrResourceNotFound:
+	case errors.Is(err, filerepo.ErrResourceNotFound):
 		// If we encountered missing resource - reuse container.
 		// If cleanup volume fails - cleanup whole container and recreate in next block. Otherwise - return it to pool.
 		if err = r.fileRepo.CleanupVolume(cont.volumeKey); err == nil {
 			r.containerPool[runtime] <- cont
 			return
 		}
-	case err == ErrSemaphoreNotAcquired:
+	case newContainer && errors.Is(err, ErrSemaphoreNotAcquired):
 		// If semaphore was not acquired for new container, simply return it to pool.
+		_ = cont.Release(requestID, nil)
 		r.containerPool[runtime] <- cont
+
 		return
 	}
 
@@ -478,13 +491,14 @@ func (r *DockerRunner) processContainerDone(runtime string, cont *Container, req
 		logger = logger.WithError(err)
 		logFunc := logger.Warn
 
-		if err != util.ErrLimitReached && err != io.EOF && err != context.DeadlineExceeded && err != context.Canceled && err != yamux.ErrSessionShutdown && err != yamux.ErrStreamClosed {
+		if !errors.Is(err, util.ErrLimitReached) && !errors.Is(err, io.EOF) && !errors.Is(err, context.DeadlineExceeded) &&
+			!errors.Is(err, context.Canceled) && !errors.Is(err, yamux.ErrSessionShutdown) && !errors.Is(err, yamux.ErrStreamClosed) {
 			logFunc = logger.Error
 		}
 
 		logFunc("Recovering from container error")
-		cont.StopAcceptingConnections()
 		r.containerCache.Delete(cont.Hash, cont)
+		cont.StopAcceptingConnections()
 	}
 	// Add new container if needed.
 	if recreate {
@@ -627,13 +641,12 @@ func (r *DockerRunner) CreatePool() (string, error) {
 
 // StopPool stops the pool and cleans it up.
 func (r *DockerRunner) StopPool() {
-	if !r.IsRunning() {
+	if !r.setRunning(false) {
 		return
 	}
 
 	r.OnContainerRemoved(nil)
 
-	r.setRunning(false)
 	logrus.Info("Stopping pool")
 	// Reset free resources counter.
 	r.metrics.WorkerCPU().Set(0)
@@ -756,7 +769,7 @@ func (r *DockerRunner) getContainer(ctx context.Context, runtime, requestID, sou
 		// If container is in good standing, use it from cache.
 		if cont.IsAcceptingConnections() && r.containerCache.Refresh(containerHash, c) {
 			if err = r.reserveContainer(ctx, cont, requestID, false, options, constraints); err != nil {
-				if err == ErrTooManyConnections || !cont.IsAcceptingConnections() {
+				if errors.Is(err, ErrTooManyConnections) || !cont.IsAcceptingConnections() {
 					continue
 				}
 
@@ -794,7 +807,16 @@ func (r *DockerRunner) getContainer(ctx context.Context, runtime, requestID, sou
 
 	// Fallback to pool.
 	cont = <-r.containerPool[runtime]
-	cont.Configure(options)
+	cont.Configure(&ContainerOptions{
+		Async:      options.Async,
+		EntryPoint: options.EntryPoint,
+		Timeout:    options.Timeout,
+	},
+		r.options.UserCacheConstraints,
+		ratelimit.NewBucketWithQuantum(time.Minute, r.options.StreamCapacityLimit, r.options.StreamPerMinuteQuantum),
+		ratelimit.NewBucketWithQuantum(time.Minute, r.options.UserCacheStreamCapacityLimit, r.options.UserCacheStreamPerMinuteQuantum),
+	)
+
 	cont.SourceHash = sourceHash
 	cont.Environment = environment
 	cont.UserID = userID
@@ -821,40 +843,63 @@ func (r *DockerRunner) getContainer(ctx context.Context, runtime, requestID, sou
 	}
 
 	// Send setup message.
-	if conn, err = cont.Setup(options, constraints); err != nil {
+	if conn, err = cont.SendSetup(&codewrapper.Setup{
+		Command: SupportedRuntimes[runtime].Command(constraints),
+	}); err != nil {
 		return conn, cont, true, err
 	}
 
+	// Setup rate limited cache.
+	go func() {
+		if err := cont.ProcessCache(); err != nil {
+			if cont.IsAcceptingConnections() {
+				logger.WithError(err).Warn("Cache streaming error")
+				cont.StopAcceptingConnections()
+			}
+		}
+	}()
+
 	// In async container start stdout/err reader.
 	if options.Async > 1 {
-		lim := ratelimit.NewBucketWithQuantum(time.Minute, 5<<20, 1<<20)
-		lim.TakeMaxDuration(1, 0)
-
 		ch := fmt.Sprintf(containerLogFormat, userID, sourceHash)
 
-		go util.SubscribeRateLimited(cont.stdout,
-			lim,
-			func(message []byte) {
-				r.redisCli.Publish(ch, cont.ID+"\tO\t"+string(message))
-			},
-			func(err error) {
-				if cont.IsAcceptingConnections() {
-					logger.WithError(err).Warn("Stdout streaming error")
-					cont.StopAcceptingConnections()
-				}
-			})
+		go func() {
+			buf := make([]byte, 64*1024)
+			stream := cont.StdoutRateLimited()
 
-		go util.SubscribeRateLimited(cont.stderr,
-			lim,
-			func(message []byte) {
-				r.redisCli.Publish(ch, cont.ID+"\tE\t"+string(message))
-			},
-			func(err error) {
-				if cont.IsAcceptingConnections() {
-					logger.WithError(err).Warn("Stderr streaming error")
-					cont.StopAcceptingConnections()
+			for {
+				n, err := stream.Read(buf)
+				if err != nil {
+					if cont.IsAcceptingConnections() {
+						logger.WithError(err).Warn("Stdout streaming error")
+						cont.StopAcceptingConnections()
+					}
+
+					break
 				}
-			})
+
+				r.redisCli.Publish(ch, cont.ID+"\tO\t"+string(buf[:n]))
+			}
+		}()
+
+		go func() {
+			buf := make([]byte, 64*1024)
+			stream := cont.StderrRateLimited()
+
+			for {
+				n, err := stream.Read(buf)
+				if err != nil {
+					if cont.IsAcceptingConnections() {
+						logger.WithError(err).Warn("Stderr streaming error")
+						cont.StopAcceptingConnections()
+					}
+
+					break
+				}
+
+				r.redisCli.Publish(ch, cont.ID+"\tE\t"+string(buf[:n]))
+			}
+		}()
 	}
 
 	// Add container to cache.
@@ -866,7 +911,7 @@ func (r *DockerRunner) getContainer(ctx context.Context, runtime, requestID, sou
 func (r *DockerRunner) createFreshContainer(ctx context.Context, runtime string) (*Container, error) {
 	var err error
 
-	cont := NewContainer(runtime)
+	cont := NewContainer(runtime, r.redisCli)
 	logger := logrus.WithField("runtime", runtime)
 	start := time.Now()
 	rInfo := SupportedRuntimes[runtime]
@@ -935,7 +980,9 @@ func (r *DockerRunner) cleanupContainer(cont *Container) {
 	logger.Info("Stopping and cleaning up container")
 
 	// Stop the container.
-	cont.Stop()
+	if !cont.Stop() {
+		return
+	}
 
 	if cont.ID != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), dockerTimeout)
@@ -962,12 +1009,9 @@ func (r *DockerRunner) cleanupContainer(cont *Container) {
 func (r *DockerRunner) onEvictedContainerHandler(key string, val interface{}) {
 	cont := val.(*Container)
 
-	// Do not cleanup container already being marked for clean up (doing after run of last connection).
-	if !cont.IsAcceptingConnections() {
-		return
+	if cont.IsAcceptingConnections() {
+		cont.StopAcceptingConnections()
 	}
-
-	cont.StopAcceptingConnections()
 
 	if cont.ConnsNum() == 0 {
 		r.cleanupContainer(cont)
@@ -979,12 +1023,12 @@ func (r *DockerRunner) IsRunning() bool {
 	return (atomic.LoadUint32(&r.running) == 1)
 }
 
-func (r *DockerRunner) setRunning(running bool) {
+func (r *DockerRunner) setRunning(running bool) bool {
 	if running {
-		atomic.StoreUint32(&r.running, 1)
-	} else {
-		atomic.StoreUint32(&r.running, 0)
+		return atomic.SwapUint32(&r.running, 1) != 1
 	}
+
+	return atomic.SwapUint32(&r.running, 0) != 0
 }
 
 // OnContainerRemoved sets an (optional) function that when container is removed.
