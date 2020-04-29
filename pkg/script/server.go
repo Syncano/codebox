@@ -225,6 +225,8 @@ func (s *Server) ParseError(err error) error {
 		code = codes.ResourceExhausted
 	case filerepo.ErrResourceNotFound:
 		code = codes.FailedPrecondition
+	case ErrUnsupportedRuntime:
+		code = codes.Canceled
 	}
 
 	return status.Error(code, err.Error())

@@ -223,9 +223,7 @@ func (c *Container) SendSetup(setup *codewrapper.Setup) (io.ReadWriteCloser, err
 		conn.Close()
 	}
 
-	if err != nil {
-		atomic.CompareAndSwapUint32(&c.state, ContainerStateFresh, ContainerStateRunning)
-	}
+	atomic.CompareAndSwapUint32(&c.state, ContainerStateFresh, ContainerStateRunning)
 
 	return conn, err
 }
