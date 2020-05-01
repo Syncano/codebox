@@ -55,36 +55,47 @@ var (
 
 const redisPopCacheScript = `
 local zset = KEYS[1]
+local hset = KEYS[2]
+
 local card = redis.call('ZCARD', zset)
 local cl = tonumber(ARGV[1])
 local sl = tonumber(ARGV[2])
-local size = tonumber(redis.call('GET', zset .. ':size'))
 
-if size > sl then
+local size = tonumber(redis.call('HGET', hset, '__size__'))
+
+if size ~= nil and size > sl then
 	local ele, eleval, elesize
 
 	while size > sl do
 		ele = redis.call('ZPOPMIN', zset)
-		elesize = redis.call('STRLEN', ele[0])
-		redis.call('DEL', ele[0])
-		redis.call('DECRBY', zset .. ':size', elesize)
+		elesize = tonumber(redis.call('HSTRLEN', hset, ele[0]))
+		redis.call('HDEL', hset, ele[0])
+		redis.call('HDECRBY', hset, '__size__', elesize)
 	end
 elseif card > cl then
 	local ele = redis.call('ZPOPMIN', zset)
-	local elesize = redis.call('STRLEN', ele[0])
-	redis.call('DEL', ele[0])
-	redis.call('DECRBY', zset .. ':size', elesize)
+	local elesize = tonumber(redis.call('HSTRLEN', hset, ele[0]))
+	redis.call('HDEL', hset, ele[0])
+	redis.call('HDECRBY', hset, '__size__', elesize)
 end
 return 1
 `
 
 const redisDecrSizeScript = `
-local l = redis.call('STRLEN', KEYS[2]);
-if l > 0 then
-	return redis.call('DECRBY', KEYS[1], l)
+local hset = KEYS[1]
+local key = KEYS[2]
+
+local l = tonumber(redis.call('HSTRLEN', hset, key))
+if l ~= nil and l > 0 then
+	return redis.call('HINCRBY', hset, '__size__', -1 * l)
 end
-return 1
+
+return 13
 `
+
+const (
+	sizeKey = "__size__"
+)
 
 func NewUserCache(userID string, rw io.ReadWriter, redisCli RedisClient, constraints *UserCacheConstraints) *UserCache {
 	if constraints != nil {
@@ -170,8 +181,18 @@ func (c *UserCache) cacheZSet() string {
 	return fmt.Sprintf("%s:user_cache:zset", c.userID)
 }
 
+func (c *UserCache) cacheHSet() string {
+	return fmt.Sprintf("%s:user_cache:hset", c.userID)
+}
+
 func (c *UserCache) cacheKey(key []byte) string {
-	return fmt.Sprintf("%s:user_cache:val:%s", c.userID, string(key))
+	k := string(key)
+
+	if k == sizeKey {
+		return k + "_"
+	}
+
+	return k
 }
 
 func (c *UserCache) processGET(parts uint32) error {
@@ -184,9 +205,10 @@ func (c *UserCache) processGET(parts uint32) error {
 		return err
 	}
 
+	hset := c.cacheHSet()
 	storKey := c.cacheKey(key)
 
-	ret, err := c.redisCli.Get(storKey).Bytes()
+	ret, err := c.redisCli.HGet(hset, storKey).Bytes()
 	if err != nil {
 		if err == redis.Nil {
 			return c.send(nil)
@@ -198,10 +220,11 @@ func (c *UserCache) processGET(parts uint32) error {
 	_, err = c.redisCli.Pipelined(func(r redis.Pipeliner) error {
 		zset := c.cacheZSet()
 
-		r.ZAdd(zset, &redis.Z{
+		r.ZAddXX(zset, &redis.Z{
 			Score:  float64(time.Now().Unix()),
 			Member: storKey,
 		})
+		r.Expire(hset, c.constraints.DefaultTimeout)
 		r.Expire(zset, c.constraints.DefaultTimeout)
 
 		return nil
@@ -229,27 +252,28 @@ func (c *UserCache) processSET(parts uint32) error {
 	}
 
 	zset := c.cacheZSet()
+	hset := c.cacheHSet()
 	storKey := c.cacheKey(key)
 
 	_, err = c.redisCli.Pipelined(func(r redis.Pipeliner) error {
-		zsetSizeKey := zset + ":size"
-		r.EvalSha(redisDecrSizeSHA, []string{zsetSizeKey, storKey})
-		r.Set(storKey, val, c.constraints.DefaultTimeout)
+		r.EvalSha(redisDecrSizeSHA, []string{hset, storKey})
 
 		r.ZAdd(zset, &redis.Z{
 			Score:  float64(time.Now().Unix()),
 			Member: storKey,
 		})
+
+		r.HSet(hset, storKey, val)
+		r.HIncrBy(hset, sizeKey, int64(len(val)))
+		r.Expire(hset, c.constraints.DefaultTimeout)
 		r.Expire(zset, c.constraints.DefaultTimeout)
-		r.IncrBy(zsetSizeKey, int64(len(val)))
-		r.Expire(zsetSizeKey, c.constraints.DefaultTimeout)
 		return nil
 	})
 	if err != nil {
 		return fmt.Errorf("user cache set error: %w", err)
 	}
 
-	err = c.redisCli.EvalSha(redisPopCacheSHA, []string{zset},
+	err = c.redisCli.EvalSha(redisPopCacheSHA, []string{zset, hset},
 		c.constraints.CardinalityLimit, c.constraints.SizeLimit).Err()
 	if err != nil {
 		return fmt.Errorf("user cache eval error: %w", err)
