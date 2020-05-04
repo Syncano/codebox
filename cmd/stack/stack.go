@@ -56,11 +56,11 @@ func (hook *LogrusStackHook) Fire(entry *logrus.Entry) error {
 
 	var skipFrames int
 	if len(entry.Data) == 0 {
-		// When WithField(s) is not used, we have 7 logrus frames to skip.
-		skipFrames = 7
+		// When WithField(s) is not used, we have 8 logrus frames to skip.
+		skipFrames = 8
 	} else {
-		// When WithField(s) is used, we have 5 logrus frames to skip.
-		skipFrames = 5
+		// When WithField(s) is used, we have 6 logrus frames to skip.
+		skipFrames = 6
 	}
 
 	for _, level := range hook.CallerLevels {

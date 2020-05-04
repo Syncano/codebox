@@ -347,10 +347,12 @@ func TestRunnerIntegration(t *testing.T) {
 
 		Convey("use cache in scripts", func() {
 			var tests = []scriptTest{
-				{"nodejs_v8", `exports.default = async (ctx) => { await ctx.cache.set('test', 'val'); let a = await ctx.cache.get('test'); console.log(a.toString()); }`},
-				{"nodejs_v12", `exports.default = async (ctx) => { await ctx.cache.set('test', 'val'); let a = await ctx.cache.get('test'); console.log(a.toString()); }`},
+				{"nodejs_v8", `exports.default = async (ctx) => { let a = await ctx.cache.get('test1'); console.log(a === null); await ctx.cache.set('test1', 'val'); a = await ctx.cache.get('test1'); console.log(a.toString()); }`},
+				{"nodejs_v12", `exports.default = async (ctx) => { let a = await ctx.cache.get('test2'); console.log(a === null); await ctx.cache.set('test2', 'val'); a = await ctx.cache.get('test2'); console.log(a.toString()); }`},
 			}
 			for _, data := range tests {
+				redisCli.FlushDB()
+
 				hash := util.GenerateKey()
 				err := uploadFile(repo, hash, []byte(data.script), script.SupportedRuntimes[data.runtime].DefaultEntryPoint)
 				So(err, ShouldBeNil)
@@ -358,7 +360,7 @@ func TestRunnerIntegration(t *testing.T) {
 				So(err, ShouldBeNil)
 
 				So(res.Code, ShouldEqual, 0)
-				So(string(res.Stdout), ShouldEqual, "val\n")
+				So(string(res.Stdout), ShouldEqual, "true\nval\n")
 				So(res.Stderr, ShouldBeEmpty)
 				So(res.Response, ShouldBeNil)
 			}
