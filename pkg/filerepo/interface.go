@@ -5,6 +5,8 @@ import (
 	"os"
 
 	"github.com/spf13/afero"
+
+	pb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/filerepo/v1"
 )
 
 // Repo provides methods to store files and manipulate volumes.
@@ -51,3 +53,18 @@ type Commander interface {
 
 // Assert that Command is compatible with our interface.
 var _ Commander = (*Command)(nil)
+
+//go:generate go run github.com/vektra/mockery/cmd/mockery -name RepoClient
+type RepoClient interface {
+	pb.RepoClient
+}
+
+//go:generate go run github.com/vektra/mockery/cmd/mockery -name Repo_UploadServer
+type Repo_UploadServer interface { // nolint
+	pb.Repo_UploadServer
+}
+
+//go:generate go run github.com/vektra/mockery/cmd/mockery -name Repo_UploadClient
+type Repo_UploadClient interface { // nolint
+	pb.Repo_UploadClient
+}

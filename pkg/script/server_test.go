@@ -19,7 +19,7 @@ import (
 
 	. "github.com/Syncano/codebox/pkg/script"
 	"github.com/Syncano/codebox/pkg/script/mocks"
-	pb "github.com/Syncano/codebox/pkg/script/proto"
+	pb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/script/v1"
 )
 
 func TestServer(t *testing.T) {
@@ -37,8 +37,8 @@ func TestServer(t *testing.T) {
 			Convey("given proper meta and chunk data", func() {
 				r1 := pb.RunRequest{Value: &pb.RunRequest_Meta{
 					Meta: &pb.RunRequest_MetaMessage{
-						RequestID: "reqID",
-						Runtime:   "runtime", SourceHash: "hash", UserID: "userID",
+						RequestId: "reqID",
+						Runtime:   "runtime", SourceHash: "hash", UserId: "userID",
 						Environment: "env"},
 				}}
 				r2 := pb.RunRequest{Value: &pb.RunRequest_Chunk{
@@ -99,8 +99,8 @@ func TestServer(t *testing.T) {
 			Convey("given proper meta and args in chunk runs script", func() {
 				r1 := pb.RunRequest{Value: &pb.RunRequest_Meta{
 					Meta: &pb.RunRequest_MetaMessage{
-						RequestID: "reqID",
-						Runtime:   "runtime", SourceHash: "hash", UserID: "userID",
+						RequestId: "reqID",
+						Runtime:   "runtime", SourceHash: "hash", UserId: "userID",
 						Environment: "env"},
 				}}
 				r2 := pb.RunRequest{Value: &pb.RunRequest_Chunk{

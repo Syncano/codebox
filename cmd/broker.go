@@ -20,10 +20,10 @@ import (
 
 	"github.com/Syncano/codebox/cmd/amqp"
 	"github.com/Syncano/codebox/pkg/broker"
-	pb "github.com/Syncano/codebox/pkg/broker/proto"
 	"github.com/Syncano/codebox/pkg/celery"
 	"github.com/Syncano/codebox/pkg/sys"
 	"github.com/Syncano/codebox/pkg/version"
+	pb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/broker/v1"
 )
 
 var (
@@ -33,7 +33,7 @@ var (
 var brokerCmd = &cli.Command{
 	Name:  "broker",
 	Usage: "Starts broker to serve as a front for load balancers.",
-	Description: `Brokers pass workload in correct way to available load balancers.
+	Description: `Brokers pass workload to available load balancers.
 As there is no authentication, always run it in a private network.`,
 	Flags: []cli.Flag{
 		&cli.IntFlag{

@@ -11,9 +11,9 @@ import (
 	"github.com/stretchr/testify/mock"
 
 	repomocks "github.com/Syncano/codebox/pkg/filerepo/mocks"
-	repopb "github.com/Syncano/codebox/pkg/filerepo/proto"
 	scriptmocks "github.com/Syncano/codebox/pkg/script/mocks"
-	scriptpb "github.com/Syncano/codebox/pkg/script/proto"
+	repopb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/filerepo/v1"
+	scriptpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/script/v1"
 )
 
 type MockFs struct {

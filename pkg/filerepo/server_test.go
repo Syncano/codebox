@@ -17,7 +17,7 @@ import (
 
 	. "github.com/Syncano/codebox/pkg/filerepo"
 	"github.com/Syncano/codebox/pkg/filerepo/mocks"
-	pb "github.com/Syncano/codebox/pkg/filerepo/proto"
+	pb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/filerepo/v1"
 )
 
 func TestServer(t *testing.T) {

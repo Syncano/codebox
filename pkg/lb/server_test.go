@@ -21,11 +21,11 @@ import (
 	"google.golang.org/grpc/status"
 
 	repomocks "github.com/Syncano/codebox/pkg/filerepo/mocks"
-	repopb "github.com/Syncano/codebox/pkg/filerepo/proto"
 	"github.com/Syncano/codebox/pkg/lb/mocks"
-	pb "github.com/Syncano/codebox/pkg/lb/proto"
 	scriptmocks "github.com/Syncano/codebox/pkg/script/mocks"
-	scriptpb "github.com/Syncano/codebox/pkg/script/proto"
+	repopb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/filerepo/v1"
+	pb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/lb/v1"
+	scriptpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/script/v1"
 )
 
 func TestMain(m *testing.M) {
@@ -62,7 +62,7 @@ func TestServerMethods(t *testing.T) {
 				validReq1 := &pb.RunRequest{
 					Value: &pb.RunRequest_Meta{
 						Meta: &pb.RunRequest_MetaMessage{
-							RequestID: "reqID",
+							RequestId: "reqID",
 						},
 					},
 				}
@@ -71,7 +71,7 @@ func TestServerMethods(t *testing.T) {
 						Request: &scriptpb.RunRequest{
 							Value: &scriptpb.RunRequest_Meta{
 								Meta: &scriptpb.RunRequest_MetaMessage{
-									RequestID:  "reqID",
+									RequestId:  "reqID",
 									Runtime:    "runtime",
 									SourceHash: "hash",
 								},
@@ -126,7 +126,7 @@ func TestServerMethods(t *testing.T) {
 						stream.On("Recv").Return(&pb.RunRequest{
 							Value: &pb.RunRequest_Meta{
 								Meta: &pb.RunRequest_MetaMessage{
-									RequestID:        "reqID",
+									RequestId:        "reqID",
 									ConcurrencyKey:   "ckey",
 									ConcurrencyLimit: 1,
 								},
@@ -365,7 +365,7 @@ func TestServerMethods(t *testing.T) {
 		})
 
 		Convey("Register adds a new worker", func() {
-			_, e := s.Register(context.Background(), &pb.RegisterRequest{Id: "id1", Port: 123, MCPU: 2000, Memory: 1000})
+			_, e := s.Register(context.Background(), &pb.RegisterRequest{Id: "id1", Port: 123, Mcpu: 2000, Memory: 1000})
 			So(e, ShouldBeNil)
 
 			wi := s.workers.Get("id1").(*Worker)
@@ -385,7 +385,7 @@ func TestServerMethods(t *testing.T) {
 
 				Convey("ContainerRemoved removes container from cache if refcount gets to 0", func() {
 					_, e := s.ContainerRemoved(context.Background(),
-						&pb.ContainerRemovedRequest{Id: "id1", SourceHash: ci.SourceHash, UserID: ci.UserID})
+						&pb.ContainerRemovedRequest{Id: "id1", SourceHash: ci.SourceHash, UserId: ci.UserID})
 					So(e, ShouldBeNil)
 					So(wi.scripts, ShouldBeEmpty)
 					So(s.workerContainerCache, ShouldBeEmpty)
@@ -396,7 +396,7 @@ func TestServerMethods(t *testing.T) {
 					So(len(wi.scripts), ShouldEqual, 1)
 
 					_, e := s.ContainerRemoved(context.Background(),
-						&pb.ContainerRemovedRequest{Id: "id1", SourceHash: ci.SourceHash, UserID: ci.UserID})
+						&pb.ContainerRemovedRequest{Id: "id1", SourceHash: ci.SourceHash, UserId: ci.UserID})
 					So(e, ShouldBeNil)
 
 					So(len(wi.scripts), ShouldEqual, 1)

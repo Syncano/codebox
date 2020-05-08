@@ -19,10 +19,10 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/Syncano/codebox/pkg/docker"
-	repopb "github.com/Syncano/codebox/pkg/filerepo/proto"
-	lbpb "github.com/Syncano/codebox/pkg/lb/proto"
 	"github.com/Syncano/codebox/pkg/script"
-	scriptpb "github.com/Syncano/codebox/pkg/script/proto"
+	repopb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/filerepo/v1"
+	lbpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/lb/v1"
+	scriptpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/script/v1"
 )
 
 func readURL(url string) ([]byte, error) {
@@ -118,7 +118,7 @@ setTimeout(function() {
 				Runtime:    "nodejs_v8",
 				SourceHash: "hash",
 				Options: &scriptpb.RunRequest_MetaMessage_OptionsMessage{
-					EntryPoint: "file.js",
+					Entrypoint: "file.js",
 					Args:       []byte(`{"argKey":"argVal"}`),
 					Meta:       []byte(`{"metaKey":"metaVal"}`),
 					Config:     []byte(`{"configKey":"configVal"}`),

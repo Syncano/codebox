@@ -14,10 +14,10 @@ import (
 	"go.opencensus.io/plugin/ocgrpc"
 	"google.golang.org/grpc"
 
-	repopb "github.com/Syncano/codebox/pkg/filerepo/proto"
-	scriptpb "github.com/Syncano/codebox/pkg/script/proto"
 	"github.com/Syncano/codebox/pkg/sys"
 	"github.com/Syncano/codebox/pkg/util"
+	repopb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/filerepo/v1"
+	scriptpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/script/v1"
 )
 
 // Worker holds basic info about the worker.

@@ -16,12 +16,12 @@ import (
 
 	"github.com/Syncano/codebox/cmd/autoscaler"
 	"github.com/Syncano/codebox/pkg/filerepo"
-	repopb "github.com/Syncano/codebox/pkg/filerepo/proto"
 	"github.com/Syncano/codebox/pkg/lb"
-	lbpb "github.com/Syncano/codebox/pkg/lb/proto"
 	"github.com/Syncano/codebox/pkg/limiter"
 	"github.com/Syncano/codebox/pkg/sys"
 	"github.com/Syncano/codebox/pkg/version"
+	repopb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/filerepo/v1"
+	lbpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/lb/v1"
 )
 
 var (
