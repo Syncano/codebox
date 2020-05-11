@@ -24,17 +24,17 @@ import (
 	"google.golang.org/grpc/grpclog"
 
 	"github.com/Syncano/codebox/pkg/broker/mocks"
-	brokerpb "github.com/Syncano/codebox/pkg/broker/proto"
 	"github.com/Syncano/codebox/pkg/celery"
 	celerymocks "github.com/Syncano/codebox/pkg/celery/mocks"
 	repomocks "github.com/Syncano/codebox/pkg/filerepo/mocks"
-	repopb "github.com/Syncano/codebox/pkg/filerepo/proto"
 	lbmocks "github.com/Syncano/codebox/pkg/lb/mocks"
-	lbpb "github.com/Syncano/codebox/pkg/lb/proto"
 	"github.com/Syncano/codebox/pkg/script"
-	scriptpb "github.com/Syncano/codebox/pkg/script/proto"
 	"github.com/Syncano/codebox/pkg/util"
 	utilmocks "github.com/Syncano/codebox/pkg/util/mocks"
+	brokerpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/broker/v1"
+	repopb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/filerepo/v1"
+	lbpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/lb/v1"
+	scriptpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/script/v1"
 )
 
 var (
@@ -92,9 +92,9 @@ func TestServerMethods(t *testing.T) {
 			runReq := brokerpb.RunRequest{
 				LbMeta: &lbpb.RunRequest_MetaMessage{},
 				Meta: &brokerpb.RunRequest_MetaMessage{
-					EnvironmentURL: envURL,
+					EnvironmentUrl: envURL,
 					Trace:          []byte("\"trace\""),
-					TraceID:        123,
+					TraceId:        123,
 				},
 				Request: []*scriptpb.RunRequest{
 					{

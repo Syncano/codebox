@@ -15,14 +15,14 @@ import (
 
 	"github.com/Syncano/codebox/pkg/cache"
 	"github.com/Syncano/codebox/pkg/filerepo"
-	pb "github.com/Syncano/codebox/pkg/lb/proto"
 	"github.com/Syncano/codebox/pkg/limiter"
-	scriptpb "github.com/Syncano/codebox/pkg/script/proto"
 	"github.com/Syncano/codebox/pkg/util"
+	pb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/lb/v1"
+	scriptpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/script/v1"
 )
 
 // Server defines a Load Balancer server implementing both worker plug and script runner interface.
-//go:generate go run github.com/vektra/mockery/cmd/mockery -dir proto -all
+//go:generate go run github.com/vektra/mockery/cmd/mockery -dir ../../proto/gen/go/syncano/codebox/lb -all
 type Server struct {
 	mu                   sync.Mutex
 	workers              *cache.LRUCache // workerID->Worker
@@ -177,11 +177,11 @@ func (s *Server) Run(stream pb.ScriptRunner_RunServer) error {
 		runMeta = &pb.RunRequest_MetaMessage{}
 	}
 
-	if runMeta.RequestID == "" {
-		runMeta.RequestID = util.GenerateShortKey()
+	if runMeta.RequestId == "" {
+		runMeta.RequestId = util.GenerateShortKey()
 	}
 
-	scriptMeta.RequestID = runMeta.RequestID
+	scriptMeta.RequestId = runMeta.RequestId
 
 	return s.processRun(stream, runMeta, scriptMeta, scriptChunk)
 }
@@ -191,15 +191,15 @@ func (s *Server) processRun(stream pb.ScriptRunner_RunServer, runMeta *pb.RunReq
 	ctx := stream.Context()
 	peerAddr := util.PeerAddr(ctx)
 	logger := logrus.WithFields(logrus.Fields{
-		"reqID":      runMeta.RequestID,
+		"reqID":      runMeta.RequestId,
 		"peer":       peerAddr,
 		"meta":       runMeta,
 		"runtime":    scriptMeta.Runtime,
 		"sourceHash": scriptMeta.SourceHash,
-		"entryPoint": scriptMeta.GetOptions().GetEntryPoint(),
+		"entryPoint": scriptMeta.GetOptions().GetEntrypoint(),
 		"async":      scriptMeta.GetOptions().GetAsync(),
-		"mcpu":       scriptMeta.GetOptions().GetMCPU(),
-		"userID":     scriptMeta.UserID,
+		"mcpu":       scriptMeta.GetOptions().GetMcpu(),
+		"userID":     scriptMeta.UserId,
 	})
 	start := time.Now()
 
@@ -271,7 +271,7 @@ func (s *Server) processRun(stream pb.ScriptRunner_RunServer, runMeta *pb.RunReq
 		if response != nil && response.Cached {
 			// Add container to worker cache if we got any response.
 			s.mu.Lock()
-			cont.Worker.AddCache(s.workerContainerCache, script, response.ContainerID, cont)
+			cont.Worker.AddCache(s.workerContainerCache, script, response.ContainerId, cont)
 			s.mu.Unlock()
 		}
 
@@ -291,9 +291,9 @@ func (s *Server) createScriptInfo(meta *scriptpb.RunRequest_MetaMessage) ScriptI
 	script := ScriptInfo{
 		SourceHash:  meta.SourceHash,
 		Environment: meta.Environment,
-		UserID:      meta.UserID,
+		UserID:      meta.UserId,
 		Async:       meta.GetOptions().GetAsync(),
-		MCPU:        meta.GetOptions().GetMCPU(),
+		MCPU:        meta.GetOptions().GetMcpu(),
 	}
 
 	return script
@@ -405,7 +405,7 @@ func (s *Server) handleWorkerError(cont *WorkerContainer, err error) {
 // ContainerRemoved handles notifications sent by client whenever a container gets removed from cache.
 func (s *Server) ContainerRemoved(ctx context.Context, in *pb.ContainerRemovedRequest) (*pb.ContainerRemovedResponse, error) {
 	peerAddr := util.PeerAddr(ctx)
-	ci := ScriptInfo{SourceHash: in.SourceHash, Environment: in.Environment, UserID: in.UserID}
+	ci := ScriptInfo{SourceHash: in.SourceHash, Environment: in.Environment, UserID: in.UserId}
 
 	logrus.WithFields(logrus.Fields{"id": in.GetId(), "container": &ci, "peer": peerAddr}).Debug("grpc:lb:ContainerRemoved")
 
@@ -415,7 +415,7 @@ func (s *Server) ContainerRemoved(ctx context.Context, in *pb.ContainerRemovedRe
 	}
 
 	s.mu.Lock()
-	cur.(*Worker).RemoveCache(s.workerContainerCache, ci, in.ContainerID)
+	cur.(*Worker).RemoveCache(s.workerContainerCache, ci, in.ContainerId)
 	s.mu.Unlock()
 
 	return &pb.ContainerRemovedResponse{}, nil
@@ -429,9 +429,9 @@ func (s *Server) Register(ctx context.Context, in *pb.RegisterRequest) (*pb.Regi
 	peerAddr := util.PeerAddr(ctx)
 	addr := net.TCPAddr{IP: peerAddr.(*net.TCPAddr).IP, Port: int(in.Port)}
 
-	w := NewWorker(in.Id, addr, in.MCPU, in.DefaultMCPU, in.Memory, s.metrics)
+	w := NewWorker(in.Id, addr, in.Mcpu, in.DefaultMcpu, in.Memory, s.metrics)
 
-	logrus.WithFields(logrus.Fields{"worker": w, "mcpu": in.MCPU, "defaultMCPU": in.DefaultMCPU, "memory": in.Memory}).Info("grpc:lb:Register")
+	logrus.WithFields(logrus.Fields{"worker": w, "mcpu": in.Mcpu, "defaultMCPU": in.DefaultMcpu, "memory": in.Memory}).Info("grpc:lb:Register")
 	s.workers.Set(in.Id, w)
 
 	return &pb.RegisterResponse{}, nil

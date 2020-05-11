@@ -9,12 +9,11 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	pb "github.com/Syncano/codebox/pkg/filerepo/proto"
 	"github.com/Syncano/codebox/pkg/util"
+	pb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/filerepo/v1"
 )
 
 // Server defines a File Repo server.
-//go:generate go run github.com/vektra/mockery/cmd/mockery -dir proto -all
 type Server struct {
 	Repo Repo
 }

@@ -17,16 +17,16 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	brokerpb "github.com/Syncano/codebox/pkg/broker/proto"
-	repopb "github.com/Syncano/codebox/pkg/filerepo/proto"
-	lbpb "github.com/Syncano/codebox/pkg/lb/proto"
-	scriptpb "github.com/Syncano/codebox/pkg/script/proto"
 	"github.com/Syncano/codebox/pkg/sys"
 	"github.com/Syncano/codebox/pkg/util"
+	brokerpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/broker/v1"
+	repopb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/filerepo/v1"
+	lbpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/lb/v1"
+	scriptpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/script/v1"
 )
 
 // Server defines a Broker server.
-//go:generate go run github.com/vektra/mockery/cmd/mockery -dir proto -all
+//go:generate go run github.com/vektra/mockery/cmd/mockery -dir ../../proto/gen/go/syncano/codebox/broker -all
 type Server struct {
 	redisCli  RedisClient
 	lbServers []*loadBalancer
@@ -161,20 +161,20 @@ func (s *Server) Run(request *brokerpb.RunRequest, stream brokerpb.ScriptRunner_
 		request.LbMeta = &lbpb.RunRequest_MetaMessage{}
 	}
 
-	if request.LbMeta.RequestID == "" {
-		request.LbMeta.RequestID = util.GenerateShortKey()
+	if request.LbMeta.RequestId == "" {
+		request.LbMeta.RequestId = util.GenerateShortKey()
 	}
 
 	logger = logger.WithFields(logrus.Fields{
-		"reqID":      request.LbMeta.RequestID,
+		"reqID":      request.LbMeta.RequestId,
 		"cKey":       request.LbMeta.ConcurrencyKey,
 		"cLimit":     request.LbMeta.ConcurrencyLimit,
 		"runtime":    scriptMeta.Runtime,
 		"sourceHash": scriptMeta.SourceHash,
-		"entryPoint": scriptMeta.GetOptions().GetEntryPoint(),
+		"entryPoint": scriptMeta.GetOptions().GetEntrypoint(),
 		"async":      scriptMeta.GetOptions().GetAsync(),
-		"mcpu":       scriptMeta.GetOptions().GetMCPU(),
-		"userID":     scriptMeta.UserID,
+		"mcpu":       scriptMeta.GetOptions().GetMcpu(),
+		"userID":     scriptMeta.UserId,
 	})
 
 	runStream, err := s.processRun(ctx, logger, request)
@@ -236,7 +236,7 @@ func (s *Server) processRun(ctx context.Context, logger logrus.FieldLogger, requ
 		}
 
 		// Upload environment file if needed.
-		envURL := meta.GetEnvironmentURL()
+		envURL := meta.GetEnvironmentUrl()
 		if envURL != "" {
 			if err := s.uploadFiles(ctx, lb, scriptMeta.Environment, map[string]string{envURL: environmentFileName}); err != nil {
 				return fmt.Errorf("environment upload error: %w", err)
@@ -276,7 +276,7 @@ func (s *Server) processRun(ctx context.Context, logger logrus.FieldLogger, requ
 		return nil, err
 	}
 
-	if err := s.updateTrace(meta.GetTraceID(), meta.GetTrace()); err != nil {
+	if err := s.updateTrace(meta.GetTraceId(), meta.GetTrace()); err != nil {
 		logger.WithError(err).Warn("UpdateTrace failed")
 	}
 
@@ -455,7 +455,7 @@ func (s *Server) processResponse(ctx context.Context, logger logrus.FieldLogger,
 		}
 	}
 
-	updatedTrace := NewScriptTrace(meta.GetTraceID(), result)
+	updatedTrace := NewScriptTrace(meta.GetTraceId(), result)
 	if e := s.saveTrace(meta.GetTrace(), updatedTrace); e != nil {
 		logger.WithError(e).Error("SaveTrace failed")
 	}

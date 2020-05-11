@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/Syncano/codebox/pkg/celery"
-	scriptpb "github.com/Syncano/codebox/pkg/script/proto"
 	"github.com/Syncano/codebox/pkg/util"
+	scriptpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/script/v1"
 )
 
 var (

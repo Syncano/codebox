@@ -12,8 +12,8 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/Syncano/codebox/pkg/filerepo"
-	pb "github.com/Syncano/codebox/pkg/script/proto"
 	"github.com/Syncano/codebox/pkg/util"
+	pb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/script/v1"
 )
 
 const (
@@ -38,7 +38,7 @@ var (
 )
 
 // Server describes a Script Runner server.
-//go:generate go run github.com/vektra/mockery/cmd/mockery -dir proto -all
+//go:generate go run github.com/vektra/mockery/cmd/mockery -dir ../../proto/gen/go/syncano/codebox/script -all
 type Server struct {
 	Runner Runner
 }
@@ -88,17 +88,17 @@ func (s *Server) Run(stream pb.ScriptRunner_RunServer) error {
 		return nil
 	}
 
-	if meta.RequestID == "" {
-		meta.RequestID = util.GenerateShortKey()
+	if meta.RequestId == "" {
+		meta.RequestId = util.GenerateShortKey()
 	}
 
 	peerAddr := util.PeerAddr(stream.Context())
 	logger := logrus.WithFields(logrus.Fields{
 		"peer":       peerAddr,
-		"reqID":      meta.RequestID,
+		"reqID":      meta.RequestId,
 		"runtime":    meta.Runtime,
 		"sourceHash": meta.SourceHash,
-		"userID":     meta.UserID,
+		"userID":     meta.UserId,
 	})
 
 	logger.Debug("grpc:script:Run start")
@@ -119,12 +119,12 @@ func (s *Server) Run(stream pb.ScriptRunner_RunServer) error {
 		args = opts.GetArgs()
 	}
 
-	ret, err := s.Runner.Run(stream.Context(), logger, meta.Runtime, meta.RequestID, meta.SourceHash, meta.Environment, meta.UserID,
+	ret, err := s.Runner.Run(stream.Context(), logger, meta.Runtime, meta.RequestId, meta.SourceHash, meta.Environment, meta.UserId,
 		&RunOptions{
-			EntryPoint:  opts.GetEntryPoint(),
+			EntryPoint:  opts.GetEntrypoint(),
 			OutputLimit: opts.GetOutputLimit(),
 			Timeout:     time.Duration(opts.GetTimeout()) * time.Millisecond,
-			MCPU:        opts.GetMCPU(),
+			MCPU:        opts.GetMcpu(),
 			Async:       opts.GetAsync(),
 
 			Args:   args,
@@ -182,7 +182,7 @@ func (s *Server) sendResponse(stream pb.ScriptRunner_RunServer, ret *Result) err
 
 	responses := []*pb.RunResponse{
 		{
-			ContainerID: ret.ContainerID,
+			ContainerId: ret.ContainerID,
 			Code:        int32(ret.Code),
 			Stdout:      ret.Stdout,
 			Stderr:      ret.Stderr,

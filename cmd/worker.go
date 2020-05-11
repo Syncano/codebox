@@ -20,13 +20,13 @@ import (
 
 	"github.com/Syncano/codebox/pkg/docker"
 	"github.com/Syncano/codebox/pkg/filerepo"
-	repopb "github.com/Syncano/codebox/pkg/filerepo/proto"
-	lbpb "github.com/Syncano/codebox/pkg/lb/proto"
 	"github.com/Syncano/codebox/pkg/script"
-	scriptpb "github.com/Syncano/codebox/pkg/script/proto"
 	"github.com/Syncano/codebox/pkg/sys"
 	"github.com/Syncano/codebox/pkg/util"
 	"github.com/Syncano/codebox/pkg/version"
+	repopb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/filerepo/v1"
+	lbpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/lb/v1"
+	scriptpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/script/v1"
 )
 
 const (
@@ -383,10 +383,10 @@ func startServer(
 		if _, e := plugClient.ContainerRemoved(ctx,
 			&lbpb.ContainerRemovedRequest{
 				Id:          poolID,
-				ContainerID: cont.ID,
+				ContainerId: cont.ID,
 				SourceHash:  cont.SourceHash,
 				Environment: cont.Environment,
-				UserID:      cont.UserID,
+				UserId:      cont.UserID,
 			}); err != nil {
 			errCh <- e
 		}
@@ -401,9 +401,9 @@ func startServer(
 		&lbpb.RegisterRequest{
 			Id:          poolID,
 			Port:        uint32(lis.Addr().(*net.TCPAddr).Port),
-			MCPU:        uint32(scriptOptions.MCPU - dockerOptions.ReservedMCPU),
+			Mcpu:        uint32(scriptOptions.MCPU - dockerOptions.ReservedMCPU),
 			Memory:      syschecker.AvailableMemory(),
-			DefaultMCPU: uint32(scriptOptions.Constraints.CPULimit / 1e6),
+			DefaultMcpu: uint32(scriptOptions.Constraints.CPULimit / 1e6),
 		}); err != nil {
 		return false, err
 	}

@@ -18,7 +18,7 @@ LDFLAGS = -s -w \
 	-X github.com/Syncano/codebox/pkg/version.buildtimeStr=$(BUILDTIME)
 
 
-.PHONY: help deps download-images clean lint fmt test stest itest atest cov goconvey lint-in-docker test-in-docker generate-assets generate proto build build-wrapper build-in-docker docker deploy-staging deploy-production encrypt decrypt start
+.PHONY: help deps download-images clean lint fmt test stest itest atest cov goconvey lint-in-docker test-in-docker generate-assets generate build build-wrapper build-in-docker docker deploy-staging deploy-production encrypt decrypt start
 .DEFAULT_GOAL := help
 $(VERBOSE).SILENT:
 
@@ -92,20 +92,6 @@ generate-assets: ## Generate assets with go-bindata
 
 generate: generate-assets ## Run go generate
 	go generate ./...
-
-proto: require-protoc ## Run protobuf compiler on all .proto files
-	for dir in $$(find . -name \*.proto -type f ! -path "./.*" -exec dirname {} \; | sort | uniq); do \
-		protoc -I. \
-			--go_out=paths=source_relative,plugins=grpc:. \
-			$$dir/*.proto; \
-	done
-
-proto-python: ## Run protobuf compiler on all .proto files and generate python files
-	pip3 install grpcio-tools
-	mkdir -p python
-	for dir in $$(find . -name \*.proto -type f ! -path "./.*" -exec dirname {} \; | sort | uniq); do \
-		python3 -m grpc_tools.protoc -I. --python_out=python --grpc_python_out=python $$dir/*.proto; \
-	done
 
 build: ## Build
 	go build -ldflags "$(LDFLAGS)" -o ./build/$(EXECNAME)

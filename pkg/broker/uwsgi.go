@@ -15,11 +15,11 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/vmihailenco/msgpack/v4"
 
-	brokerpb "github.com/Syncano/codebox/pkg/broker/proto"
-	lbpb "github.com/Syncano/codebox/pkg/lb/proto"
 	"github.com/Syncano/codebox/pkg/script"
-	scriptpb "github.com/Syncano/codebox/pkg/script/proto"
 	"github.com/Syncano/codebox/pkg/util"
+	brokerpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/broker/v1"
+	lbpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/lb/v1"
+	scriptpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/script/v1"
 )
 
 var (
@@ -47,7 +47,7 @@ type uwsgiPayload struct {
 	OutputLimit    uint32            `json:"output_limit"`
 	Files          map[string]string `json:"files"`
 	SourceHash     string            `json:"source_hash"`
-	EntryPoint     string            `json:"entrypoint"`
+	Entrypoint     string            `json:"entrypoint"`
 	Environment    string            `json:"environment"`
 	EnvironmentURL string            `json:"environment_url"`
 	Trace          json.RawMessage   `json:"trace"`
@@ -192,7 +192,7 @@ func (s *Server) RunHandler(w http.ResponseWriter, r *http.Request) {
 		"lbMeta":        request.GetLbMeta(),
 		"runtime":       scriptMeta.Runtime,
 		"sourceHash":    scriptMeta.SourceHash,
-		"userID":        scriptMeta.UserID,
+		"userID":        scriptMeta.UserId,
 		"payloadParsed": requestParsed,
 		"took":          took,
 		"overhead":      time.Since(start) - took,
@@ -221,12 +221,12 @@ func (s *Server) prepareRequest(r *http.Request, payload *uwsgiPayload) (*broker
 	return &brokerpb.RunRequest{
 		Meta: &brokerpb.RunRequest_MetaMessage{
 			Files:          payload.Files,
-			EnvironmentURL: payload.EnvironmentURL,
+			EnvironmentUrl: payload.EnvironmentURL,
 			Trace:          payload.Trace,
-			TraceID:        tracePK,
+			TraceId:        tracePK,
 		},
 		LbMeta: &lbpb.RunRequest_MetaMessage{
-			RequestID:        util.GenerateShortKey(),
+			RequestId:        util.GenerateShortKey(),
 			ConcurrencyKey:   instancePK,
 			ConcurrencyLimit: payload.Run.ConcurrencyLimit,
 		},
@@ -237,13 +237,13 @@ func (s *Server) prepareRequest(r *http.Request, payload *uwsgiPayload) (*broker
 						Environment: payload.Environment,
 						Runtime:     payload.Run.Runtime,
 						SourceHash:  payload.SourceHash,
-						UserID:      instancePK,
+						UserId:      instancePK,
 						Options: &scriptpb.RunRequest_MetaMessage_OptionsMessage{
-							EntryPoint:  payload.EntryPoint,
+							Entrypoint:  payload.Entrypoint,
 							OutputLimit: payload.OutputLimit,
 							Timeout:     int64(payload.Run.Timeout * 1000),
 							Async:       payload.Run.Async,
-							MCPU:        payload.Run.MCPU,
+							Mcpu:        payload.Run.MCPU,
 							Args:        []byte(payload.Run.Args),
 							Config:      []byte(payload.Run.Config),
 							Meta:        []byte(payload.Run.Meta),
