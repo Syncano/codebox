@@ -14,12 +14,11 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/vmihailenco/msgpack/v4"
 
+	"github.com/Syncano/codebox/pkg/common"
+	"github.com/Syncano/codebox/pkg/util"
 	brokerpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/broker/v1"
 	lbpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/lb/v1"
 	scriptpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/script/v1"
-
-	"github.com/Syncano/codebox/pkg/common"
-	"github.com/Syncano/codebox/pkg/util"
 )
 
 var (
@@ -208,8 +207,6 @@ func (s *Server) RunHandler(w http.ResponseWriter, r *http.Request) {
 
 	writeTraceResponse(w, trace)
 }
-
-var reqid uint64
 
 func getRequestID(r *http.Request) string {
 	reqID := r.Header.Get(headerRequestID)

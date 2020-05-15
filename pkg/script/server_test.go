@@ -9,18 +9,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Syncano/codebox/pkg/filerepo"
-
 	"github.com/sirupsen/logrus"
 	. "github.com/smartystreets/goconvey/convey"
 	"github.com/stretchr/testify/mock"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	pb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/script/v1"
-
+	"github.com/Syncano/codebox/pkg/filerepo"
 	. "github.com/Syncano/codebox/pkg/script"
 	"github.com/Syncano/codebox/pkg/script/mocks"
+	pb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/script/v1"
 )
 
 func TestServer(t *testing.T) {

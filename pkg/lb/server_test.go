@@ -20,13 +20,12 @@ import (
 	"google.golang.org/grpc/grpclog"
 	"google.golang.org/grpc/status"
 
-	repopb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/filerepo/v1"
-	pb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/lb/v1"
-	scriptpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/script/v1"
-
 	repomocks "github.com/Syncano/codebox/pkg/filerepo/mocks"
 	"github.com/Syncano/codebox/pkg/lb/mocks"
 	scriptmocks "github.com/Syncano/codebox/pkg/script/mocks"
+	repopb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/filerepo/v1"
+	pb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/lb/v1"
+	scriptpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/script/v1"
 )
 
 func TestMain(m *testing.M) {

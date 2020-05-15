@@ -10,12 +10,11 @@ import (
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/mock"
 
-	repopb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/filerepo/v1"
-	scriptpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/script/v1"
-
 	"github.com/Syncano/codebox/pkg/common"
 	repomocks "github.com/Syncano/codebox/pkg/filerepo/mocks"
 	scriptmocks "github.com/Syncano/codebox/pkg/script/mocks"
+	repopb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/filerepo/v1"
+	scriptpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/script/v1"
 )
 
 type MockFs struct {

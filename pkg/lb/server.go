@@ -13,14 +13,13 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	pb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/lb/v1"
-	scriptpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/script/v1"
-
 	"github.com/Syncano/codebox/pkg/cache"
 	"github.com/Syncano/codebox/pkg/common"
 	"github.com/Syncano/codebox/pkg/filerepo"
 	"github.com/Syncano/codebox/pkg/limiter"
 	"github.com/Syncano/codebox/pkg/util"
+	pb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/lb/v1"
+	scriptpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/script/v1"
 )
 
 // Server defines a Load Balancer server implementing both worker plug and script runner interface.

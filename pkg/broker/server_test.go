@@ -23,11 +23,6 @@ import (
 	"github.com/vmihailenco/msgpack/v4"
 	"google.golang.org/grpc/grpclog"
 
-	brokerpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/broker/v1"
-	repopb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/filerepo/v1"
-	lbpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/lb/v1"
-	scriptpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/script/v1"
-
 	"github.com/Syncano/codebox/pkg/broker/mocks"
 	"github.com/Syncano/codebox/pkg/celery"
 	celerymocks "github.com/Syncano/codebox/pkg/celery/mocks"
@@ -35,6 +30,10 @@ import (
 	lbmocks "github.com/Syncano/codebox/pkg/lb/mocks"
 	"github.com/Syncano/codebox/pkg/util"
 	utilmocks "github.com/Syncano/codebox/pkg/util/mocks"
+	brokerpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/broker/v1"
+	repopb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/filerepo/v1"
+	lbpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/lb/v1"
+	scriptpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/script/v1"
 )
 
 var (

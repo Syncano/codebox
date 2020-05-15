@@ -18,12 +18,11 @@ import (
 	. "github.com/smartystreets/goconvey/convey"
 	"google.golang.org/grpc"
 
+	"github.com/Syncano/codebox/pkg/docker"
+	"github.com/Syncano/codebox/pkg/script"
 	repopb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/filerepo/v1"
 	lbpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/lb/v1"
 	scriptpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/script/v1"
-
-	"github.com/Syncano/codebox/pkg/docker"
-	"github.com/Syncano/codebox/pkg/script"
 )
 
 func readURL(url string) ([]byte, error) {

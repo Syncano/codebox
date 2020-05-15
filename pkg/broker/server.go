@@ -18,14 +18,13 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
+	"github.com/Syncano/codebox/pkg/common"
+	"github.com/Syncano/codebox/pkg/sys"
+	"github.com/Syncano/codebox/pkg/util"
 	brokerpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/broker/v1"
 	repopb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/filerepo/v1"
 	lbpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/lb/v1"
 	scriptpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/script/v1"
-
-	"github.com/Syncano/codebox/pkg/common"
-	"github.com/Syncano/codebox/pkg/sys"
-	"github.com/Syncano/codebox/pkg/util"
 )
 
 // Server defines a Broker server.
@@ -222,6 +221,7 @@ func (s *Server) processRun(ctx context.Context, logger logrus.FieldLogger,
 	if md, ok := metadata.FromOutgoingContext(ctx); ok {
 		newCtx = metadata.NewOutgoingContext(newCtx, md)
 	}
+
 	ctx = newCtx
 
 	logger = logger.WithFields(logrus.Fields{

@@ -4,9 +4,8 @@ import (
 	"io"
 	"os"
 
-	"github.com/spf13/afero"
-
 	pb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/filerepo/v1"
+	"github.com/spf13/afero"
 )
 
 // Repo provides methods to store files and manipulate volumes.

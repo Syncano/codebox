@@ -15,10 +15,9 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	pb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/filerepo/v1"
-
 	. "github.com/Syncano/codebox/pkg/filerepo"
 	"github.com/Syncano/codebox/pkg/filerepo/mocks"
+	pb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/filerepo/v1"
 )
 
 func TestServer(t *testing.T) {
