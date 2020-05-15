@@ -15,9 +15,10 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	pb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/filerepo/v1"
+
 	. "github.com/Syncano/codebox/pkg/filerepo"
 	"github.com/Syncano/codebox/pkg/filerepo/mocks"
-	pb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/filerepo/v1"
 )
 
 func TestServer(t *testing.T) {
@@ -51,10 +52,10 @@ func TestServer(t *testing.T) {
 
 			Convey("given proper meta and chunk data", func() {
 				r1 := pb.UploadRequest{Value: &pb.UploadRequest_Meta{
-					Meta: &pb.UploadRequest_MetaMessage{Key: "someKey"},
+					Meta: &pb.UploadMetaMessage{Key: "someKey"},
 				}}
 				r2 := pb.UploadRequest{Value: &pb.UploadRequest_Chunk{
-					Chunk: &pb.UploadRequest_ChunkMessage{
+					Chunk: &pb.UploadChunkMessage{
 						Name: "someName",
 						Data: []byte("someData"),
 					},
@@ -96,7 +97,7 @@ func TestServer(t *testing.T) {
 				Convey("propagates multi-file store error", func() {
 					stream.On("Send", mock.Anything).Return(nil).Once()
 					r3 := pb.UploadRequest{Value: &pb.UploadRequest_Chunk{
-						Chunk: &pb.UploadRequest_ChunkMessage{
+						Chunk: &pb.UploadChunkMessage{
 							Name: "someName2",
 							Data: []byte("someData"),
 						},
@@ -144,7 +145,7 @@ func TestServer(t *testing.T) {
 			})
 			Convey("sends error response on missing Meta (chunk)", func() {
 				r := pb.UploadRequest{Value: &pb.UploadRequest_Chunk{
-					Chunk: &pb.UploadRequest_ChunkMessage{
+					Chunk: &pb.UploadChunkMessage{
 						Name: "someName",
 						Data: []byte("someData"),
 					},

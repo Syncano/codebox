@@ -11,15 +11,15 @@ import (
 	"strings"
 	"time"
 
-	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/sirupsen/logrus"
 	"github.com/vmihailenco/msgpack/v4"
 
-	"github.com/Syncano/codebox/pkg/script"
-	"github.com/Syncano/codebox/pkg/util"
 	brokerpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/broker/v1"
 	lbpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/lb/v1"
 	scriptpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/script/v1"
+
+	"github.com/Syncano/codebox/pkg/common"
+	"github.com/Syncano/codebox/pkg/util"
 )
 
 var (
@@ -41,6 +41,7 @@ const (
 	headerPayloadParsed = "PAYLOAD_PARSED"
 	getSkipCache        = "__skip_cache"
 	jsonContentType     = "application/json; charset=utf-8"
+	headerRequestID     = "HTTP_X_REQUEST_ID"
 )
 
 type uwsgiPayload struct {
@@ -114,28 +115,22 @@ func writeTraceResponse(w http.ResponseWriter, trace *ScriptTrace) {
 
 // RunHandler processes uwsgi request and passes it to load balancer.
 func (s *Server) RunHandler(w http.ResponseWriter, r *http.Request) {
-	// Process zipkin span.
 	ctx, cancel := context.WithTimeout(context.Background(), s.options.MaxTimeout)
 	defer cancel()
 
-	spanCtx, err := opentracing.GlobalTracer().Extract(opentracing.HTTPHeaders, opentracing.HTTPHeadersCarrier(r.Header))
-	if err == nil {
-		span := opentracing.StartSpan("uwsgi run", opentracing.ChildOf(spanCtx))
-
-		defer span.Finish()
-		ctx = opentracing.ContextWithSpan(ctx, span)
-	}
-
-	logger := logrus.WithField("peer", r.RemoteAddr)
+	ctx, reqID := util.AddRequestID(ctx, func() string {
+		return getRequestID(r)
+	})
+	logger := logrus.WithFields(logrus.Fields{"peer": r.RemoteAddr, "reqID": reqID})
 
 	if r.Header.Get("HTTP_ORIGIN") != "" {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 	}
 
 	// Process request.
-	payload, e := s.loadPayload(r)
-	if e != nil {
-		logger.WithError(e).Error("Loading payload failed")
+	payload, err := s.loadPayload(r)
+	if err != nil {
+		logger.WithError(err).Error("Loading payload failed")
 		httpError(w, http.StatusInternalServerError, "Loading payload failure.")
 
 		return
@@ -156,9 +151,9 @@ func (s *Server) RunHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	request, e := s.prepareRequest(r, payload)
-	if e != nil {
-		logger.WithError(e).Error("Parsing request failed")
+	meta, lbMeta, scriptMeta, err := s.prepareRequest(r, payload)
+	if err != nil {
+		logger.WithError(err).Error("Parsing request failed")
 		httpError(w, http.StatusInternalServerError, "Parsing request failure.")
 
 		return
@@ -166,30 +161,34 @@ func (s *Server) RunHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Check if request META needs to be parsed.
 	requestParsed := r.Header.Get(headerPayloadParsed) == "1"
-	scriptMeta := request.GetRequest()[0].GetMeta()
 
-	// Add request data to broker request.
+	// Process script chunks.
+	var chunks []*scriptpb.RunChunk
+
 	if !requestParsed {
 		r.Body = http.MaxBytesReader(w, r.Body, s.options.MaxPayloadSize)
-		if err := s.processRequestData(r, request); err != nil {
+
+		chunks, err = s.processRequestData(r)
+		if err != nil {
 			httpError(w, http.StatusBadRequest, fmt.Sprintf("Parsing payload failure: %s.", err.Error()))
 			return
 		}
 	}
 
 	start := time.Now()
+	chunkReader := common.NewArrayChunkReader(chunks)
 
-	stream, e := s.processRun(ctx, logger, request)
-	if e != nil {
+	stream, err := s.sendRunToLoadbalancer(ctx, logger, meta, lbMeta, scriptMeta, chunkReader)
+	if err != nil {
 		httpError(w, http.StatusBadGateway, "Processing script failure.")
 		return
 	}
 
-	trace, _ := s.processResponse(ctx, logger, start, request.Meta, stream, nil)
+	trace, _ := s.processResponse(ctx, logger, start, meta, stream, nil)
 	took := time.Duration(trace.Duration) * time.Millisecond
 
 	logger.WithFields(logrus.Fields{
-		"lbMeta":        request.GetLbMeta(),
+		"lbMeta":        lbMeta,
 		"runtime":       scriptMeta.Runtime,
 		"sourceHash":    scriptMeta.SourceHash,
 		"userID":        scriptMeta.UserId,
@@ -210,49 +209,51 @@ func (s *Server) RunHandler(w http.ResponseWriter, r *http.Request) {
 	writeTraceResponse(w, trace)
 }
 
-func (s *Server) prepareRequest(r *http.Request, payload *uwsgiPayload) (*brokerpb.RunRequest, error) {
+var reqid uint64
+
+func getRequestID(r *http.Request) string {
+	reqID := r.Header.Get(headerRequestID)
+	if reqID != "" {
+		return reqID
+	}
+
+	return util.NewRequestID()
+}
+
+func (s *Server) prepareRequest(r *http.Request, payload *uwsgiPayload) (meta *brokerpb.RunMeta, lbMeta *lbpb.RunMeta, scriptMeta *scriptpb.RunMeta, err error) {
 	instancePK := r.Header.Get(headerInstancePKKey)
 
 	tracePK, err := strconv.ParseUint(r.Header.Get(headerTracePKKey), 10, 0)
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, err
 	}
 
-	return &brokerpb.RunRequest{
-		Meta: &brokerpb.RunRequest_MetaMessage{
+	return &brokerpb.RunMeta{
 			Files:          payload.Files,
 			EnvironmentUrl: payload.EnvironmentURL,
 			Trace:          payload.Trace,
 			TraceId:        tracePK,
 		},
-		LbMeta: &lbpb.RunRequest_MetaMessage{
-			RequestId:        util.GenerateShortKey(),
+		&lbpb.RunMeta{
 			ConcurrencyKey:   instancePK,
 			ConcurrencyLimit: payload.Run.ConcurrencyLimit,
 		},
-		Request: []*scriptpb.RunRequest{
-			{
-				Value: &scriptpb.RunRequest_Meta{
-					Meta: &scriptpb.RunRequest_MetaMessage{
-						Environment: payload.Environment,
-						Runtime:     payload.Run.Runtime,
-						SourceHash:  payload.SourceHash,
-						UserId:      instancePK,
-						Options: &scriptpb.RunRequest_MetaMessage_OptionsMessage{
-							Entrypoint:  payload.Entrypoint,
-							OutputLimit: payload.OutputLimit,
-							Timeout:     int64(payload.Run.Timeout * 1000),
-							Async:       payload.Run.Async,
-							Mcpu:        payload.Run.MCPU,
-							Args:        []byte(payload.Run.Args),
-							Config:      []byte(payload.Run.Config),
-							Meta:        []byte(payload.Run.Meta),
-						},
-					},
-				},
+		&scriptpb.RunMeta{
+			Environment: payload.Environment,
+			Runtime:     payload.Run.Runtime,
+			SourceHash:  payload.SourceHash,
+			UserId:      instancePK,
+			Options: &scriptpb.RunMeta_Options{
+				Entrypoint:  payload.Entrypoint,
+				OutputLimit: payload.OutputLimit,
+				Timeout:     int64(payload.Run.Timeout * 1000),
+				Async:       payload.Run.Async,
+				Mcpu:        payload.Run.MCPU,
+				Args:        []byte(payload.Run.Args),
+				Config:      []byte(payload.Run.Config),
+				Meta:        []byte(payload.Run.Meta),
 			},
-		},
-	}, nil
+		}, nil
 }
 
 func (s *Server) loadPayload(r *http.Request) (*uwsgiPayload, error) {
@@ -278,7 +279,9 @@ func (s *Server) loadPayload(r *http.Request) (*uwsgiPayload, error) {
 	return &payload, nil
 }
 
-func (s *Server) processRequestData(r *http.Request, request *brokerpb.RunRequest) error {
+func (s *Server) processRequestData(r *http.Request) ([]*scriptpb.RunChunk, error) {
+	var chunks []*scriptpb.RunChunk
+
 	parseErr := r.ParseMultipartForm(s.options.MaxPayloadSize)
 
 	// Parse GET/POST params.
@@ -295,7 +298,7 @@ func (s *Server) processRequestData(r *http.Request, request *brokerpb.RunReques
 	if strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
 		jsonMap := make(map[string]interface{})
 		if err := json.NewDecoder(r.Body).Decode(&jsonMap); err != nil {
-			return ErrJSONParsingFailed
+			return nil, ErrJSONParsingFailed
 		}
 
 		for k, v := range jsonMap {
@@ -304,13 +307,9 @@ func (s *Server) processRequestData(r *http.Request, request *brokerpb.RunReques
 	}
 
 	if data, err := json.Marshal(dataMap); err == nil {
-		request.Request = append(request.Request, &scriptpb.RunRequest{
-			Value: &scriptpb.RunRequest_Chunk{
-				Chunk: &scriptpb.RunRequest_ChunkMessage{
-					Name: script.ChunkARGS,
-					Data: data,
-				},
-			},
+		chunks = append(chunks, &scriptpb.RunChunk{
+			Data: data,
+			Type: scriptpb.RunChunk_ARGS,
 		})
 	}
 
@@ -321,20 +320,16 @@ func (s *Server) processRequestData(r *http.Request, request *brokerpb.RunReques
 
 			if f, err := file.Open(); err == nil {
 				if buf, e := ioutil.ReadAll(f); e == nil {
-					request.Request = append(request.Request, &scriptpb.RunRequest{
-						Value: &scriptpb.RunRequest_Chunk{
-							Chunk: &scriptpb.RunRequest_ChunkMessage{
-								Name:        name,
-								Filename:    file.Filename,
-								ContentType: file.Header.Get("Content-Type"),
-								Data:        buf,
-							},
-						},
+					chunks = append(chunks, &scriptpb.RunChunk{
+						Name:        name,
+						Filename:    file.Filename,
+						ContentType: file.Header.Get("Content-Type"),
+						Data:        buf,
 					})
 				}
 			}
 		}
 	}
 
-	return nil
+	return chunks, nil
 }

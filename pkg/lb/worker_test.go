@@ -10,10 +10,12 @@ import (
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/mock"
 
-	repomocks "github.com/Syncano/codebox/pkg/filerepo/mocks"
-	scriptmocks "github.com/Syncano/codebox/pkg/script/mocks"
 	repopb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/filerepo/v1"
 	scriptpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/script/v1"
+
+	"github.com/Syncano/codebox/pkg/common"
+	repomocks "github.com/Syncano/codebox/pkg/filerepo/mocks"
+	scriptmocks "github.com/Syncano/codebox/pkg/script/mocks"
 )
 
 type MockFs struct {
@@ -143,7 +145,7 @@ func TestWorker(t *testing.T) {
 
 		Convey("Run propagates gRPC error", func() {
 			scriptCli.On("Run", mock.Anything).Return(nil, err)
-			_, e := cont.Run(context.Background(), &scriptpb.RunRequest_MetaMessage{}, nil)
+			_, e := cont.Run(context.Background(), &scriptpb.RunMeta{}, nil)
 			So(e, ShouldEqual, err)
 		})
 		Convey("given mocked stream, Run", func() {
@@ -162,10 +164,10 @@ func TestWorker(t *testing.T) {
 				stream.On("CloseSend").Return(err)
 			})
 
-			_, e := cont.Run(context.Background(), &scriptpb.RunRequest_MetaMessage{}, []*scriptpb.RunRequest_ChunkMessage{
+			_, e := cont.Run(context.Background(), &scriptpb.RunMeta{}, common.NewArrayChunkReader([]*scriptpb.RunChunk{
 				{Name: "chunk1", Data: []byte("data")},
-			})
-			So(e, ShouldEqual, err)
+			}))
+			So(errors.Is(e, err), ShouldBeTrue)
 		})
 
 		mock.AssertExpectationsForObjects(t, repoCli, scriptCli)

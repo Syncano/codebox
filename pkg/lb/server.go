@@ -13,12 +13,14 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	pb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/lb/v1"
+	scriptpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/script/v1"
+
 	"github.com/Syncano/codebox/pkg/cache"
+	"github.com/Syncano/codebox/pkg/common"
 	"github.com/Syncano/codebox/pkg/filerepo"
 	"github.com/Syncano/codebox/pkg/limiter"
 	"github.com/Syncano/codebox/pkg/util"
-	pb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/lb/v1"
-	scriptpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/script/v1"
 )
 
 // Server defines a Load Balancer server implementing both worker plug and script runner interface.
@@ -63,6 +65,7 @@ var (
 	ErrNoWorkersAvailable = status.Error(codes.ResourceExhausted, "no workers available")
 	// ErrSourceNotAvailable signals that specified source hash was not found.
 	ErrSourceNotAvailable = status.Error(codes.FailedPrecondition, "source not available")
+	ErrInvalidArgument    = status.Error(codes.InvalidArgument, "invalid argument")
 )
 
 const (
@@ -141,10 +144,13 @@ func (s *Server) findWorkerWithMaxFreeCPU() *Worker {
 // Run runs script in secure environment of worker.
 func (s *Server) Run(stream pb.ScriptRunner_RunServer) error {
 	var (
-		runMeta     *pb.RunRequest_MetaMessage
-		scriptMeta  *scriptpb.RunRequest_MetaMessage
-		scriptChunk []*scriptpb.RunRequest_ChunkMessage
+		meta       *pb.RunMeta
+		scriptMeta *scriptpb.RunMeta
 	)
+
+	ctx, reqID := util.AddDefaultRequestID(stream.Context())
+	peerAddr := util.PeerAddr(ctx)
+	logger := logrus.WithFields(logrus.Fields{"peer": peerAddr, "reqID": reqID})
 
 	for {
 		in, err := stream.Recv()
@@ -158,41 +164,27 @@ func (s *Server) Run(stream pb.ScriptRunner_RunServer) error {
 
 		switch v := in.Value.(type) {
 		case *pb.RunRequest_Meta:
-			runMeta = v.Meta
-		case *pb.RunRequest_Request:
-			switch r := v.Request.Value.(type) {
-			case *scriptpb.RunRequest_Meta:
-				scriptMeta = r.Meta
-			case *scriptpb.RunRequest_Chunk:
-				scriptChunk = append(scriptChunk, r.Chunk)
-			}
+			meta = v.Meta
+		case *pb.RunRequest_ScriptMeta:
+			scriptMeta = v.ScriptMeta
+		}
+
+		if meta != nil && scriptMeta != nil {
+			break
 		}
 	}
 
-	if scriptMeta == nil {
-		return nil
+	if meta == nil || scriptMeta == nil {
+		logger.Error("grpc:broker:Run error parsing input")
+		return ErrInvalidArgument
 	}
 
-	if runMeta == nil {
-		runMeta = &pb.RunRequest_MetaMessage{}
-	}
-
-	if runMeta.RequestId == "" {
-		runMeta.RequestId = util.GenerateShortKey()
-	}
-
-	scriptMeta.RequestId = runMeta.RequestId
-
-	return s.processRun(stream, runMeta, scriptMeta, scriptChunk)
+	return s.processRun(ctx, logger, stream, meta, scriptMeta)
 }
 
-func (s *Server) processRun(stream pb.ScriptRunner_RunServer, runMeta *pb.RunRequest_MetaMessage, // nolint: gocyclo
-	scriptMeta *scriptpb.RunRequest_MetaMessage, scriptChunk []*scriptpb.RunRequest_ChunkMessage) error {
-	ctx := stream.Context()
-	peerAddr := util.PeerAddr(ctx)
-	logger := logrus.WithFields(logrus.Fields{
-		"reqID":      runMeta.RequestId,
-		"peer":       peerAddr,
+func (s *Server) processRun(ctx context.Context, logger logrus.FieldLogger, stream pb.ScriptRunner_RunServer, // nolint: gocyclo
+	runMeta *pb.RunMeta, scriptMeta *scriptpb.RunMeta) error {
+	logger = logrus.WithFields(logrus.Fields{
 		"meta":       runMeta,
 		"runtime":    scriptMeta.Runtime,
 		"sourceHash": scriptMeta.SourceHash,
@@ -208,7 +200,26 @@ func (s *Server) processRun(stream pb.ScriptRunner_RunServer, runMeta *pb.RunReq
 	script := s.createScriptInfo(scriptMeta)
 	retry := 0
 
-	_, runErr := util.RetryWithCritical(s.options.WorkerRetry, workerRetrySleep, func() (bool, error) {
+	chunkReader := common.NewChunkReader(func() (*scriptpb.RunChunk, error) {
+		req, err := stream.Recv()
+		if err != nil {
+			return nil, err
+		}
+
+		chunk := req.GetScriptChunk()
+		if chunk == nil {
+			return nil, ErrInvalidArgument
+		}
+
+		return chunk, nil
+	})
+
+	var (
+		cont  *WorkerContainer
+		resCh <-chan interface{}
+	)
+
+	_, err := util.RetryWithCritical(s.options.WorkerRetry, workerRetrySleep, func() (bool, error) {
 		retry++
 
 		// Check and refresh source and environment.
@@ -217,7 +228,11 @@ func (s *Server) processRun(stream pb.ScriptRunner_RunServer, runMeta *pb.RunReq
 		}
 
 		// Grab worker.
-		cont, conns, fromCache := s.grabWorker(script)
+		var (
+			conns     int
+			fromCache bool
+		)
+		cont, conns, fromCache = s.grabWorker(script)
 		if cont == nil {
 			return true, ErrNoWorkersAvailable
 		}
@@ -234,60 +249,69 @@ func (s *Server) processRun(stream pb.ScriptRunner_RunServer, runMeta *pb.RunReq
 
 		logger = logger.WithFields(logrus.Fields{"container": cont, "script": &script, "try": retry, "fromCache": fromCache})
 
-		resCh, err := s.processWorkerRun(ctx, logger, cont, scriptMeta, scriptChunk)
+		var err error
 
+		resCh, err = s.processWorkerRun(ctx, logger, cont, scriptMeta, chunkReader)
 		if err != nil {
 			logger.WithError(err).Warn("Worker processing Run failed")
 			// Release worker resources as it failed prematurely.
 			s.handleWorkerError(cont, err)
 
-			return util.IsCancellation(err), err
+			return chunkReader.IsDirty() || util.IsCancellation(err), err
 		}
-
-		cont.Worker.ResetErrorCount()
-
-		var response *scriptpb.RunResponse
-		for res := range resCh {
-			switch v := res.(type) {
-			case *scriptpb.RunResponse:
-				if response == nil {
-					response = v
-				}
-
-				if err = stream.Send(v); err != nil {
-					logger.WithField("res", v).Warn("Sending data error")
-					return true, err
-				}
-
-			case error:
-				// Retry on worker error.
-				logger.WithError(v).Warn("Worker error")
-				s.handleWorkerError(cont, v)
-
-				return false, v
-			}
-		}
-
-		if response != nil && response.Cached {
-			// Add container to worker cache if we got any response.
-			s.mu.Lock()
-			cont.Worker.AddCache(s.workerContainerCache, script, response.ContainerId, cont)
-			s.mu.Unlock()
-		}
-
-		logger.WithField("took", time.Since(start)).Info("grpc:lb:Run")
 
 		return false, nil
 	})
-
-	if runErr != nil {
-		logger.WithError(runErr).Warn("grpc:lb:Run failed")
+	if err != nil {
+		logger.WithError(err).Warn("grpc:lb:Run failed")
+		return err
 	}
 
-	return runErr
+	cont.Worker.ResetErrorCount()
+
+	response, err := s.relayReponse(logger, stream, cont, resCh)
+
+	if response != nil && response.Cached {
+		// Add container to worker cache if we got any response.
+		s.mu.Lock()
+		cont.Worker.AddCache(s.workerContainerCache, script, response.ContainerId, cont)
+		s.mu.Unlock()
+	}
+
+	logger.WithField("took", time.Since(start)).Info("grpc:lb:Run")
+
+	return err
 }
 
-func (s *Server) createScriptInfo(meta *scriptpb.RunRequest_MetaMessage) ScriptInfo {
+func (s *Server) relayReponse(logger logrus.FieldLogger, stream pb.ScriptRunner_RunServer, cont *WorkerContainer, resCh <-chan interface{}) (*scriptpb.RunResponse, error) {
+	var response *scriptpb.RunResponse
+
+	for res := range resCh {
+		switch v := res.(type) {
+		case *scriptpb.RunResponse:
+			if response == nil {
+				response = v
+			}
+
+			if err := stream.Send(v); err != nil {
+				logger.WithField("res", v).Warn("Sending data error")
+
+				return response, err
+			}
+
+		case error:
+			// Retry on worker error.
+			logger.WithError(v).Warn("Worker error")
+			s.handleWorkerError(cont, v)
+
+			return response, v
+		}
+	}
+
+	return response, nil
+}
+
+func (s *Server) createScriptInfo(meta *scriptpb.RunMeta) ScriptInfo {
 	script := ScriptInfo{
 		SourceHash:  meta.SourceHash,
 		Environment: meta.Environment,
@@ -317,7 +341,7 @@ func (s *Server) uploadResource(ctx context.Context, logger logrus.FieldLogger, 
 }
 
 func (s *Server) processWorkerRun(ctx context.Context, logger logrus.FieldLogger, cont *WorkerContainer,
-	meta *scriptpb.RunRequest_MetaMessage, chunk []*scriptpb.RunRequest_ChunkMessage) (<-chan interface{}, error) {
+	meta *scriptpb.RunMeta, chunkReader *common.ChunkReader) (<-chan interface{}, error) {
 	for _, key := range []string{meta.SourceHash, meta.Environment} {
 		if key != "" {
 			if err := s.uploadResource(ctx, logger, cont, key); err != nil {
@@ -326,7 +350,7 @@ func (s *Server) processWorkerRun(ctx context.Context, logger logrus.FieldLogger
 		}
 	}
 
-	return cont.Run(ctx, meta, chunk)
+	return cont.Run(ctx, meta, chunkReader)
 }
 
 // grabWorker finds worker with container in cache and highest amount of free CPU.
@@ -404,10 +428,13 @@ func (s *Server) handleWorkerError(cont *WorkerContainer, err error) {
 
 // ContainerRemoved handles notifications sent by client whenever a container gets removed from cache.
 func (s *Server) ContainerRemoved(ctx context.Context, in *pb.ContainerRemovedRequest) (*pb.ContainerRemovedResponse, error) {
-	peerAddr := util.PeerAddr(ctx)
 	ci := ScriptInfo{SourceHash: in.SourceHash, Environment: in.Environment, UserID: in.UserId}
 
-	logrus.WithFields(logrus.Fields{"id": in.GetId(), "container": &ci, "peer": peerAddr}).Debug("grpc:lb:ContainerRemoved")
+	ctx, reqID := util.AddDefaultRequestID(ctx)
+	peerAddr := util.PeerAddr(ctx)
+	logger := logrus.WithFields(logrus.Fields{"peer": peerAddr, "reqID": reqID})
+
+	logger.WithFields(logrus.Fields{"id": in.GetId(), "container": &ci}).Debug("grpc:lb:ContainerRemoved")
 
 	cur := s.workers.Get(in.Id)
 	if cur == nil {
@@ -451,8 +478,11 @@ func (s *Server) Heartbeat(ctx context.Context, in *pb.HeartbeatRequest) (*pb.He
 
 // Disconnect gracefully removes worker.
 func (s *Server) Disconnect(ctx context.Context, in *pb.DisconnectRequest) (*pb.DisconnectResponse, error) {
-	logrus.WithFields(logrus.Fields{"id": in.GetId(), "peer": util.PeerAddr(ctx)}).Info("grpc:lb:Disconnect")
+	ctx, reqID := util.AddDefaultRequestID(ctx)
+	peerAddr := util.PeerAddr(ctx)
+	logger := logrus.WithFields(logrus.Fields{"peer": peerAddr, "reqID": reqID})
 
+	logger.WithFields(logrus.Fields{"id": in.GetId()}).Info("grpc:lb:Disconnect")
 	s.workers.Delete(in.Id)
 
 	return &pb.DisconnectResponse{}, nil

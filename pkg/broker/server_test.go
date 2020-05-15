@@ -23,18 +23,18 @@ import (
 	"github.com/vmihailenco/msgpack/v4"
 	"google.golang.org/grpc/grpclog"
 
+	brokerpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/broker/v1"
+	repopb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/filerepo/v1"
+	lbpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/lb/v1"
+	scriptpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/script/v1"
+
 	"github.com/Syncano/codebox/pkg/broker/mocks"
 	"github.com/Syncano/codebox/pkg/celery"
 	celerymocks "github.com/Syncano/codebox/pkg/celery/mocks"
 	repomocks "github.com/Syncano/codebox/pkg/filerepo/mocks"
 	lbmocks "github.com/Syncano/codebox/pkg/lb/mocks"
-	"github.com/Syncano/codebox/pkg/script"
 	"github.com/Syncano/codebox/pkg/util"
 	utilmocks "github.com/Syncano/codebox/pkg/util/mocks"
-	brokerpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/broker/v1"
-	repopb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/filerepo/v1"
-	lbpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/lb/v1"
-	scriptpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/script/v1"
 )
 
 var (
@@ -81,7 +81,7 @@ func TestServerMethods(t *testing.T) {
 		})
 		Convey("Run returns error on invalid request", func() {
 			stream.On("Context").Return(context.Background())
-			e := s.Run(new(brokerpb.RunRequest), stream)
+			e := s.SimpleRun(new(brokerpb.SimpleRunRequest), stream)
 			So(e, ShouldResemble, ErrInvalidArgument)
 		})
 		Convey("Run processes on valid request", func() {
@@ -89,22 +89,16 @@ func TestServerMethods(t *testing.T) {
 			env := "cba"
 			envURL := "http://google.com"
 
-			runReq := brokerpb.RunRequest{
-				LbMeta: &lbpb.RunRequest_MetaMessage{},
-				Meta: &brokerpb.RunRequest_MetaMessage{
+			runReq := brokerpb.SimpleRunRequest{
+				LbMeta: &lbpb.RunMeta{},
+				Meta: &brokerpb.RunMeta{
 					EnvironmentUrl: envURL,
 					Trace:          []byte("\"trace\""),
 					TraceId:        123,
 				},
-				Request: []*scriptpb.RunRequest{
-					{
-						Value: &scriptpb.RunRequest_Meta{
-							Meta: &scriptpb.RunRequest_MetaMessage{
-								Environment: env,
-								SourceHash:  sourceHash,
-							},
-						},
-					},
+				ScriptMeta: &scriptpb.RunMeta{
+					Environment: env,
+					SourceHash:  sourceHash,
 				},
 			}
 
@@ -121,7 +115,7 @@ func TestServerMethods(t *testing.T) {
 				Convey("on upload Send error, propagates it", func() {
 					uploadStream.On("Send", mock.Anything).Return(err)
 					repoCli.On("Exists", mock.Anything, mock.Anything, mock.Anything).Return(&repopb.ExistsResponse{Ok: false}, nil).Once()
-					e := s.Run(&runReq, stream)
+					e := s.SimpleRun(&runReq, stream)
 					So(errors.Is(e, err), ShouldBeTrue)
 				})
 				Convey("given simple download result channel", func() {
@@ -132,7 +126,7 @@ func TestServerMethods(t *testing.T) {
 						uploadStream.On("Send", mock.Anything).Return(nil).Once()
 						uploadStream.On("Recv").Return(nil, err).Once()
 						repoCli.On("Exists", mock.Anything, mock.Anything).Return(&repopb.ExistsResponse{Ok: false}, nil).Once()
-						e := s.Run(&runReq, stream)
+						e := s.SimpleRun(&runReq, stream)
 						So(errors.Is(e, err), ShouldBeTrue)
 					})
 					Convey("on last Recv error, propagates it", func() {
@@ -140,14 +134,14 @@ func TestServerMethods(t *testing.T) {
 						uploadStream.On("Recv").Return(&repopb.UploadResponse{Accepted: true}, nil).Once()
 						uploadStream.On("Recv").Return(nil, err).Once()
 						repoCli.On("Exists", mock.Anything, mock.Anything).Return(&repopb.ExistsResponse{Ok: false}, nil).Once()
-						e := s.Run(&runReq, stream)
+						e := s.SimpleRun(&runReq, stream)
 						So(errors.Is(e, err), ShouldBeTrue)
 					})
 					Convey("when upload is not accepted, moves to next file", func() {
 						uploadStream.On("Send", mock.Anything).Return(nil).Once()
 						uploadStream.On("Recv").Return(&repopb.UploadResponse{Accepted: false}, nil).Once()
 						repoCli.On("Exists", mock.Anything, &repopb.ExistsRequest{Key: env}, mock.Anything).Return(nil, err).Once()
-						e := s.Run(&runReq, stream)
+						e := s.SimpleRun(&runReq, stream)
 						So(errors.Is(e, err), ShouldBeTrue)
 					})
 					Convey("on uploadChunks error, rechecks Exists and moves to next file if succeeds", func() {
@@ -155,7 +149,7 @@ func TestServerMethods(t *testing.T) {
 						uploadStream.On("Recv").Return(nil, err).Once()
 						repoCli.On("Exists", mock.Anything, mock.Anything).Return(&repopb.ExistsResponse{Ok: true}, nil).Once()
 						repoCli.On("Exists", mock.Anything, &repopb.ExistsRequest{Key: env}, mock.Anything).Return(nil, err).Once()
-						e := s.Run(&runReq, stream)
+						e := s.SimpleRun(&runReq, stream)
 						So(errors.Is(e, err), ShouldBeTrue)
 					})
 					Convey("on chunk Send error, propagates it", func() {
@@ -163,7 +157,7 @@ func TestServerMethods(t *testing.T) {
 						uploadStream.On("Recv").Return(&repopb.UploadResponse{Accepted: true}, nil).Once()
 						uploadStream.On("Send", mock.Anything).Return(err)
 						repoCli.On("Exists", mock.Anything, mock.Anything).Return(nil, err).Once()
-						e := s.Run(&runReq, stream)
+						e := s.SimpleRun(&runReq, stream)
 						So(errors.Is(e, err), ShouldBeTrue)
 					})
 					Convey("on chunk upload Send error, propagates it", func() {
@@ -171,7 +165,7 @@ func TestServerMethods(t *testing.T) {
 						uploadStream.On("Recv").Return(&repopb.UploadResponse{Accepted: true}, nil).Once()
 						uploadStream.On("Send", mock.Anything).Return(err)
 						repoCli.On("Exists", mock.Anything, mock.Anything).Return(&repopb.ExistsResponse{Ok: false}, nil).Once()
-						e := s.Run(&runReq, stream)
+						e := s.SimpleRun(&runReq, stream)
 						So(errors.Is(e, err), ShouldBeTrue)
 					})
 					Convey("on upload Done Send error, propagates it", func() {
@@ -180,7 +174,7 @@ func TestServerMethods(t *testing.T) {
 						uploadStream.On("Send", mock.Anything).Return(nil).Once()
 						uploadStream.On("Send", mock.Anything).Return(err)
 						repoCli.On("Exists", mock.Anything, mock.Anything).Return(&repopb.ExistsResponse{Ok: false}, nil).Once()
-						e := s.Run(&runReq, stream)
+						e := s.SimpleRun(&runReq, stream)
 						So(errors.Is(e, err), ShouldBeTrue)
 					})
 				})
@@ -197,7 +191,7 @@ func TestServerMethods(t *testing.T) {
 						ch := make(chan bool)
 						runStream.On("Recv", mock.Anything).Return(&scriptpb.RunResponse{
 							Code:     100,
-							Response: &scriptpb.HTTPResponseMessage{},
+							Response: &scriptpb.HTTPResponse{},
 						}, err).Run(func(args mock.Arguments) {
 							ch <- true
 						})
@@ -207,17 +201,17 @@ func TestServerMethods(t *testing.T) {
 
 						Convey("ignores json marshall error on celery", func() {
 							runReq.Meta.Trace = []byte("trace")
-							e := s.Run(&runReq, stream)
+							e := s.SimpleRun(&runReq, stream)
 							So(e, ShouldBeNil)
 						})
 						Convey("runs request correctly and publishes results", func() {
 							amqpCh.On("Publish", mock.Anything, queue, mock.Anything, mock.Anything, mock.Anything).Return(nil)
-							e := s.Run(&runReq, stream)
+							e := s.SimpleRun(&runReq, stream)
 							So(e, ShouldBeNil)
 						})
 						Convey("runs request and skips publish for empty trace", func() {
 							runReq.Meta.Trace = nil
-							e := s.Run(&runReq, stream)
+							e := s.SimpleRun(&runReq, stream)
 							So(e, ShouldBeNil)
 						})
 
@@ -227,7 +221,7 @@ func TestServerMethods(t *testing.T) {
 					Convey("on failed download, propagates error", func() {
 						dlCh <- &util.DownloadResult{Error: err}
 						close(dlCh)
-						e := s.Run(&runReq, stream)
+						e := s.SimpleRun(&runReq, stream)
 						So(errors.Is(e, err), ShouldBeTrue)
 					})
 				})
@@ -235,21 +229,21 @@ func TestServerMethods(t *testing.T) {
 			Convey("propagates Exists error", func() {
 				repoCli.On("Exists", mock.Anything, mock.Anything, mock.Anything).Return(nil, err)
 				stream.On("Context").Return(context.Background())
-				e := s.Run(&runReq, stream)
+				e := s.SimpleRun(&runReq, stream)
 				So(errors.Is(e, err), ShouldBeTrue)
 			})
 			Convey("propagates Exists error on environment upload", func() {
 				repoCli.On("Exists", mock.Anything, mock.Anything, mock.Anything).Return(&repopb.ExistsResponse{Ok: true}, nil).Once()
 				repoCli.On("Exists", mock.Anything, mock.Anything, mock.Anything).Return(nil, err).Once()
 				stream.On("Context").Return(context.Background())
-				e := s.Run(&runReq, stream)
+				e := s.SimpleRun(&runReq, stream)
 				So(errors.Is(e, err), ShouldBeTrue)
 			})
 			Convey("propagates Upload error", func() {
 				repoCli.On("Exists", mock.Anything, mock.Anything, mock.Anything).Return(&repopb.ExistsResponse{Ok: false}, nil)
 				repoCli.On("Upload", mock.Anything).Return(nil, err)
 				stream.On("Context").Return(context.Background())
-				e := s.Run(&runReq, stream)
+				e := s.SimpleRun(&runReq, stream)
 				So(errors.Is(e, err), ShouldBeTrue)
 			})
 			Convey("if concurrent upload happens, wait for it to finish", func() {
@@ -266,14 +260,14 @@ func TestServerMethods(t *testing.T) {
 
 				Convey("and propagates Run error", func() {
 					lbCli.On("Run", mock.Anything).Return(nil, err)
-					e := s.Run(&runReq, stream)
+					e := s.SimpleRun(&runReq, stream)
 					So(errors.Is(e, err), ShouldBeTrue)
 				})
 				Convey("and propagates Send error", func() {
 					runStream := new(lbmocks.ScriptRunner_RunClient)
 					lbCli.On("Run", mock.Anything).Return(runStream, nil)
 					runStream.On("Send", mock.Anything).Return(err)
-					e := s.Run(&runReq, stream)
+					e := s.SimpleRun(&runReq, stream)
 					So(errors.Is(e, err), ShouldBeTrue)
 				})
 				Convey("and propagates Send request error", func() {
@@ -281,7 +275,7 @@ func TestServerMethods(t *testing.T) {
 					lbCli.On("Run", mock.Anything).Return(runStream, nil)
 					runStream.On("Send", mock.Anything).Return(nil).Once()
 					runStream.On("Send", mock.Anything).Return(err)
-					e := s.Run(&runReq, stream)
+					e := s.SimpleRun(&runReq, stream)
 					So(errors.Is(e, err), ShouldBeTrue)
 				})
 			})
@@ -304,7 +298,7 @@ func TestServerMethods(t *testing.T) {
 				Convey("silently logs ret stream Send error", func() {
 					stream.On("Send", res).Return(err).Once()
 				})
-				e := s.Run(&runReq, stream)
+				e := s.SimpleRun(&runReq, stream)
 				So(e, ShouldBeNil)
 			})
 
@@ -382,7 +376,7 @@ func TestServerMethods(t *testing.T) {
 							lbCli.On("Run", mock.Anything).Return(runStream, nil)
 							runStream.On("Send", mock.Anything).Once().Return(nil)
 							runStream.On("Send", mock.Anything).Once().Return(err).Run(func(args mock.Arguments) {
-								ch <- args.Get(0).(*lbpb.RunRequest).GetRequest().GetMeta().GetOptions().Timeout
+								ch <- args.Get(0).(*lbpb.RunRequest).GetScriptMeta().GetOptions().Timeout
 							})
 							handler.ServeHTTP(rr, req)
 							So(rr.Code, ShouldEqual, http.StatusBadGateway)
@@ -489,7 +483,7 @@ func TestServerMethods(t *testing.T) {
 									Took:   took,
 									Stdout: []byte(stdout),
 									Stderr: []byte(stderr),
-									Response: &scriptpb.HTTPResponseMessage{
+									Response: &scriptpb.HTTPResponse{
 										StatusCode:  int32(code),
 										Content:     content,
 										ContentType: contentType,
@@ -514,13 +508,13 @@ func TestServerMethods(t *testing.T) {
 
 								runStream.On("Recv", mock.Anything).Return(&scriptpb.RunResponse{
 									Took: took,
-									Response: &scriptpb.HTTPResponseMessage{
+									Response: &scriptpb.HTTPResponse{
 										StatusCode: int32(code),
 										Content:    content,
 									},
 								}, nil).Once()
 								runStream.On("Recv", mock.Anything).Return(&scriptpb.RunResponse{
-									Response: &scriptpb.HTTPResponseMessage{
+									Response: &scriptpb.HTTPResponse{
 										Content: content2,
 									},
 								}, nil).Once()
@@ -630,15 +624,15 @@ func TestServerMethods(t *testing.T) {
 			req, _ := http.NewRequest("POST", "/", body)
 			req.Header.Add("Content-Type", writer.FormDataContentType())
 
-			request := new(brokerpb.RunRequest)
-			e := s.processRequestData(req, request)
+			chunks, e := s.processRequestData(req)
 			So(e, ShouldBeNil)
-			So(len(request.Request), ShouldEqual, 2)
+			So(len(chunks), ShouldEqual, 2)
 
-			So(request.Request[0].GetChunk().Name, ShouldEqual, script.ChunkARGS)
-			So(request.Request[0].GetChunk().Data, ShouldResemble, []byte(expectedArgs))
-			So(request.Request[1].GetChunk().Name, ShouldEqual, "file")
-			So(request.Request[1].GetChunk().Data, ShouldResemble, expectedFile)
+			So(chunks[0].Type, ShouldEqual, scriptpb.RunChunk_ARGS)
+			So(chunks[0].Data, ShouldResemble, []byte(expectedArgs))
+			So(chunks[1].Type, ShouldEqual, scriptpb.RunChunk_GENERIC)
+			So(chunks[1].Name, ShouldEqual, "file")
+			So(chunks[1].Data, ShouldResemble, expectedFile)
 		})
 		Convey("empty multipart http request is correctly parsed", func() {
 			expectedArgs := `{}`
@@ -650,13 +644,12 @@ func TestServerMethods(t *testing.T) {
 			req, _ := http.NewRequest("POST", "/", body)
 			req.Header.Add("Content-Type", writer.FormDataContentType())
 
-			request := new(brokerpb.RunRequest)
-			e := s.processRequestData(req, request)
+			chunks, e := s.processRequestData(req)
 			So(e, ShouldBeNil)
-			So(len(request.Request), ShouldEqual, 1)
+			So(len(chunks), ShouldEqual, 1)
 
-			So(request.Request[0].GetChunk().Name, ShouldEqual, script.ChunkARGS)
-			So(request.Request[0].GetChunk().Data, ShouldResemble, []byte(expectedArgs))
+			So(chunks[0].Type, ShouldEqual, scriptpb.RunChunk_ARGS)
+			So(chunks[0].Data, ShouldResemble, []byte(expectedArgs))
 		})
 		Convey("json http request is correctly parsed", func() {
 			expectedArgs := `{"abc":[123,"a"]}`
@@ -664,13 +657,12 @@ func TestServerMethods(t *testing.T) {
 			req, _ := http.NewRequest("POST", "/", bytes.NewBufferString(expectedArgs))
 			req.Header.Add("Content-Type", "application/json;charset=utf-8")
 
-			request := new(brokerpb.RunRequest)
-			e := s.processRequestData(req, request)
+			chunks, e := s.processRequestData(req)
 			So(e, ShouldBeNil)
-			So(len(request.Request), ShouldEqual, 1)
+			So(len(chunks), ShouldEqual, 1)
 
-			So(request.Request[0].GetChunk().Name, ShouldEqual, script.ChunkARGS)
-			So(request.Request[0].GetChunk().Data, ShouldResemble, []byte(expectedArgs))
+			So(chunks[0].Type, ShouldEqual, scriptpb.RunChunk_ARGS)
+			So(chunks[0].Data, ShouldResemble, []byte(expectedArgs))
 		})
 		s.Shutdown()
 		mock.AssertExpectationsForObjects(t, amqpCh, redisCli, repoCli, lbCli)

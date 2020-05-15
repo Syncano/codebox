@@ -14,10 +14,12 @@ import (
 	"go.opencensus.io/plugin/ocgrpc"
 	"google.golang.org/grpc"
 
-	"github.com/Syncano/codebox/pkg/sys"
-	"github.com/Syncano/codebox/pkg/util"
 	repopb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/filerepo/v1"
 	scriptpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/script/v1"
+
+	"github.com/Syncano/codebox/pkg/common"
+	"github.com/Syncano/codebox/pkg/sys"
+	"github.com/Syncano/codebox/pkg/util"
 )
 
 // Worker holds basic info about the worker.
@@ -181,7 +183,7 @@ func uploadDir(stream repopb.Repo_UploadClient, fs afero.Fs, key, sourcePath str
 
 	if err := stream.Send(&repopb.UploadRequest{
 		Value: &repopb.UploadRequest_Meta{
-			Meta: &repopb.UploadRequest_MetaMessage{Key: key},
+			Meta: &repopb.UploadMetaMessage{Key: key},
 		},
 	}); err != nil {
 		return err
@@ -218,7 +220,7 @@ func uploadDir(stream repopb.Repo_UploadClient, fs afero.Fs, key, sourcePath str
 
 				if err := stream.Send(&repopb.UploadRequest{
 					Value: &repopb.UploadRequest_Chunk{
-						Chunk: &repopb.UploadRequest_ChunkMessage{Name: name, Data: buf[:n]},
+						Chunk: &repopb.UploadChunkMessage{Name: name, Data: buf[:n]},
 					},
 				}); err != nil {
 					return err
@@ -347,14 +349,14 @@ func (w *WorkerContainer) Upload(ctx context.Context, fs afero.Fs, sourcePath, k
 }
 
 // Run calls worker RPC and runs script there.
-func (w *WorkerContainer) Run(ctx context.Context, meta *scriptpb.RunRequest_MetaMessage, chunk []*scriptpb.RunRequest_ChunkMessage) (<-chan interface{}, error) {
-	stream, err := w.Worker.scriptCli.Run(ctx)
+func (w *WorkerContainer) Run(ctx context.Context, meta *scriptpb.RunMeta, chunkReader *common.ChunkReader) (<-chan interface{}, error) {
+	workerStream, err := w.Worker.scriptCli.Run(ctx)
 	if err != nil {
 		return nil, err
 	}
 
 	// Send meta header.
-	if err := stream.Send(&scriptpb.RunRequest{
+	if err := workerStream.Send(&scriptpb.RunRequest{
 		Value: &scriptpb.RunRequest_Meta{
 			Meta: meta,
 		},
@@ -363,17 +365,37 @@ func (w *WorkerContainer) Run(ctx context.Context, meta *scriptpb.RunRequest_Met
 	}
 
 	// Send chunks.
-	for _, m := range chunk {
-		if err := stream.Send(&scriptpb.RunRequest{
-			Value: &scriptpb.RunRequest_Chunk{
-				Chunk: m,
-			},
-		}); err != nil {
+	if chunkReader != nil {
+		var chunk *scriptpb.RunChunk
+
+		for {
+			chunk, err = chunkReader.Get()
+			if err == io.EOF {
+				err = nil
+				break
+			}
+
+			if err != nil {
+				err = fmt.Errorf("reading script chunk failed: %w", err)
+				break
+			}
+
+			if err = workerStream.Send(&scriptpb.RunRequest{
+				Value: &scriptpb.RunRequest_Chunk{
+					Chunk: chunk,
+				},
+			}); err != nil {
+				err = fmt.Errorf("sending script request failed: %w", err)
+				break
+			}
+		}
+
+		if err != nil {
 			return nil, err
 		}
 	}
 
-	if err := stream.CloseSend(); err != nil {
+	if err := workerStream.CloseSend(); err != nil {
 		return nil, err
 	}
 
@@ -381,7 +403,7 @@ func (w *WorkerContainer) Run(ctx context.Context, meta *scriptpb.RunRequest_Met
 
 	go func() {
 		for {
-			runRes, err := stream.Recv()
+			runRes, err := workerStream.Recv()
 			if err != nil {
 				if err != io.EOF {
 					ch <- err

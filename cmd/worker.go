@@ -18,15 +18,16 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/keepalive"
 
+	repopb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/filerepo/v1"
+	lbpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/lb/v1"
+	scriptpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/script/v1"
+
 	"github.com/Syncano/codebox/pkg/docker"
 	"github.com/Syncano/codebox/pkg/filerepo"
 	"github.com/Syncano/codebox/pkg/script"
 	"github.com/Syncano/codebox/pkg/sys"
 	"github.com/Syncano/codebox/pkg/util"
 	"github.com/Syncano/codebox/pkg/version"
-	repopb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/filerepo/v1"
-	lbpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/lb/v1"
-	scriptpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/script/v1"
 )
 
 const (

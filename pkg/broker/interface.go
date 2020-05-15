@@ -6,6 +6,7 @@ import (
 	"github.com/go-redis/redis/v7"
 
 	pb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/broker/v1"
+	scriptpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/script/v1"
 )
 
 // RedisClient defines redis client methods we are using.
@@ -32,4 +33,8 @@ type ScriptRunner_RunServer interface { // nolint
 //go:generate go run github.com/vektra/mockery/cmd/mockery -name ScriptRunner_RunClient
 type ScriptRunner_RunClient interface { // nolint
 	pb.ScriptRunner_RunClient
+}
+
+type StreamReponder interface {
+	Send(*scriptpb.RunResponse) error
 }

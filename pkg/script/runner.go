@@ -130,7 +130,7 @@ type RunOptions struct {
 	Args   []byte
 	Meta   []byte
 	Config []byte
-	Files  map[string]File
+	Files  map[string]*File
 }
 
 // File holds info about a file.

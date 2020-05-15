@@ -4,9 +4,10 @@ import (
 	"encoding/json"
 	"time"
 
+	scriptpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/script/v1"
+
 	"github.com/Syncano/codebox/pkg/celery"
 	"github.com/Syncano/codebox/pkg/util"
-	scriptpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/script/v1"
 )
 
 var (

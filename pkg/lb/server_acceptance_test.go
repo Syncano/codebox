@@ -18,11 +18,12 @@ import (
 	. "github.com/smartystreets/goconvey/convey"
 	"google.golang.org/grpc"
 
-	"github.com/Syncano/codebox/pkg/docker"
-	"github.com/Syncano/codebox/pkg/script"
 	repopb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/filerepo/v1"
 	lbpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/lb/v1"
 	scriptpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/script/v1"
+
+	"github.com/Syncano/codebox/pkg/docker"
+	"github.com/Syncano/codebox/pkg/script"
 )
 
 func readURL(url string) ([]byte, error) {
@@ -82,7 +83,7 @@ func TestLBAcceptance(t *testing.T) {
 
 			upStream.Send(&repopb.UploadRequest{
 				Value: &repopb.UploadRequest_Meta{
-					Meta: &repopb.UploadRequest_MetaMessage{Key: "hash"},
+					Meta: &repopb.UploadMetaMessage{Key: "hash"},
 				},
 			})
 			_, err = upStream.Recv()
@@ -90,7 +91,7 @@ func TestLBAcceptance(t *testing.T) {
 
 			upStream.Send(&repopb.UploadRequest{
 				Value: &repopb.UploadRequest_Chunk{
-					Chunk: &repopb.UploadRequest_ChunkMessage{
+					Chunk: &repopb.UploadChunkMessage{
 						Name: "file.js",
 						Data: []byte(`
 setTimeout(function() {
@@ -114,22 +115,22 @@ setTimeout(function() {
 			So(r.Ok, ShouldBeTrue)
 
 			// Simple request.
-			requestMeta := scriptpb.RunRequest_MetaMessage{
-				Runtime:    "nodejs_v8",
-				SourceHash: "hash",
-				Options: &scriptpb.RunRequest_MetaMessage_OptionsMessage{
-					Entrypoint: "file.js",
-					Args:       []byte(`{"argKey":"argVal"}`),
-					Meta:       []byte(`{"metaKey":"metaVal"}`),
-					Config:     []byte(`{"configKey":"configVal"}`),
+			lbMetaReq := lbpb.RunRequest{
+				Value: &lbpb.RunRequest_Meta{
+					Meta: &lbpb.RunMeta{},
 				},
 			}
 
-			runRequest := lbpb.RunRequest{
-				Value: &lbpb.RunRequest_Request{
-					Request: &scriptpb.RunRequest{
-						Value: &scriptpb.RunRequest_Meta{
-							Meta: &requestMeta,
+			scriptMetaReq := lbpb.RunRequest{
+				Value: &lbpb.RunRequest_ScriptMeta{
+					ScriptMeta: &scriptpb.RunMeta{
+						Runtime:    "nodejs_v8",
+						SourceHash: "hash",
+						Options: &scriptpb.RunMeta_Options{
+							Entrypoint: "file.js",
+							Args:       []byte(`{"argKey":"argVal"}`),
+							Meta:       []byte(`{"metaKey":"metaVal"}`),
+							Config:     []byte(`{"configKey":"configVal"}`),
 						},
 					},
 				},
@@ -140,7 +141,9 @@ setTimeout(function() {
 			Convey("run single script", func() {
 				runStream, err := scriptClient.Run(context.Background())
 				So(err, ShouldBeNil)
-				err = runStream.Send(&runRequest)
+				err = runStream.Send(&lbMetaReq)
+				So(err, ShouldBeNil)
+				err = runStream.Send(&scriptMetaReq)
 				So(err, ShouldBeNil)
 				runStream.CloseSend()
 
@@ -158,7 +161,9 @@ setTimeout(function() {
 			Convey("finishes running scripts during shutdown", func() {
 				runStream, err := scriptClient.Run(context.Background())
 				So(err, ShouldBeNil)
-				err = runStream.Send(&runRequest)
+				err = runStream.Send(&lbMetaReq)
+				So(err, ShouldBeNil)
+				err = runStream.Send(&scriptMetaReq)
 				So(err, ShouldBeNil)
 				runStream.CloseSend()
 
@@ -190,7 +195,8 @@ setTimeout(function() {
 					go func() {
 						runStream, _ := scriptClient.Run(context.Background())
 
-						runStream.Send(&runRequest)
+						runStream.Send(&lbMetaReq)
+						runStream.Send(&scriptMetaReq)
 						runStream.CloseSend()
 						result, _ := runStream.Recv()
 						resCh <- result

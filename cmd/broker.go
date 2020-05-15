@@ -18,12 +18,13 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/keepalive"
 
+	pb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/broker/v1"
+
 	"github.com/Syncano/codebox/cmd/amqp"
 	"github.com/Syncano/codebox/pkg/broker"
 	"github.com/Syncano/codebox/pkg/celery"
 	"github.com/Syncano/codebox/pkg/sys"
 	"github.com/Syncano/codebox/pkg/version"
-	pb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/broker/v1"
 )
 
 var (

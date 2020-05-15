@@ -17,9 +17,10 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	pb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/script/v1"
+
 	. "github.com/Syncano/codebox/pkg/script"
 	"github.com/Syncano/codebox/pkg/script/mocks"
-	pb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/script/v1"
 )
 
 func TestServer(t *testing.T) {
@@ -36,13 +37,12 @@ func TestServer(t *testing.T) {
 
 			Convey("given proper meta and chunk data", func() {
 				r1 := pb.RunRequest{Value: &pb.RunRequest_Meta{
-					Meta: &pb.RunRequest_MetaMessage{
-						RequestId: "reqID",
-						Runtime:   "runtime", SourceHash: "hash", UserId: "userID",
+					Meta: &pb.RunMeta{
+						Runtime: "runtime", SourceHash: "hash", UserId: "userID",
 						Environment: "env"},
 				}}
 				r2 := pb.RunRequest{Value: &pb.RunRequest_Chunk{
-					Chunk: &pb.RunRequest_ChunkMessage{
+					Chunk: &pb.RunChunk{
 						Name: "someName",
 						Data: []byte("someData"),
 					},
@@ -98,15 +98,14 @@ func TestServer(t *testing.T) {
 			})
 			Convey("given proper meta and args in chunk runs script", func() {
 				r1 := pb.RunRequest{Value: &pb.RunRequest_Meta{
-					Meta: &pb.RunRequest_MetaMessage{
-						RequestId: "reqID",
-						Runtime:   "runtime", SourceHash: "hash", UserId: "userID",
+					Meta: &pb.RunMeta{
+						Runtime: "runtime", SourceHash: "hash", UserId: "userID",
 						Environment: "env"},
 				}}
 				r2 := pb.RunRequest{Value: &pb.RunRequest_Chunk{
-					Chunk: &pb.RunRequest_ChunkMessage{
-						Name: ChunkARGS,
+					Chunk: &pb.RunChunk{
 						Data: []byte("someData"),
+						Type: pb.RunChunk_ARGS,
 					},
 				}}
 				stream.On("Recv").Return(&r1, nil).Once()
