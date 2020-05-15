@@ -183,7 +183,7 @@ func (s *Server) Run(stream pb.ScriptRunner_RunServer) error {
 
 func (s *Server) processRun(ctx context.Context, logger logrus.FieldLogger, stream pb.ScriptRunner_RunServer, // nolint: gocyclo
 	runMeta *pb.RunMeta, scriptMeta *scriptpb.RunMeta) error {
-	logger = logrus.WithFields(logrus.Fields{
+	logger = logger.WithFields(logrus.Fields{
 		"meta":       runMeta,
 		"runtime":    scriptMeta.Runtime,
 		"sourceHash": scriptMeta.SourceHash,
