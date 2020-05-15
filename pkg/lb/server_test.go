@@ -44,11 +44,14 @@ func TestServerMethods(t *testing.T) {
 
 		Convey("given mocked Run stream, Run", func() {
 			stream := new(mocks.ScriptRunner_RunServer)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			stream.On("Context").Return(ctx)
 
 			Convey("does nothing when meta is not received", func() {
 				stream.On("Recv").Return(nil, io.EOF).Once()
 				e := s.Run(stream)
-				So(e, ShouldBeNil)
+				So(e, ShouldEqual, ErrInvalidArgument)
 			})
 			Convey("propagates error on Recv", func() {
 				stream.On("Recv").Return(nil, err).Once()
@@ -56,38 +59,24 @@ func TestServerMethods(t *testing.T) {
 				So(e, ShouldEqual, err)
 			})
 			Convey("given valid request", func() {
-				ctx, cancel := context.WithCancel(context.Background())
-				defer cancel()
-				stream.On("Context").Return(ctx)
 				validReq1 := &pb.RunRequest{
 					Value: &pb.RunRequest_Meta{
-						Meta: &pb.RunRequest_MetaMessage{
-							RequestId: "reqID",
-						},
+						Meta: &pb.RunMeta{},
 					},
 				}
 				validReq2 := &pb.RunRequest{
-					Value: &pb.RunRequest_Request{
-						Request: &scriptpb.RunRequest{
-							Value: &scriptpb.RunRequest_Meta{
-								Meta: &scriptpb.RunRequest_MetaMessage{
-									RequestId:  "reqID",
-									Runtime:    "runtime",
-									SourceHash: "hash",
-								},
-							},
+					Value: &pb.RunRequest_ScriptMeta{
+						ScriptMeta: &scriptpb.RunMeta{
+							Runtime:    "runtime",
+							SourceHash: "hash",
 						},
 					},
 				}
 				validReq3 := &pb.RunRequest{
-					Value: &pb.RunRequest_Request{
-						Request: &scriptpb.RunRequest{
-							Value: &scriptpb.RunRequest_Chunk{
-								Chunk: &scriptpb.RunRequest_ChunkMessage{
-									Name: "key",
-									Data: []byte("value"),
-								},
-							},
+					Value: &pb.RunRequest_ScriptChunk{
+						ScriptChunk: &scriptpb.RunChunk{
+							Name: "key",
+							Data: []byte("value"),
 						},
 					},
 				}
@@ -95,8 +84,6 @@ func TestServerMethods(t *testing.T) {
 				Convey("returns error when no workers are available", func() {
 					stream.On("Recv").Return(validReq1, nil).Once()
 					stream.On("Recv").Return(validReq2, nil).Once()
-					stream.On("Recv").Return(validReq3, nil).Once()
-					stream.On("Recv").Return(nil, io.EOF).Once()
 					repo.On("Get", "hash").Return("/path")
 
 					e := s.Run(stream)
@@ -125,16 +112,13 @@ func TestServerMethods(t *testing.T) {
 						s.limiter.Lock(context.Background(), "ckey", 1)
 						stream.On("Recv").Return(&pb.RunRequest{
 							Value: &pb.RunRequest_Meta{
-								Meta: &pb.RunRequest_MetaMessage{
-									RequestId:        "reqID",
+								Meta: &pb.RunMeta{
 									ConcurrencyKey:   "ckey",
 									ConcurrencyLimit: 1,
 								},
 							},
 						}, nil).Once()
 						stream.On("Recv").Return(validReq2, nil).Once()
-						stream.On("Recv").Return(validReq3, nil).Once()
-						stream.On("Recv").Return(nil, io.EOF).Once()
 						repo.On("Get", "hash").Return("/path")
 						e := s.Run(stream)
 						So(e, ShouldResemble, status.Error(codes.ResourceExhausted, context.Canceled.Error()))
@@ -142,15 +126,13 @@ func TestServerMethods(t *testing.T) {
 					Convey("given meta, unlocks when done", func() {
 						stream.On("Recv").Return(&pb.RunRequest{
 							Value: &pb.RunRequest_Meta{
-								Meta: &pb.RunRequest_MetaMessage{
+								Meta: &pb.RunMeta{
 									ConcurrencyKey:   "ckey",
 									ConcurrencyLimit: 1,
 								},
 							},
 						}, nil).Once()
 						stream.On("Recv").Return(validReq2, nil).Once()
-						stream.On("Recv").Return(validReq3, nil).Once()
-						stream.On("Recv").Return(nil, io.EOF).Once()
 						repo.On("Get", "hash").Return("/path")
 						repoCli.On("Exists", mock.Anything, mock.Anything).Return(nil, err)
 						e := s.Run(stream)
@@ -160,8 +142,6 @@ func TestServerMethods(t *testing.T) {
 					Convey("given simple valid request", func() {
 						stream.On("Recv").Return(validReq1, nil).Once()
 						stream.On("Recv").Return(validReq2, nil).Once()
-						stream.On("Recv").Return(validReq3, nil).Once()
-						stream.On("Recv").Return(nil, io.EOF).Once()
 
 						Convey("given successful repo Get", func() {
 							repo.On("Get", "hash").Return("/path")
@@ -174,6 +154,8 @@ func TestServerMethods(t *testing.T) {
 								So(e, ShouldEqual, err)
 							})
 							Convey("given source that exists on worker", func() {
+								stream.On("Recv").Return(validReq3, nil).Once()
+								stream.On("Recv").Return(nil, io.EOF).Once()
 								repoCli.On("Exists", mock.Anything, mock.Anything).Return(&repopb.ExistsResponse{Ok: true}, nil)
 
 								scriptCli.On("Run", mock.Anything).Return(runStream, nil).Once()
@@ -232,6 +214,8 @@ func TestServerMethods(t *testing.T) {
 									So(e, ShouldEqual, err)
 								})
 								Convey("proceeds on successful upload source", func() {
+									stream.On("Recv").Return(validReq3, nil).Once()
+									stream.On("Recv").Return(nil, io.EOF).Once()
 									uploadStream := new(repomocks.Repo_UploadClient)
 									repoCli.On("Upload", mock.Anything).Return(uploadStream, nil)
 									uploadStream.On("Send", mock.Anything).Return(nil).Times(3)

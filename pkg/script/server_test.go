@@ -9,16 +9,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Syncano/codebox/pkg/filerepo"
-
 	"github.com/sirupsen/logrus"
 	. "github.com/smartystreets/goconvey/convey"
 	"github.com/stretchr/testify/mock"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/Syncano/codebox/pkg/filerepo"
 	. "github.com/Syncano/codebox/pkg/script"
 	"github.com/Syncano/codebox/pkg/script/mocks"
+	"github.com/Syncano/codebox/pkg/util"
 	pb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/script/v1"
 )
 
@@ -32,17 +32,17 @@ func TestServer(t *testing.T) {
 
 		Convey("given mocked Run stream, Run", func() {
 			stream := new(mocks.ScriptRunner_RunServer)
-			stream.On("Context").Return(context.Background())
+			ctx, reqID := util.AddRequestID(context.Background(), func() string { return "reqID" })
+			stream.On("Context").Return(ctx)
 
 			Convey("given proper meta and chunk data", func() {
 				r1 := pb.RunRequest{Value: &pb.RunRequest_Meta{
-					Meta: &pb.RunRequest_MetaMessage{
-						RequestId: "reqID",
-						Runtime:   "runtime", SourceHash: "hash", UserId: "userID",
+					Meta: &pb.RunMeta{
+						Runtime: "runtime", SourceHash: "hash", UserId: "userID",
 						Environment: "env"},
 				}}
 				r2 := pb.RunRequest{Value: &pb.RunRequest_Chunk{
-					Chunk: &pb.RunRequest_ChunkMessage{
+					Chunk: &pb.RunChunk{
 						Name: "someName",
 						Data: []byte("someData"),
 					},
@@ -52,7 +52,7 @@ func TestServer(t *testing.T) {
 				stream.On("Recv").Return(nil, io.EOF).Once()
 
 				Convey("runs script and returns response", func() {
-					runner.On("Run", mock.Anything, mock.Anything, "runtime", "reqID", "hash", "env", "userID", mock.Anything).Return(
+					runner.On("Run", mock.Anything, mock.Anything, "runtime", reqID, "hash", "env", "userID", mock.Anything).Return(
 						&Result{Code: 1, Took: 2 * time.Millisecond, Response: &HTTPResponse{StatusCode: 204}}, nil)
 					stream.On("Send", mock.Anything).Return(nil).Once()
 					e := server.Run(stream)
@@ -64,7 +64,7 @@ func TestServer(t *testing.T) {
 				})
 				Convey("runs script and returns response in chunks if needed", func() {
 					chunkSize := 2 * 1024 * 1024
-					runner.On("Run", mock.Anything, mock.Anything, "runtime", "reqID", "hash", "env", "userID", mock.Anything).Return(
+					runner.On("Run", mock.Anything, mock.Anything, "runtime", reqID, "hash", "env", "userID", mock.Anything).Return(
 						&Result{Code: 1, Took: 2 * time.Millisecond, Response: &HTTPResponse{StatusCode: 204, Content: []byte(strings.Repeat("a", 3*chunkSize/2))}}, nil)
 					stream.On("Send", mock.Anything).Return(nil).Twice()
 					e := server.Run(stream)
@@ -79,18 +79,18 @@ func TestServer(t *testing.T) {
 					So(len(msg2.Response.Content), ShouldEqual, chunkSize/2)
 				})
 				Convey("ignores Run error when response is returned", func() {
-					runner.On("Run", mock.Anything, mock.Anything, "runtime", "reqID", "hash", "env", "userID", mock.Anything).Return(&Result{}, err)
+					runner.On("Run", mock.Anything, mock.Anything, "runtime", reqID, "hash", "env", "userID", mock.Anything).Return(&Result{}, err)
 					stream.On("Send", mock.Anything).Return(nil).Once()
 					e := server.Run(stream)
 					So(e, ShouldBeNil)
 				})
 				Convey("propagates Run error when no response is returned", func() {
-					runner.On("Run", mock.Anything, mock.Anything, "runtime", "reqID", "hash", "env", "userID", mock.Anything).Return(nil, err)
+					runner.On("Run", mock.Anything, mock.Anything, "runtime", reqID, "hash", "env", "userID", mock.Anything).Return(nil, err)
 					e := server.Run(stream)
 					So(e, ShouldResemble, status.Error(codes.Internal, err.Error()))
 				})
 				Convey("propagates Send error", func() {
-					runner.On("Run", mock.Anything, mock.Anything, "runtime", "reqID", "hash", "env", "userID", mock.Anything).Return(&Result{}, nil)
+					runner.On("Run", mock.Anything, mock.Anything, "runtime", reqID, "hash", "env", "userID", mock.Anything).Return(&Result{}, nil)
 					stream.On("Send", mock.Anything).Return(err).Once()
 					e := server.Run(stream)
 					So(e, ShouldEqual, err)
@@ -98,15 +98,14 @@ func TestServer(t *testing.T) {
 			})
 			Convey("given proper meta and args in chunk runs script", func() {
 				r1 := pb.RunRequest{Value: &pb.RunRequest_Meta{
-					Meta: &pb.RunRequest_MetaMessage{
-						RequestId: "reqID",
-						Runtime:   "runtime", SourceHash: "hash", UserId: "userID",
+					Meta: &pb.RunMeta{
+						Runtime: "runtime", SourceHash: "hash", UserId: "userID",
 						Environment: "env"},
 				}}
 				r2 := pb.RunRequest{Value: &pb.RunRequest_Chunk{
-					Chunk: &pb.RunRequest_ChunkMessage{
-						Name: ChunkARGS,
+					Chunk: &pb.RunChunk{
 						Data: []byte("someData"),
+						Type: pb.RunChunk_ARGS,
 					},
 				}}
 				stream.On("Recv").Return(&r1, nil).Once()

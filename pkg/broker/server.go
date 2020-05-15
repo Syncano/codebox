@@ -15,8 +15,10 @@ import (
 	census_trace "go.opencensus.io/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
+	"github.com/Syncano/codebox/pkg/common"
 	"github.com/Syncano/codebox/pkg/sys"
 	"github.com/Syncano/codebox/pkg/util"
 	brokerpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/broker/v1"
@@ -139,36 +141,92 @@ func (s *Server) Shutdown() {
 	}
 }
 
-// Run runs script in secure environment.
-func (s *Server) Run(request *brokerpb.RunRequest, stream brokerpb.ScriptRunner_RunServer) error {
-	peerAddr := util.PeerAddr(stream.Context())
-	start := time.Now()
-	logger := logrus.WithField("peer", peerAddr)
+func (s *Server) SimpleRun(req *brokerpb.SimpleRunRequest, stream brokerpb.ScriptRunner_SimpleRunServer) error {
+	ctx, reqID := util.AddDefaultRequestID(stream.Context())
+	peerAddr := util.PeerAddr(ctx)
+	logger := logrus.WithFields(logrus.Fields{"peer": peerAddr, "reqID": reqID})
 
-	if len(request.GetRequest()) < 1 || request.GetRequest()[0].GetMeta() == nil || request.LbMeta == nil {
+	return s.processRun(ctx, logger, req.Meta, req.LbMeta, req.ScriptMeta, nil, stream)
+}
+
+func (s *Server) Run(stream brokerpb.ScriptRunner_RunServer) error {
+	var (
+		meta       *brokerpb.RunMeta
+		lbMeta     *lbpb.RunMeta
+		scriptMeta *scriptpb.RunMeta
+	)
+
+	ctx, reqID := util.AddDefaultRequestID(stream.Context())
+	peerAddr := util.PeerAddr(ctx)
+	logger := logrus.WithFields(logrus.Fields{"peer": peerAddr, "reqID": reqID})
+
+	for {
+		in, err := stream.Recv()
+		if err == io.EOF {
+			break
+		}
+
+		if err != nil {
+			return err
+		}
+
+		switch v := in.Value.(type) {
+		case *brokerpb.RunRequest_Meta:
+			meta = v.Meta
+		case *brokerpb.RunRequest_LbMeta:
+			lbMeta = v.LbMeta
+		case *brokerpb.RunRequest_ScriptMeta:
+			scriptMeta = v.ScriptMeta
+		default:
+			logger.Error("grpc:broker:Run error parsing input")
+			return ErrInvalidArgument
+		}
+
+		if meta != nil && lbMeta != nil && scriptMeta != nil {
+			break
+		}
+	}
+
+	chunkReader := common.NewChunkReader(func() (*scriptpb.RunChunk, error) {
+		req, err := stream.Recv()
+		if err != nil {
+			return nil, err
+		}
+
+		chunk := req.GetScriptChunk()
+		if chunk == nil {
+			return nil, ErrInvalidArgument
+		}
+
+		return chunk, nil
+	})
+
+	return s.processRun(ctx, logger, meta, lbMeta, scriptMeta, chunkReader, stream)
+}
+
+func (s *Server) processRun(ctx context.Context, logger logrus.FieldLogger,
+	meta *brokerpb.RunMeta, lbMeta *lbpb.RunMeta, scriptMeta *scriptpb.RunMeta, chunkReader *common.ChunkReader,
+	stream StreamReponder) error {
+	if meta == nil || lbMeta == nil || scriptMeta == nil {
 		logger.Error("grpc:broker:Run error parsing input")
 		return ErrInvalidArgument
 	}
 
-	scriptMeta := request.GetRequest()[0].GetMeta()
+	start := time.Now()
 
 	// Create new context and add trace metadata to it to process traces even for canceled contexts.
-	ctx, cancel := context.WithTimeout(
-		census_trace.NewContext(context.Background(), census_trace.FromContext(stream.Context())),
+	newCtx, cancel := context.WithTimeout(
+		census_trace.NewContext(context.Background(), census_trace.FromContext(ctx)),
 		s.options.MaxTimeout)
-
-	if request.LbMeta == nil {
-		request.LbMeta = &lbpb.RunRequest_MetaMessage{}
+	if md, ok := metadata.FromOutgoingContext(ctx); ok {
+		newCtx = metadata.NewOutgoingContext(newCtx, md)
 	}
 
-	if request.LbMeta.RequestId == "" {
-		request.LbMeta.RequestId = util.GenerateShortKey()
-	}
+	ctx = newCtx
 
 	logger = logger.WithFields(logrus.Fields{
-		"reqID":      request.LbMeta.RequestId,
-		"cKey":       request.LbMeta.ConcurrencyKey,
-		"cLimit":     request.LbMeta.ConcurrencyLimit,
+		"cKey":       lbMeta.ConcurrencyKey,
+		"cLimit":     lbMeta.ConcurrencyLimit,
 		"runtime":    scriptMeta.Runtime,
 		"sourceHash": scriptMeta.SourceHash,
 		"entryPoint": scriptMeta.GetOptions().GetEntrypoint(),
@@ -177,7 +235,7 @@ func (s *Server) Run(request *brokerpb.RunRequest, stream brokerpb.ScriptRunner_
 		"userID":     scriptMeta.UserId,
 	})
 
-	runStream, err := s.processRun(ctx, logger, request)
+	lbStream, err := s.sendRunToLoadbalancer(ctx, logger, meta, lbMeta, scriptMeta, chunkReader)
 	if err != nil {
 		logger.WithError(err).Warn("grpc:broker:Run")
 		cancel()
@@ -185,8 +243,8 @@ func (s *Server) Run(request *brokerpb.RunRequest, stream brokerpb.ScriptRunner_
 		return err
 	}
 
-	processFunc := func(ctx context.Context, retStream brokerpb.ScriptRunner_RunServer) error {
-		trace, err := s.processResponse(ctx, logger, start, request.GetMeta(), runStream, retStream)
+	processFunc := func(ctx context.Context, retStream StreamReponder) error {
+		trace, err := s.processResponse(ctx, logger, start, meta, lbStream, retStream)
 
 		cancel()
 
@@ -205,7 +263,7 @@ func (s *Server) Run(request *brokerpb.RunRequest, stream brokerpb.ScriptRunner_
 		return err
 	}
 
-	if request.GetMeta().Sync {
+	if meta.Sync {
 		// Process response synchronously.
 		return processFunc(ctx, stream)
 	}
@@ -216,16 +274,13 @@ func (s *Server) Run(request *brokerpb.RunRequest, stream brokerpb.ScriptRunner_
 	return nil
 }
 
-func (s *Server) processRun(ctx context.Context, logger logrus.FieldLogger, request *brokerpb.RunRequest) (lbpb.ScriptRunner_RunClient, error) {
-	meta := request.GetMeta()
-	lbMeta := request.GetLbMeta()
-	scriptMeta := request.GetRequest()[0].GetMeta()
-
+func (s *Server) sendRunToLoadbalancer(ctx context.Context, logger logrus.FieldLogger,
+	meta *brokerpb.RunMeta, lbMeta *lbpb.RunMeta, scriptMeta *scriptpb.RunMeta, chunkReader *common.ChunkReader) (lbpb.ScriptRunner_RunClient, error) {
 	lbID := util.Hash(lbMeta.GetConcurrencyKey()) % uint32(len(s.lbServers))
 	lb := s.lbServers[lbID]
 	logger = logger.WithFields(logrus.Fields{"lb": lb, "sourceHash": scriptMeta.SourceHash, "envHash": scriptMeta.Environment})
 
-	var stream lbpb.ScriptRunner_RunClient
+	var lbStream lbpb.ScriptRunner_RunClient
 
 	// Start processing and retry in case of network error.
 	canceled, err := util.RetryNotCancelled(s.options.LBRetry, lbRetrySleep, func() error {
@@ -244,28 +299,27 @@ func (s *Server) processRun(ctx context.Context, logger logrus.FieldLogger, requ
 		}
 
 		var err error
-		stream, err = lb.lbCli.Run(ctx)
+		lbStream, err = lb.lbCli.Run(ctx)
 		if err != nil {
 			return fmt.Errorf("lb run error: %w", err)
 		}
-		if err := stream.Send(&lbpb.RunRequest{
+		if err := lbStream.Send(&lbpb.RunRequest{
 			Value: &lbpb.RunRequest_Meta{
 				Meta: lbMeta,
 			},
 		}); err != nil {
-			return fmt.Errorf("sending meta failed: %w", err)
+			return fmt.Errorf("sending lb meta failed: %w", err)
 		}
 
-		for _, scriptReq := range request.GetRequest() {
-			if err := stream.Send(&lbpb.RunRequest{
-				Value: &lbpb.RunRequest_Request{
-					Request: scriptReq,
-				},
-			}); err != nil {
-				return fmt.Errorf("sending script request failed: %w", err)
-			}
+		if err := lbStream.Send(&lbpb.RunRequest{
+			Value: &lbpb.RunRequest_ScriptMeta{
+				ScriptMeta: scriptMeta,
+			},
+		}); err != nil {
+			return fmt.Errorf("sending script meta failed: %w", err)
 		}
-		return stream.CloseSend()
+
+		return nil
 	})
 
 	if err != nil {
@@ -276,11 +330,48 @@ func (s *Server) processRun(ctx context.Context, logger logrus.FieldLogger, requ
 		return nil, err
 	}
 
+	// Send remaining script chunks
+	if chunkReader != nil {
+		var chunk *scriptpb.RunChunk
+
+		for {
+			chunk, err = chunkReader.Get()
+			if err == io.EOF {
+				err = nil
+				break
+			}
+
+			if err != nil {
+				err = fmt.Errorf("reading script chunk failed: %w", err)
+				break
+			}
+
+			if err = lbStream.Send(&lbpb.RunRequest{
+				Value: &lbpb.RunRequest_ScriptChunk{
+					ScriptChunk: chunk,
+				},
+			}); err != nil {
+				err = fmt.Errorf("sending script request failed: %w", err)
+				break
+			}
+		}
+
+		if err != nil {
+			if !util.IsContextError(err) {
+				logrus.WithError(err).Error("grpc:lb:Run error")
+			}
+
+			return nil, err
+		}
+	}
+
+	_ = lbStream.CloseSend()
+
 	if err := s.updateTrace(meta.GetTraceId(), meta.GetTrace()); err != nil {
 		logger.WithError(err).Warn("UpdateTrace failed")
 	}
 
-	return stream, nil
+	return lbStream, nil
 }
 
 func uploadChunks(stream repopb.Repo_UploadClient, key string, resCh <-chan *util.DownloadResult, files map[string]string) error {
@@ -289,7 +380,7 @@ func uploadChunks(stream repopb.Repo_UploadClient, key string, resCh <-chan *uti
 	// Send meta header.
 	if err := stream.Send(&repopb.UploadRequest{
 		Value: &repopb.UploadRequest_Meta{
-			Meta: &repopb.UploadRequest_MetaMessage{Key: key},
+			Meta: &repopb.UploadMetaMessage{Key: key},
 		},
 	}); err != nil {
 		return err
@@ -332,7 +423,7 @@ func uploadChunks(stream repopb.Repo_UploadClient, key string, resCh <-chan *uti
 
 			if err := stream.Send(&repopb.UploadRequest{
 				Value: &repopb.UploadRequest_Chunk{
-					Chunk: &repopb.UploadRequest_ChunkMessage{
+					Chunk: &repopb.UploadChunkMessage{
 						Name: name,
 						Data: buf[:n],
 					},
@@ -422,8 +513,8 @@ func (s *Server) uploadFiles(ctx context.Context, lb *loadBalancer, key string, 
 	return err
 }
 
-func (s *Server) processResponse(ctx context.Context, logger logrus.FieldLogger, start time.Time, meta *brokerpb.RunRequest_MetaMessage,
-	stream lbpb.ScriptRunner_RunClient, retStream brokerpb.ScriptRunner_RunServer) (*ScriptTrace, error) {
+func (s *Server) processResponse(ctx context.Context, logger logrus.FieldLogger, start time.Time, meta *brokerpb.RunMeta,
+	stream lbpb.ScriptRunner_RunClient, retStream StreamReponder) (*ScriptTrace, error) {
 	retSend := func(r *scriptpb.RunResponse) {
 		if retStream != nil {
 			e := retStream.Send(r)

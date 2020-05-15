@@ -28,7 +28,11 @@ var (
 
 // Exists checks if file was defined in file repo.
 func (s *Server) Exists(ctx context.Context, in *pb.ExistsRequest) (*pb.ExistsResponse, error) {
-	logrus.WithFields(logrus.Fields{"key": in.GetKey(), "peer": util.PeerAddr(ctx)}).Debug("grpc:filerepo:Exists")
+	ctx, reqID := util.AddDefaultRequestID(ctx)
+	peerAddr := util.PeerAddr(ctx)
+	logger := logrus.WithFields(logrus.Fields{"peer": peerAddr, "reqID": reqID})
+
+	logger.WithField("key", in.GetKey()).Debug("grpc:filerepo:Exists")
 
 	res := new(pb.ExistsResponse)
 	res.Ok = s.Repo.Get(in.GetKey()) != ""
@@ -38,12 +42,14 @@ func (s *Server) Exists(ctx context.Context, in *pb.ExistsRequest) (*pb.ExistsRe
 
 // Upload streams file(s) to server.
 func (s *Server) Upload(stream pb.Repo_UploadServer) error {
-	peerAddr := util.PeerAddr(stream.Context())
+	ctx, reqID := util.AddDefaultRequestID(stream.Context())
+	peerAddr := util.PeerAddr(ctx)
+	logger := logrus.WithFields(logrus.Fields{"peer": peerAddr, "reqID": reqID})
+
 	errCh := make(chan error, 1)
-	logger := logrus.WithField("peer", peerAddr)
 
 	var (
-		meta      *pb.UploadRequest_MetaMessage
+		meta      *pb.UploadMetaMessage
 		chunkCh   chan []byte
 		chunkName string
 		lockCh    chan struct{}
@@ -122,7 +128,7 @@ func (s *Server) Upload(stream pb.Repo_UploadServer) error {
 	return nil
 }
 
-func (s *Server) processChunkUpload(key, storeKey, chunkName string, chunkCh chan []byte, chunk *pb.UploadRequest_ChunkMessage,
+func (s *Server) processChunkUpload(key, storeKey, chunkName string, chunkCh chan []byte, chunk *pb.UploadChunkMessage,
 	errCh chan error) (newChunkName string, newChunkCh chan []byte, err error) {
 	// If we are to start a new chunk, close previous chunk channel.
 	if chunkCh != nil && chunk.GetName() != chunkName {

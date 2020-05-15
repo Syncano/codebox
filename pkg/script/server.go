@@ -18,7 +18,6 @@ import (
 
 const (
 	// ChunkARGS is used to define script ARGS in chunk message.
-	ChunkARGS = "__args__"
 	chunkSize = 2 * 1024 * 1024
 )
 
@@ -58,9 +57,12 @@ func NewServer(runner Runner) *Server {
 
 // Run runs script in secure environment of worker.
 func (s *Server) Run(stream pb.ScriptRunner_RunServer) error {
-	var meta *pb.RunRequest_MetaMessage
+	var (
+		meta     *pb.RunMeta
+		argsData *File
+	)
 
-	chunkData := make(map[string]File)
+	chunkData := make(map[string]*File)
 
 	for {
 		in, err := stream.Recv()
@@ -76,10 +78,17 @@ func (s *Server) Run(stream pb.ScriptRunner_RunServer) error {
 		case *pb.RunRequest_Meta:
 			meta = v.Meta
 		case *pb.RunRequest_Chunk:
-			chunkData[v.Chunk.Name] = File{
+			f := File{
 				Filename:    v.Chunk.Filename,
 				ContentType: v.Chunk.ContentType,
 				Data:        v.Chunk.Data,
+			}
+
+			switch v.Chunk.Type {
+			case pb.RunChunk_GENERIC:
+				chunkData[v.Chunk.Name] = &f
+			case pb.RunChunk_ARGS:
+				argsData = &f
 			}
 		}
 	}
@@ -88,14 +97,11 @@ func (s *Server) Run(stream pb.ScriptRunner_RunServer) error {
 		return nil
 	}
 
-	if meta.RequestId == "" {
-		meta.RequestId = util.GenerateShortKey()
-	}
-
-	peerAddr := util.PeerAddr(stream.Context())
+	ctx, reqID := util.AddDefaultRequestID(stream.Context())
+	peerAddr := util.PeerAddr(ctx)
 	logger := logrus.WithFields(logrus.Fields{
 		"peer":       peerAddr,
-		"reqID":      meta.RequestId,
+		"reqID":      reqID,
 		"runtime":    meta.Runtime,
 		"sourceHash": meta.SourceHash,
 		"userID":     meta.UserId,
@@ -107,19 +113,15 @@ func (s *Server) Run(stream pb.ScriptRunner_RunServer) error {
 	opts := meta.GetOptions()
 
 	// Use chunk ARGS, fallback to run args.
-	argsData, ok := chunkData[ChunkARGS]
-
 	var args []byte
 
-	if ok {
+	if argsData != nil {
 		args = argsData.Data
-
-		delete(chunkData, ChunkARGS)
 	} else {
 		args = opts.GetArgs()
 	}
 
-	ret, err := s.Runner.Run(stream.Context(), logger, meta.Runtime, meta.RequestId, meta.SourceHash, meta.Environment, meta.UserId,
+	ret, err := s.Runner.Run(ctx, logger, meta.Runtime, reqID, meta.SourceHash, meta.Environment, meta.UserId,
 		&RunOptions{
 			EntryPoint:  opts.GetEntrypoint(),
 			OutputLimit: opts.GetOutputLimit(),
@@ -140,7 +142,7 @@ func (s *Server) Run(stream pb.ScriptRunner_RunServer) error {
 
 	// Send response if we got any.
 	if ret != nil {
-		stats.Record(stream.Context(), overheadDuration.M(ret.Overhead.Seconds())) //  docker overhead
+		stats.Record(ctx, overheadDuration.M(ret.Overhead.Seconds())) //  docker overhead
 
 		logger.WithField("ret", ret).Info("grpc:script:Run")
 
@@ -158,12 +160,12 @@ func (s *Server) Run(stream pb.ScriptRunner_RunServer) error {
 func (s *Server) sendResponse(stream pb.ScriptRunner_RunServer, ret *Result) error {
 	// Prepare response.
 	var (
-		httpResponse *pb.HTTPResponseMessage
+		httpResponse *pb.HTTPResponse
 		content      []byte
 	)
 
 	if ret.Response != nil {
-		httpResponse = &pb.HTTPResponseMessage{
+		httpResponse = &pb.HTTPResponse{
 			StatusCode:  int32(ret.Response.StatusCode),
 			ContentType: ret.Response.ContentType,
 			Content:     ret.Response.Content,
@@ -202,7 +204,7 @@ func (s *Server) sendResponse(stream pb.ScriptRunner_RunServer, ret *Result) err
 		}
 
 		responses = append(responses, &pb.RunResponse{
-			Response: &pb.HTTPResponseMessage{Content: content[:cut]},
+			Response: &pb.HTTPResponse{Content: content[:cut]},
 		})
 		content = content[cut:]
 	}

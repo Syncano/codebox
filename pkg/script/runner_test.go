@@ -187,7 +187,7 @@ func TestNewRunner(t *testing.T) {
 							})
 						})
 						Convey("with files", func() {
-							files := map[string]File{"file": {Data: []byte("content")}}
+							files := map[string]*File{"file": {Data: []byte("content")}}
 							cont.Hash = fmt.Sprintf("hash/user//%x", util.Hash("main.js"))
 							r.containerCache.Set(cont.Hash, cont)
 							_, e := r.Run(context.Background(), logrus.StandardLogger(), defaultRuntime, "reqID", "hash", "", "user", &RunOptions{Files: files})
@@ -207,7 +207,7 @@ func TestNewRunner(t *testing.T) {
 						So(cont2.ID, ShouldEqual, cID)
 					})
 					Convey("propagates and cleans up errors", func() {
-						files := map[string]File{"file": {Data: []byte("content")}}
+						files := map[string]*File{"file": {Data: []byte("content")}}
 						r.containerPool[defaultRuntime] <- cont
 						expectedErr := err
 						env := ""
