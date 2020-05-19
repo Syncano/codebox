@@ -28,22 +28,22 @@ func TestLRUSetCache(t *testing.T) {
 			c.StopJanitor()
 
 			Convey("Get/Contains of expired item returns nil/false", func() {
-				c.Set("key1", "value1")
+				c.Add("key1", "value1")
 				c.valueMap["key1"].(map[interface{}]*Item)["value1"].expiration = 1
 				So(c.Get("key1"), ShouldBeNil)
 				So(c.Contains("key1", "val"), ShouldBeFalse)
 			})
 			Convey("Refresh returns false for expired item", func() {
-				c.Set("key1", "value1")
+				c.Add("key1", "value1")
 				c.valueMap["key1"].(map[interface{}]*Item)["value1"].expiration = 1
 				So(c.Refresh("key1", "value1"), ShouldBeFalse)
 			})
 			Convey("DeleteExpired deletes all items that are expired", func() {
-				c.Set("key1", "value1")
+				c.Add("key1", "value1")
 				c.valueMap["key1"].(map[interface{}]*Item)["value1"].expiration = 1
-				c.Set("key2", "value2")
+				c.Add("key2", "value2")
 				c.valueMap["key2"].(map[interface{}]*Item)["value2"].expiration = 1
-				c.Set("key3", "value3")
+				c.Add("key3", "value3")
 
 				c.DeleteExpired()
 				So(c.Len(), ShouldEqual, 1)
@@ -142,9 +142,9 @@ func TestLRUSetCache(t *testing.T) {
 
 			Convey("Janitor cleans up expired values", func() {
 				mh.On("OnValueEvicted", mock.Anything, mock.Anything).Twice()
-				c.Set("key1", "value1")
-				c.Set("key1", "value2")
-				c.Set("key2", "value3")
+				c.Add("key1", "value1")
+				c.Add("key1", "value2")
+				c.Add("key2", "value3")
 				So(c.Len(), ShouldEqual, 3)
 				c.mu.Lock()
 				c.valueMap["key1"].(map[interface{}]*Item)["value1"].expiration = 1

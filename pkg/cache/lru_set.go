@@ -61,8 +61,8 @@ func (c *LRUSetCache) Refresh(key string, val interface{}) bool {
 	}
 
 	if cItem.object == val && time.Now().UnixNano() < cItem.expiration {
-		cItem.expiration = time.Now().Add(c.options.TTL).UnixNano()
-		c.valuesList.MoveToBack(cItem.valuesListElement)
+		cItem.expiration = time.Now().Add(cItem.ttl).UnixNano()
+		c.sortMove(cItem.valuesListElement)
 
 		return true
 	}
@@ -70,20 +70,23 @@ func (c *LRUSetCache) Refresh(key string, val interface{}) bool {
 	return false
 }
 
-// Set in LRUSetCache just calls Add. Use it instead.
-func (c *LRUSetCache) Set(key string, val interface{}) {
-	c.Add(key, val)
-}
-
 // Add assigns a new value to an item at given key if it doesn't exist.
 func (c *LRUSetCache) Add(key string, val interface{}) bool {
+	return c.AddTTL(key, val, 0)
+}
+
+func (c *LRUSetCache) AddTTL(key string, val interface{}, ttl time.Duration) bool {
+	if ttl == 0 {
+		ttl = c.options.TTL
+	}
+
 	c.mu.Lock()
 
 	curVal, ok := c.valueMap[key]
 	if ok {
 		if cItem, ok2 := curVal.(map[interface{}]*Item)[val]; ok2 {
-			cItem.expiration = time.Now().Add(c.options.TTL).UnixNano()
-			c.valuesList.MoveToBack(cItem.valuesListElement)
+			cItem.expiration = time.Now().Add(ttl).UnixNano()
+			c.sortMove(cItem.valuesListElement)
 			c.mu.Unlock()
 
 			return false
@@ -91,8 +94,8 @@ func (c *LRUSetCache) Add(key string, val interface{}) bool {
 	}
 
 	// Add item.
-	cItem := &Item{object: val, expiration: time.Now().Add(c.options.TTL).UnixNano()}
-	cItem.valuesListElement = c.valuesList.PushBack(&valuesItem{key: key, item: cItem})
+	cItem := &Item{object: val, expiration: time.Now().Add(ttl).UnixNano(), ttl: ttl}
+	cItem.valuesListElement = c.add(&valuesItem{key: key, item: cItem})
 	c.checkLength()
 
 	if ok {
