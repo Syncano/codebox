@@ -181,7 +181,7 @@ func TestNewRunner(t *testing.T) {
 							})
 							Convey("from cache", func() {
 								cont.Hash = fmt.Sprintf("hash/user//%x", util.Hash("main.js"))
-								r.containerCache.Set(cont.Hash, cont)
+								r.containerCache.Add(cont.Hash, cont)
 								_, e := r.Run(context.Background(), logrus.StandardLogger(), defaultRuntime, "reqID", "hash", "", "user", &RunOptions{})
 								So(e, ShouldEqual, io.EOF)
 							})
@@ -189,7 +189,7 @@ func TestNewRunner(t *testing.T) {
 						Convey("with files", func() {
 							files := map[string]*File{"file": {Data: []byte("content")}}
 							cont.Hash = fmt.Sprintf("hash/user//%x", util.Hash("main.js"))
-							r.containerCache.Set(cont.Hash, cont)
+							r.containerCache.Add(cont.Hash, cont)
 							_, e := r.Run(context.Background(), logrus.StandardLogger(), defaultRuntime, "reqID", "hash", "", "user", &RunOptions{Files: files})
 							So(e, ShouldEqual, io.EOF)
 						})
@@ -330,7 +330,7 @@ func TestNewRunner(t *testing.T) {
 
 			Convey("onEvictedHandler gets called on container removal from cache", func() {
 				cont := &Container{ID: "someId", volumeKey: "someKey", SourceHash: "sourceHash", UserID: "userID", state: ContainerStateRunning}
-				r.containerCache.Set("hash", cont)
+				r.containerCache.Add("hash", cont)
 				dockerMgr.On("ContainerStop", mock.Anything, "someId").Return(nil).Once()
 				repo.On("DeleteVolume", "someKey").Return(nil).Once()
 
@@ -518,7 +518,7 @@ func TestRunnerMethods(t *testing.T) {
 				So(func() { r.afterRun("runtime", cont, "abc", &RunOptions{}, false, filerepo.ErrResourceNotFound) }, ShouldPanic)
 			})
 			Convey("afterRun tries to delete containers on full memory", func() {
-				r.containerCache.Set("hash", cont)
+				r.containerCache.Add("hash", cont)
 				repo.On("CleanupVolume", "volKey").Return(nil).Once()
 				checker.On("CheckFreeMemory", mock.Anything).Return(sys.ErrNotEnoughMemory{}).Once()
 				checker.On("CheckFreeMemory", mock.Anything).Return(nil)

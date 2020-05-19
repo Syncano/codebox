@@ -15,8 +15,9 @@ import (
 type Cache struct {
 	options Options
 
-	// Maintain both valueMap and valuesList in sync. valueMap is used as a storage for key->list while valuesList
-	// is used to keep info about the order of items added/accessed so that we can expire them in same order.
+	// Maintain both valueMap and valuesList in sync.
+	// valueMap is used as a storage for key->list
+	// valuesList is used to keep it in TTL order so that we can expire them in same order.
 	mu         sync.RWMutex
 	valueMap   map[string]interface{}
 	valuesList *list.List
@@ -44,6 +45,7 @@ var defaultOptions = &Options{
 type Item struct {
 	object            interface{}
 	expiration        int64
+	ttl               time.Duration
 	valuesListElement *list.Element
 }
 
@@ -128,7 +130,7 @@ func (c *Cache) OnValueEvicted(f EvictionHandler) {
 	c.muHandler.Unlock()
 }
 
-// DeleteLRU deletes one least recently used element from cache. Returns true if list was not empty.
+// DeleteOne deletes one element that is closest to expiring. Returns true if list was not empty.
 // Calls onValueEvicted.
 func (c *Cache) DeleteLRU() bool {
 	c.mu.Lock()
@@ -225,12 +227,52 @@ func (c *Cache) deleteValue(e *list.Element, now int64) (valueEvicted *keyValue)
 }
 
 func (c *Cache) checkLength() {
-	// If we are over the capacity, delete LRU.
+	// If we are over the capacity, delete one closest to expiring.
 	if c.options.Capacity > 0 {
 		for c.valuesList.Len() > c.options.Capacity {
 			c.deleteLRU()
 		}
 	}
+}
+
+func (c *Cache) add(vi *valuesItem) *list.Element {
+	exp := vi.item.expiration
+
+	var at *list.Element
+
+	for at = c.valuesList.Front(); at != nil; {
+		if at.Value.(*valuesItem).item.expiration > exp {
+			break
+		}
+
+		at = at.Next()
+	}
+
+	if at != nil {
+		return c.valuesList.InsertBefore(vi, at)
+	}
+
+	return c.valuesList.PushBack(vi)
+}
+
+func (c *Cache) sortMove(ele *list.Element) {
+	exp := ele.Value.(*valuesItem).item.expiration
+
+	var at *list.Element
+
+	for at = c.valuesList.Front(); at != nil; {
+		if at.Value.(*valuesItem).item.expiration > exp {
+			break
+		}
+
+		at = at.Next()
+	}
+
+	if at != nil {
+		c.valuesList.MoveBefore(ele, at)
+	}
+
+	c.valuesList.MoveToBack(ele)
 }
 
 type janitor struct {

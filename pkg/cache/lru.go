@@ -30,7 +30,9 @@ func NewLRUCache(options *Options, lruOptions *LRUOptions) *LRUCache {
 		lruOptions = defaultLRUOptions
 	}
 
-	cache := LRUCache{lruOptions: *lruOptions}
+	cache := LRUCache{
+		lruOptions: *lruOptions,
+	}
 
 	cache.Cache.Init(options, cache.deleteHandler)
 
@@ -57,8 +59,8 @@ func (c *LRUCache) get(key string, refresh bool) interface{} {
 	}
 
 	if refresh {
-		cItem.expiration = time.Now().Add(c.options.TTL).UnixNano()
-		c.valuesList.MoveToBack(cItem.valuesListElement)
+		cItem.expiration = time.Now().Add(cItem.ttl).UnixNano()
+		c.sortMove(cItem.valuesListElement)
 	}
 
 	return cItem.object
@@ -69,15 +71,25 @@ func (c *LRUCache) Refresh(key string) bool {
 	return c.get(key, true) != nil
 }
 
-func (c *LRUCache) set(key string, val interface{}) {
-	cItem := &Item{object: val, expiration: time.Now().Add(c.options.TTL).UnixNano()}
-	cItem.valuesListElement = c.valuesList.PushBack(&valuesItem{key: key, item: cItem})
+func (c *LRUCache) set(key string, val interface{}, ttl time.Duration) {
+	if ttl == 0 {
+		ttl = c.options.TTL
+	}
+
+	cItem := &Item{object: val, expiration: time.Now().Add(ttl).UnixNano(), ttl: ttl}
+	vi := &valuesItem{key: key, item: cItem}
+
+	cItem.valuesListElement = c.add(vi)
 	c.checkLength()
 	c.valueMap[key] = cItem
 }
 
 // Set assigns a new value to an item at given key.
 func (c *LRUCache) Set(key string, val interface{}) {
+	c.SetTTL(key, val, 0)
+}
+
+func (c *LRUCache) SetTTL(key string, val interface{}, ttl time.Duration) {
 	c.mu.Lock()
 
 	curVal, ok := c.valueMap[key]
@@ -85,26 +97,30 @@ func (c *LRUCache) Set(key string, val interface{}) {
 		c.delete(curVal.(*Item).valuesListElement)
 	}
 
-	c.set(key, val)
+	c.set(key, val, ttl)
 	c.mu.Unlock()
 }
 
 // Add assigns a new value to an item at given key if it doesn't exist.
 func (c *LRUCache) Add(key string, val interface{}) bool {
+	return c.AddTTL(key, val, 0)
+}
+
+func (c *LRUCache) AddTTL(key string, val interface{}, ttl time.Duration) bool {
 	c.mu.Lock()
 
 	curVal, ok := c.valueMap[key]
 	if ok {
 		cItem := curVal.(*Item)
-		cItem.expiration = time.Now().Add(c.options.TTL).UnixNano()
-		c.valuesList.MoveToBack(cItem.valuesListElement)
+		cItem.expiration = time.Now().Add(cItem.ttl).UnixNano()
+		c.sortMove(cItem.valuesListElement)
 
 		c.mu.Unlock()
 
 		return false
 	}
 
-	c.set(key, val)
+	c.set(key, val, ttl)
 	c.mu.Unlock()
 
 	return true
