@@ -146,10 +146,10 @@ func (s *Server) Run(stream pb.ScriptRunner_RunServer) error {
 
 		logger.WithField("ret", ret).Info("grpc:script:Run")
 
-		e := s.sendResponse(stream, ret)
-		if e != nil {
+		err := s.sendResponse(stream, ret)
+		if err != nil {
 			logger.WithError(err).Warn("grpc:script:Run send response error")
-			return e
+			return err
 		}
 	}
 
