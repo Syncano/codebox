@@ -37,6 +37,7 @@ func TestMain(m *testing.M) {
 
 func TestServerMethods(t *testing.T) {
 	err := errors.New("some error")
+	errCanceled := status.Error(codes.Canceled, "some error")
 
 	Convey("Given server with mocked repo", t, func() {
 		repo := new(repomocks.Repo)
@@ -134,9 +135,9 @@ func TestServerMethods(t *testing.T) {
 						}, nil).Once()
 						stream.On("Recv").Return(validReq2, nil).Once()
 						repo.On("Get", "hash").Return("/path")
-						repoCli.On("Exists", mock.Anything, mock.Anything).Return(nil, err)
+						repoCli.On("Exists", mock.Anything, mock.Anything).Return(nil, errCanceled)
 						e := s.Run(stream)
-						So(e, ShouldEqual, err)
+						So(e, ShouldEqual, errCanceled)
 						So(s.limiter.Lock(ctx, "ckey", 1), ShouldBeNil)
 					})
 					Convey("given simple valid request", func() {
@@ -148,10 +149,10 @@ func TestServerMethods(t *testing.T) {
 							runStream := new(scriptmocks.ScriptRunner_RunClient)
 
 							Convey("propagates and handles source exists error", func() {
-								repoCli.On("Exists", mock.Anything, mock.Anything).Return(nil, err)
+								repoCli.On("Exists", mock.Anything, mock.Anything).Return(nil, errCanceled)
 
 								e := s.Run(stream)
-								So(e, ShouldEqual, err)
+								So(e, ShouldEqual, errCanceled)
 							})
 							Convey("given source that exists on worker", func() {
 								stream.On("Recv").Return(validReq3, nil).Once()
@@ -163,9 +164,9 @@ func TestServerMethods(t *testing.T) {
 								runStream.On("CloseSend").Return(nil).Once()
 
 								Convey("propagates worker.Run error", func() {
-									runStream.On("Recv").Return(nil, err).Once()
+									runStream.On("Recv").Return(nil, errCanceled).Once()
 									e := s.Run(stream)
-									So(e, ShouldEqual, err)
+									So(e, ShouldEqual, errCanceled)
 									So(s.workers.Contains(worker.ID), ShouldBeTrue)
 								})
 								Convey("removes worker if error threshold has been exceeded", func() {
@@ -187,9 +188,9 @@ func TestServerMethods(t *testing.T) {
 									runStream.On("Recv").Return(nil, io.EOF).Once()
 
 									Convey("propagates client Send error", func() {
-										stream.On("Send", mock.Anything).Return(err)
+										stream.On("Send", mock.Anything).Return(errCanceled)
 										e := s.Run(stream)
-										So(e, ShouldEqual, err)
+										So(e, ShouldEqual, errCanceled)
 									})
 									Convey("proceeds with sending", func() {
 										stream.On("Send", mock.Anything).Return(nil).Run(func(args mock.Arguments) {
@@ -209,9 +210,9 @@ func TestServerMethods(t *testing.T) {
 								repo.On("GetFS").Return(memfs)
 
 								Convey("propagates upload source error", func() {
-									repoCli.On("Upload", mock.Anything).Return(nil, err)
+									repoCli.On("Upload", mock.Anything).Return(nil, errCanceled)
 									e := s.Run(stream)
-									So(e, ShouldEqual, err)
+									So(e, ShouldEqual, errCanceled)
 								})
 								Convey("proceeds on successful upload source", func() {
 									stream.On("Recv").Return(validReq3, nil).Once()

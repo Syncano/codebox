@@ -197,7 +197,6 @@ func (s *Server) processRun(ctx context.Context, logger logrus.FieldLogger, stre
 	logger.Debug("grpc:lb:Run start")
 
 	script := s.createScriptInfo(scriptMeta)
-	retry := 0
 
 	chunkReader := common.NewChunkReader(func() (*scriptpb.RunChunk, error) {
 		req, err := stream.Recv()
@@ -214,33 +213,34 @@ func (s *Server) processRun(ctx context.Context, logger logrus.FieldLogger, stre
 	})
 
 	var (
-		cont  *WorkerContainer
-		resCh <-chan interface{}
+		cont      *WorkerContainer
+		resCh     <-chan interface{}
+		conns     int
+		fromCache bool
 	)
 
-	_, err := util.RetryWithCritical(s.options.WorkerRetry, workerRetrySleep, func() (bool, error) {
-		retry++
-
+	for retry := 0; retry < s.options.WorkerRetry; retry++ {
 		// Check and refresh source and environment.
 		if s.fileRepo.Get(scriptMeta.SourceHash) == "" || (scriptMeta.Environment != "" && s.fileRepo.Get(scriptMeta.Environment) == "") {
-			return true, ErrSourceNotAvailable
+			logger.Error("grpc:lb:Run source not available")
+			return ErrSourceNotAvailable
 		}
 
 		// Grab worker.
-		var (
-			conns     int
-			fromCache bool
-		)
 		cont, conns, fromCache = s.grabWorker(script)
 		if cont == nil {
-			return true, ErrNoWorkersAvailable
+			logger.Warn("grpc:lb:Run no workers available")
+
+			return ErrNoWorkersAvailable
 		}
+
 		defer cont.Release()
 
 		// Limiter.
 		if conns == 1 && runMeta != nil && runMeta.ConcurrencyLimit > 0 {
 			if err := s.limiter.Lock(ctx, runMeta.ConcurrencyKey, int(runMeta.ConcurrencyLimit)); err != nil {
-				return true, status.Error(codes.ResourceExhausted, err.Error())
+				logger.WithError(err).Warn("grpc:lb:Run Lock failed")
+				return status.Error(codes.ResourceExhausted, err.Error())
 			}
 
 			defer s.limiter.Unlock(runMeta.ConcurrencyKey, int(runMeta.ConcurrencyLimit))
@@ -256,14 +256,18 @@ func (s *Server) processRun(ctx context.Context, logger logrus.FieldLogger, stre
 			// Release worker resources as it failed prematurely.
 			s.handleWorkerError(cont, err)
 
-			return chunkReader.IsDirty() || util.IsCancellation(err), err
+			if chunkReader.IsDirty() || util.IsCancellation(err) {
+				logger.WithError(err).Warn("grpc:lb:Run failed")
+				return err
+			}
+
+			// Retry
+			time.Sleep(workerRetrySleep)
+
+			continue
 		}
 
-		return false, nil
-	})
-	if err != nil {
-		logger.WithError(err).Warn("grpc:lb:Run failed")
-		return err
+		break
 	}
 
 	cont.Worker.ResetErrorCount()
