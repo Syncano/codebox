@@ -195,6 +195,7 @@ func TestServerMethods(t *testing.T) {
 						}, err).Run(func(args mock.Arguments) {
 							ch <- true
 						})
+						amqpCh.On("Publish", mock.Anything, queue, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
 						dlCh <- &util.DownloadResult{Data: []byte("abc")}
 						close(dlCh)
@@ -205,7 +206,6 @@ func TestServerMethods(t *testing.T) {
 							So(e, ShouldBeNil)
 						})
 						Convey("runs request correctly and publishes results", func() {
-							amqpCh.On("Publish", mock.Anything, queue, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 							e := s.SimpleRun(&runReq, stream)
 							So(e, ShouldBeNil)
 						})
