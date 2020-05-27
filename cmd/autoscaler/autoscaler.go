@@ -17,7 +17,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"golang.org/x/net/http2"
 
-	"github.com/Syncano/codebox/pkg/lb"
+	"github.com/Syncano/codebox/app/lb"
 )
 
 // Options holds settable options for LB Autoscaler.

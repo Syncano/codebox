@@ -14,8 +14,8 @@ BUILDTIME = $(shell date +%Y-%m-%dT%H:%M)
 GITSHA = $(shell git rev-parse --short HEAD)
 
 LDFLAGS = -s -w \
-	-X github.com/Syncano/codebox/pkg/version.GitSHA=$(GITSHA) \
-	-X github.com/Syncano/codebox/pkg/version.buildtimeStr=$(BUILDTIME)
+	-X github.com/Syncano/codebox/app/version.GitSHA=$(GITSHA) \
+	-X github.com/Syncano/codebox/app/version.buildtimeStr=$(BUILDTIME)
 
 
 .PHONY: help deps download-images clean lint fmt test stest itest atest cov goconvey lint-in-docker test-in-docker generate-assets generate build build-wrapper build-in-docker docker deploy-staging deploy-production encrypt decrypt start
@@ -45,7 +45,7 @@ lint: ## Run lint checks
 	echo "=== lint ==="
 	if ! hash golangci-lint 2>/dev/null; then \
 		echo "Installing golangci-lint"; \
-		curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | sh -s -- -b $$(go env GOPATH)/bin v1.24.0; \
+		curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | sh -s -- -b $$(go env GOPATH)/bin v1.27.0; \
 	fi
 	golangci-lint run $(ARGS)
 
