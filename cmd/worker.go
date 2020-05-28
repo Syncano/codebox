@@ -18,12 +18,13 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/keepalive"
 
-	"github.com/Syncano/codebox/pkg/docker"
-	"github.com/Syncano/codebox/pkg/filerepo"
-	"github.com/Syncano/codebox/pkg/script"
-	"github.com/Syncano/codebox/pkg/sys"
-	"github.com/Syncano/codebox/pkg/util"
-	"github.com/Syncano/codebox/pkg/version"
+	"github.com/Syncano/codebox/app/common"
+	"github.com/Syncano/codebox/app/docker"
+	"github.com/Syncano/codebox/app/filerepo"
+	"github.com/Syncano/codebox/app/script"
+	"github.com/Syncano/codebox/app/version"
+	"github.com/Syncano/pkg-go/sys"
+	"github.com/Syncano/pkg-go/util"
 	repopb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/filerepo/v1"
 	lbpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/lb/v1"
 	scriptpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/script/v1"
@@ -342,11 +343,11 @@ func startServer(
 	// Serve a new gRPC server.
 	grpcServer := grpc.NewServer(
 		grpc.StatsHandler(&ocgrpc.ServerHandler{}),
-		grpc.MaxRecvMsgSize(sys.MaxGRPCMessageSize),
-		grpc.MaxSendMsgSize(sys.MaxGRPCMessageSize),
+		grpc.MaxRecvMsgSize(common.MaxGRPCMessageSize),
+		grpc.MaxSendMsgSize(common.MaxGRPCMessageSize),
 		grpc.KeepaliveParams(keepalive.ServerParameters{
-			Time:    sys.KeepaliveParamsTime,
-			Timeout: sys.KeepaliveParamsTimeout,
+			Time:    common.KeepaliveParamsTime,
+			Timeout: common.KeepaliveParamsTimeout,
 		}),
 	)
 	repopb.RegisterRepoServer(grpcServer, &filerepo.Server{Repo: repo})
@@ -366,7 +367,7 @@ func startServer(
 	// Connect to load balancer.
 	conn, err := grpc.Dial(lbAddr,
 		grpc.WithInsecure(),
-		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(sys.MaxGRPCMessageSize)),
+		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(common.MaxGRPCMessageSize)),
 		grpc.WithStatsHandler(&ocgrpc.ClientHandler{}),
 	)
 	if err != nil {

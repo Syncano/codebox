@@ -22,9 +22,9 @@ import (
 	"golang.org/x/crypto/ssh/terminal"
 	"google.golang.org/grpc/grpclog"
 
+	"github.com/Syncano/codebox/app/filerepo"
+	"github.com/Syncano/codebox/app/version"
 	"github.com/Syncano/codebox/cmd/stack"
-	"github.com/Syncano/codebox/pkg/filerepo"
-	"github.com/Syncano/codebox/pkg/version"
 )
 
 var (

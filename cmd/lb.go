@@ -14,12 +14,13 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/keepalive"
 
+	"github.com/Syncano/codebox/app/common"
+	"github.com/Syncano/codebox/app/filerepo"
+	"github.com/Syncano/codebox/app/lb"
+	"github.com/Syncano/codebox/app/version"
 	"github.com/Syncano/codebox/cmd/autoscaler"
-	"github.com/Syncano/codebox/pkg/filerepo"
-	"github.com/Syncano/codebox/pkg/lb"
-	"github.com/Syncano/codebox/pkg/limiter"
-	"github.com/Syncano/codebox/pkg/sys"
-	"github.com/Syncano/codebox/pkg/version"
+	"github.com/Syncano/pkg-go/limiter"
+	"github.com/Syncano/pkg-go/sys"
 	repopb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/filerepo/v1"
 	lbpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/lb/v1"
 )
@@ -135,11 +136,11 @@ As there is no authentication, always run it in a private network.`,
 		}
 		grpcServer := grpc.NewServer(
 			grpc.StatsHandler(&ocgrpc.ServerHandler{}),
-			grpc.MaxRecvMsgSize(sys.MaxGRPCMessageSize),
-			grpc.MaxSendMsgSize(sys.MaxGRPCMessageSize),
+			grpc.MaxRecvMsgSize(common.MaxGRPCMessageSize),
+			grpc.MaxSendMsgSize(common.MaxGRPCMessageSize),
 			grpc.KeepaliveParams(keepalive.ServerParameters{
-				Time:    sys.KeepaliveParamsTime,
-				Timeout: sys.KeepaliveParamsTimeout,
+				Time:    common.KeepaliveParamsTime,
+				Timeout: common.KeepaliveParamsTimeout,
 			}),
 		)
 

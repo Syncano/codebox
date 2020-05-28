@@ -18,11 +18,11 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/keepalive"
 
+	"github.com/Syncano/codebox/app/broker"
+	"github.com/Syncano/codebox/app/common"
+	"github.com/Syncano/codebox/app/version"
 	"github.com/Syncano/codebox/cmd/amqp"
-	"github.com/Syncano/codebox/pkg/broker"
-	"github.com/Syncano/codebox/pkg/celery"
-	"github.com/Syncano/codebox/pkg/sys"
-	"github.com/Syncano/codebox/pkg/version"
+	"github.com/Syncano/pkg-go/celery"
 	pb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/broker/v1"
 )
 
@@ -93,13 +93,15 @@ As there is no authentication, always run it in a private network.`,
 
 		// Create new gRPC server.
 		logrus.WithField("options", lbOptions).Debug("Initializing broker server")
+
 		amqpChannel := new(amqp.Channel)
 		if err := amqpChannel.Init(c.String("broker-url")); err != nil {
 			return err
 		}
-		celery.Init(amqpChannel)
+
+		cel := celery.New(amqpChannel)
 		brokerOptions.LBAddr = c.StringSlice("lb-addrs")
-		brokerServer, err := broker.NewServer(redisClient, brokerOptions)
+		brokerServer, err := broker.NewServer(redisClient, cel, brokerOptions)
 		if err != nil {
 			return err
 		}
@@ -110,11 +112,11 @@ As there is no authentication, always run it in a private network.`,
 		}
 		grpcServer := grpc.NewServer(
 			grpc.StatsHandler(&ocgrpc.ServerHandler{}),
-			grpc.MaxRecvMsgSize(sys.MaxGRPCMessageSize),
-			grpc.MaxSendMsgSize(sys.MaxGRPCMessageSize),
+			grpc.MaxRecvMsgSize(common.MaxGRPCMessageSize),
+			grpc.MaxSendMsgSize(common.MaxGRPCMessageSize),
 			grpc.KeepaliveParams(keepalive.ServerParameters{
-				Time:    sys.KeepaliveParamsTime,
-				Timeout: sys.KeepaliveParamsTimeout,
+				Time:    common.KeepaliveParamsTime,
+				Timeout: common.KeepaliveParamsTimeout,
 			}),
 		)
 
