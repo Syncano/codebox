@@ -24,6 +24,7 @@ import (
 	"google.golang.org/grpc/grpclog"
 
 	"github.com/Syncano/codebox/app/broker/mocks"
+	"github.com/Syncano/codebox/app/common"
 	repomocks "github.com/Syncano/codebox/app/filerepo/mocks"
 	lbmocks "github.com/Syncano/codebox/app/lb/mocks"
 	"github.com/Syncano/pkg-go/celery"
@@ -82,7 +83,7 @@ func TestServerMethods(t *testing.T) {
 		Convey("Run returns error on invalid request", func() {
 			stream.On("Context").Return(context.Background())
 			e := s.SimpleRun(new(brokerpb.SimpleRunRequest), stream)
-			So(e, ShouldResemble, ErrInvalidArgument)
+			So(e, ShouldResemble, common.ErrInvalidArgument)
 		})
 		Convey("Run processes on valid request", func() {
 			sourceHash := "abc"

@@ -2,7 +2,6 @@ package filerepo
 
 import (
 	"bufio"
-	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -68,15 +67,6 @@ type Volume struct {
 type Resource struct {
 	Path string
 }
-
-var (
-	// ErrResourceNotFound signals that resource key was not found and it was a must.
-	ErrResourceNotFound = errors.New("resource not found")
-	// ErrVolumeNotFound signals that volume key was not found and it was a must.
-	ErrVolumeNotFound = errors.New("volume not found")
-	// ErrNotEnoughDiskSpace signals that there is not enough disk space available on storage path.
-	ErrNotEnoughDiskSpace = errors.New("not enough disk space")
-)
 
 const (
 	fileStorageName   = "files"

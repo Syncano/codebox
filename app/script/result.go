@@ -14,8 +14,6 @@ import (
 )
 
 var (
-	// ErrIncorrectData signals when output structure is malformed.
-	ErrIncorrectData = errors.New("malformed or too large output received")
 	// IncorrectDataText is used when output structure is malformed.
 	IncorrectDataText = []byte("malformed or too large output received")
 	// LimitReachedText is used when stdout/stderr is too large or custom response could not be parsed.

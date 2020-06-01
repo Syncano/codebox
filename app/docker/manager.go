@@ -2,7 +2,6 @@ package docker
 
 import (
 	"context"
-	"errors"
 	"io"
 	"io/ioutil"
 	"time"
@@ -44,9 +43,6 @@ var DefaultOptions = &Options{
 	ReservedMCPU:  250,
 	DNS:           []string{"208.67.222.222", "208.67.220.220"},
 }
-
-// ErrReservedCPUTooHigh signals that too we are trying to reserve more cpu than we got.
-var ErrReservedCPUTooHigh = errors.New("value of reserved cpu is higher than available")
 
 // Constraints defines limitations for docker container.
 type Constraints struct {

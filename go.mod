@@ -7,7 +7,7 @@ require (
 	contrib.go.opencensus.io/exporter/prometheus v0.1.0
 	github.com/Microsoft/go-winio v0.4.14 // indirect
 	github.com/Syncano/pkg-go v0.1.4
-	github.com/Syncano/syncanoapis/gen v0.1.0
+	github.com/Syncano/syncanoapis/gen v0.1.2
 	github.com/blang/semver v3.5.1+incompatible
 	github.com/certifi/gocertifi v0.0.0-20200211180108-c7c1fbc02894 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.0 // indirect
@@ -30,6 +30,7 @@ require (
 	github.com/kevinburke/go-bindata v3.21.0+incompatible
 	github.com/leodido/go-urn v1.2.0 // indirect
 	github.com/mattn/go-uwsgi v0.0.0-20170905170457-a9a6bec67815
+	github.com/mitchellh/hashstructure v1.0.0
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.0.1 // indirect
 	github.com/prometheus/client_golang v1.6.0 // indirect
