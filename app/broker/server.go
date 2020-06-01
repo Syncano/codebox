@@ -14,9 +14,7 @@ import (
 	"go.opencensus.io/stats/view"
 	census_trace "go.opencensus.io/trace"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
-	"google.golang.org/grpc/status"
 
 	"github.com/Syncano/codebox/app/common"
 	"github.com/Syncano/pkg-go/celery"
@@ -70,9 +68,6 @@ var DefaultOptions = &ServerOptions{
 }
 
 var (
-	// ErrInvalidArgument signals that there are no suitable workers at this moment.
-	ErrInvalidArgument = status.Error(codes.InvalidArgument, "invalid argument")
-
 	initOnce         sync.Once
 	overheadDuration = stats.Float64(
 		"codebox/overhead/duration/seconds",
@@ -181,7 +176,7 @@ func (s *Server) Run(stream brokerpb.ScriptRunner_RunServer) error {
 			scriptMeta = v.ScriptMeta
 		default:
 			logger.Error("grpc:broker:Run error parsing input")
-			return ErrInvalidArgument
+			return common.ErrInvalidArgument
 		}
 
 		if meta != nil && lbMeta != nil && scriptMeta != nil {
@@ -197,7 +192,7 @@ func (s *Server) Run(stream brokerpb.ScriptRunner_RunServer) error {
 
 		chunk := req.GetScriptChunk()
 		if chunk == nil {
-			return nil, ErrInvalidArgument
+			return nil, common.ErrInvalidArgument
 		}
 
 		return chunk, nil
@@ -211,7 +206,7 @@ func (s *Server) processRun(ctx context.Context, logger logrus.FieldLogger,
 	stream StreamReponder) error {
 	if meta == nil || lbMeta == nil || scriptMeta == nil {
 		logger.Error("grpc:broker:Run error parsing input")
-		return ErrInvalidArgument
+		return common.ErrInvalidArgument
 	}
 
 	start := time.Now()

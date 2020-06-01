@@ -3,7 +3,6 @@ package broker
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -22,11 +21,7 @@ import (
 )
 
 var (
-	// ErrMissingPayloadKey means that payload was missing from request headers.
-	ErrMissingPayloadKey = errors.New("missing payload")
-	// ErrJSONParsingFailed is used to mark any JSON unmarshal error during payload parsing.
-	ErrJSONParsingFailed = errors.New("json parsing error, expected an object")
-	statusToHTTPCode     = map[string]int{
+	statusToHTTPCode = map[string]int{
 		failureStatus: http.StatusInternalServerError,
 		blockedStatus: http.StatusTooManyRequests,
 		timeoutStatus: http.StatusRequestTimeout,

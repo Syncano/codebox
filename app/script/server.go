@@ -121,13 +121,11 @@ func (s *Server) Run(stream pb.ScriptRunner_RunServer) error {
 		args = opts.GetArgs()
 	}
 
-	ret, err := s.Runner.Run(ctx, logger, meta.Runtime, reqID, meta.SourceHash, meta.Environment, meta.UserId,
+	ret, err := s.Runner.Run(ctx, logger, reqID,
+		CreateScriptInfoFromScriptMeta(meta),
 		&RunOptions{
-			EntryPoint:  opts.GetEntrypoint(),
 			OutputLimit: opts.GetOutputLimit(),
 			Timeout:     time.Duration(opts.GetTimeout()) * time.Millisecond,
-			MCPU:        opts.GetMcpu(),
-			Async:       opts.GetAsync(),
 
 			Args:   args,
 			Meta:   opts.GetMeta(),

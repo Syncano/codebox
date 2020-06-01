@@ -31,16 +31,15 @@ const (
 	ContainerStateRunning
 	ContainerStateStopping
 	ContainerStateStopped
+
+	containerLogFormat = "stream:%s:%s:log"
 )
 
 // Container defines unique container information.
 type Container struct {
-	Hash        string
-	ID          string
-	SourceHash  string
-	Environment string
-	UserID      string
-	Runtime     string
+	*ScriptInfo
+
+	ID string
 
 	state     uint32
 	conns     map[string]struct{}
@@ -63,21 +62,19 @@ type Container struct {
 }
 
 type ContainerOptions struct {
-	EntryPoint string
-	Timeout    time.Duration
-	Async      uint32
+	Timeout time.Duration
 }
 
 func (c *Container) String() string {
-	return fmt.Sprintf("{ID:%s, Calls: %d, VolumeKey:%s}", c.ID, c.Calls(), c.volumeKey)
+	return fmt.Sprintf("{ID:%s, Calls:%d, VolumeKey:%s}", c.ID, c.Calls(), c.volumeKey)
 }
 
 // NewContainer creates new container and returns it.
 func NewContainer(runtime string, redisCli RedisClient) *Container {
 	return &Container{
-		Runtime:  runtime,
-		conns:    make(map[string]struct{}),
-		redisCli: redisCli,
+		ScriptInfo: &ScriptInfo{Runtime: runtime},
+		conns:      make(map[string]struct{}),
+		redisCli:   redisCli,
 	}
 }
 
@@ -148,8 +145,8 @@ func (c *Container) setupCodewrapper(conn io.Writer, setup *codewrapper.Setup) e
 func (c *Container) setupSocket(conn io.Writer) error {
 	// Send socket wrapper setup.
 	setup := scriptSetup{
-		Async:      c.opts.Async,
-		EntryPoint: c.opts.EntryPoint,
+		Async:      c.Async,
+		EntryPoint: c.Entrypoint,
 		Timeout:    c.opts.Timeout,
 	}
 	setupBytes, err := json.Marshal(setup)
@@ -173,7 +170,7 @@ func (c *Container) Configure(options *ContainerOptions, userCacheConstraints *U
 	c.userCacheBucket = userCacheBucket
 	c.userCacheConstraints = userCacheConstraints
 
-	c.connLimit = int(options.Async)
+	c.connLimit = int(c.Async)
 	if c.connLimit == 0 {
 		c.connLimit = 1
 	}
@@ -370,4 +367,8 @@ func (c *Container) Stop() bool {
 	c.mu.Unlock()
 
 	return true
+}
+
+func (c *Container) LogChannel() string {
+	return fmt.Sprintf(containerLogFormat, c.UserID, c.SourceHash)
 }

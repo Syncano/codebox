@@ -12,6 +12,7 @@ import (
 
 	"github.com/Syncano/codebox/app/common"
 	repomocks "github.com/Syncano/codebox/app/filerepo/mocks"
+	"github.com/Syncano/codebox/app/script"
 	scriptmocks "github.com/Syncano/codebox/app/script/mocks"
 	repopb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/filerepo/v1"
 	scriptpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/script/v1"
@@ -45,7 +46,7 @@ func TestWorker(t *testing.T) {
 			repoCli:    repoCli,
 			scriptCli:  scriptCli,
 			containers: make(map[string]*WorkerContainer),
-			scripts:    make(map[ScriptInfo]int),
+			scripts:    make(map[script.ScriptInfo]int),
 			metrics:    Metrics(),
 		}
 		cont := &WorkerContainer{Worker: worker}

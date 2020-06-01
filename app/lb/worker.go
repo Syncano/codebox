@@ -15,6 +15,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/Syncano/codebox/app/common"
+	"github.com/Syncano/codebox/app/script"
 	"github.com/Syncano/pkg-go/util"
 	repopb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/filerepo/v1"
 	scriptpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/script/v1"
@@ -37,7 +38,7 @@ type Worker struct {
 	alive      bool
 	repoCli    repopb.RepoClient
 	scriptCli  scriptpb.ScriptRunnerClient
-	scripts    map[ScriptInfo]int
+	scripts    map[script.ScriptInfo]int
 	containers map[string]*WorkerContainer
 	metrics    *MetricsData
 
@@ -46,7 +47,7 @@ type Worker struct {
 }
 
 // ContainerWorkerCache defines a map - ScriptInfo->container ID->set of *WorkerContainer.
-type ContainerWorkerCache map[ScriptInfo]map[string]*WorkerContainer
+type ContainerWorkerCache map[script.ScriptInfo]map[string]*WorkerContainer
 
 const (
 	chunkSize = 2 * 1024 * 1024
@@ -66,7 +67,7 @@ func NewWorker(id string, addr net.TCPAddr, mCPU, defaultMCPU uint32, memory uin
 		Addr: addr,
 
 		alive:       true,
-		scripts:     make(map[ScriptInfo]int),
+		scripts:     make(map[script.ScriptInfo]int),
 		containers:  make(map[string]*WorkerContainer),
 		conn:        conn,
 		mCPU:        mCPU,
@@ -243,37 +244,37 @@ func uploadDir(stream repopb.Repo_UploadClient, fs afero.Fs, key, sourcePath str
 }
 
 // AddCache increases ref count of Container in Worker and adds it to ContainerWorkerCache.
-func (w *Worker) AddCache(cache ContainerWorkerCache, ci ScriptInfo, contID string, container *WorkerContainer) {
+func (w *Worker) AddCache(cache ContainerWorkerCache, scriptInfo *script.ScriptInfo, contID string, container *WorkerContainer) {
 	w.mu.Lock()
 
 	container.ID = contID
-	w.scripts[ci]++
+	w.scripts[*scriptInfo]++
 	w.containers[contID] = container
 
-	if _, ok := cache[ci]; !ok {
-		cache[ci] = map[string]*WorkerContainer{contID: container}
+	if v, ok := cache[*scriptInfo]; ok {
+		v[contID] = container
 	} else {
-		cache[ci][contID] = container
+		cache[*scriptInfo] = map[string]*WorkerContainer{contID: container}
 	}
 
 	w.mu.Unlock()
 }
 
 // RemoveCache decreases ref count of Container in Worker and if needed removes it from ContainerWorkerCache.
-func (w *Worker) RemoveCache(cache ContainerWorkerCache, ci ScriptInfo, contID string) {
+func (w *Worker) RemoveCache(cache ContainerWorkerCache, scriptInfo *script.ScriptInfo, contID string) {
 	w.mu.Lock()
 
 	delete(w.containers, contID)
 
-	ref := w.scripts[ci]
+	ref := w.scripts[*scriptInfo]
 	if ref > 1 {
-		w.scripts[ci]--
+		w.scripts[*scriptInfo]--
 	} else {
-		delete(w.scripts, ci)
+		delete(w.scripts, *scriptInfo)
 
-		if m, ok := cache[ci]; ok {
+		if m, ok := cache[*scriptInfo]; ok {
 			if len(m) == 1 {
-				delete(cache, ci)
+				delete(cache, *scriptInfo)
 			} else {
 				delete(m, contID)
 			}
@@ -444,17 +445,4 @@ func (w *WorkerContainer) Release() {
 	conns := atomic.AddUint32(&w.conns, ^uint32(0))
 
 	w.Worker.release(w.mCPU, conns)
-}
-
-// ScriptInfo defines unique container information.
-type ScriptInfo struct {
-	SourceHash  string
-	Environment string
-	UserID      string
-	MCPU        uint32
-	Async       uint32
-}
-
-func (ci *ScriptInfo) String() string {
-	return fmt.Sprintf("{SourceHash:%s, Environment:%s, UserID:%s}", ci.SourceHash, ci.Environment, ci.UserID)
 }
