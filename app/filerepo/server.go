@@ -21,11 +21,6 @@ type Server struct {
 // Assert that Server is compatible with proto interface.
 var _ pb.RepoServer = (*Server)(nil)
 
-var (
-	// ErrMissingMeta signals that there are upload format was invalid and was missing upload meta.
-	ErrMissingMeta = status.Error(codes.FailedPrecondition, "missing upload meta")
-)
-
 // Exists checks if file was defined in file repo.
 func (s *Server) Exists(ctx context.Context, in *pb.ExistsRequest) (*pb.ExistsResponse, error) {
 	ctx, reqID := util.AddDefaultRequestID(ctx)

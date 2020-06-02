@@ -54,23 +54,21 @@ func nodeCommand(constraints *docker.Constraints) []string {
 // SupportedRuntimes defines info and constraints of all runtimes.
 var SupportedRuntimes = map[string]*RuntimeInfo{
 	"nodejs_v12": {
-		FileName:          "node.js",
-		AssetName:         "wrappers/node.js",
-		Command:           nodeCommand,
-		Environment:       []string{"NODE_PATH=/app/env/node_modules:/app/code"},
-		Image:             "node:12-stretch",
-		User:              "node",
-		DefaultEntryPoint: "main.js",
+		FileName:    "node.js",
+		AssetName:   "wrappers/node.js",
+		Command:     nodeCommand,
+		Environment: []string{"NODE_PATH=/app/env/node_modules:/app/code"},
+		Image:       "node:12-stretch",
+		User:        "node",
 	},
 
 	"nodejs_v8": {
-		FileName:          "node.js",
-		AssetName:         "wrappers/node.js",
-		Command:           nodeCommand,
-		Environment:       []string{"NODE_PATH=/app/env/node_modules:/app/code"},
-		Image:             "node:8-stretch",
-		User:              "node",
-		DefaultEntryPoint: "main.js",
+		FileName:    "node.js",
+		AssetName:   "wrappers/node.js",
+		Command:     nodeCommand,
+		Environment: []string{"NODE_PATH=/app/env/node_modules:/app/code"},
+		Image:       "node:8-stretch",
+		User:        "node",
 	},
 }
 

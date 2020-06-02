@@ -384,10 +384,14 @@ func startServer(
 		if _, e := plugClient.ContainerRemoved(ctx,
 			&lbpb.ContainerRemovedRequest{
 				Id:          poolID,
+				Runtime:     cont.Runtime,
 				ContainerId: cont.ID,
 				SourceHash:  cont.SourceHash,
 				Environment: cont.Environment,
 				UserId:      cont.UserID,
+				Entrypoint:  cont.Entrypoint,
+				Async:       cont.Async,
+				Mcpu:        cont.MCPU,
 			}); err != nil {
 			errCh <- e
 		}

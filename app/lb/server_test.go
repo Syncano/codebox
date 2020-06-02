@@ -20,8 +20,10 @@ import (
 	"google.golang.org/grpc/grpclog"
 	"google.golang.org/grpc/status"
 
+	"github.com/Syncano/codebox/app/common"
 	repomocks "github.com/Syncano/codebox/app/filerepo/mocks"
 	"github.com/Syncano/codebox/app/lb/mocks"
+	"github.com/Syncano/codebox/app/script"
 	scriptmocks "github.com/Syncano/codebox/app/script/mocks"
 	repopb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/filerepo/v1"
 	pb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/lb/v1"
@@ -38,6 +40,7 @@ func TestMain(m *testing.M) {
 func TestServerMethods(t *testing.T) {
 	err := errors.New("some error")
 	errCanceled := status.Error(codes.Canceled, "some error")
+	runtime := "nodejs_v8"
 
 	Convey("Given server with mocked repo", t, func() {
 		repo := new(repomocks.Repo)
@@ -52,7 +55,7 @@ func TestServerMethods(t *testing.T) {
 			Convey("does nothing when meta is not received", func() {
 				stream.On("Recv").Return(nil, io.EOF).Once()
 				e := s.Run(stream)
-				So(e, ShouldEqual, ErrInvalidArgument)
+				So(e, ShouldEqual, common.ErrInvalidArgument)
 			})
 			Convey("propagates error on Recv", func() {
 				stream.On("Recv").Return(nil, err).Once()
@@ -68,7 +71,7 @@ func TestServerMethods(t *testing.T) {
 				validReq2 := &pb.RunRequest{
 					Value: &pb.RunRequest_ScriptMeta{
 						ScriptMeta: &scriptpb.RunMeta{
-							Runtime:    "runtime",
+							Runtime:    runtime,
 							SourceHash: "hash",
 						},
 					},
@@ -101,7 +104,7 @@ func TestServerMethods(t *testing.T) {
 						repoCli:    repoCli,
 						scriptCli:  scriptCli,
 						containers: make(map[string]*WorkerContainer),
-						scripts:    make(map[ScriptInfo]int),
+						scripts:    make(map[script.ScriptInfo]int),
 						conn:       conn,
 						metrics:    Metrics(),
 					}
@@ -244,7 +247,7 @@ func TestServerMethods(t *testing.T) {
 						Convey("returns error when hash is not in filerepo", func() {
 							repo.On("Get", "hash").Return("").Once()
 							e := s.Run(stream)
-							So(e, ShouldEqual, ErrSourceNotAvailable)
+							So(e, ShouldEqual, common.ErrSourceNotAvailable)
 						})
 					})
 
@@ -261,14 +264,14 @@ func TestServerMethods(t *testing.T) {
 		})
 
 		Convey("given some Container, grabWorker", func() {
-			ci := ScriptInfo{SourceHash: "hash", UserID: "user"}
+			si := &script.ScriptInfo{SourceHash: "hash", UserID: "user"}
 
 			Convey("returns worker with max free slots", func() {
 				s.workers.Set("id1", NewWorker("id1", net.TCPAddr{}, 1, 1, 128, s.metrics))
 				s.workers.Set("id2", NewWorker("id2", net.TCPAddr{}, 2, 2, 128, s.metrics))
 				s.workers.Set("id3", NewWorker("id2", net.TCPAddr{}, 1, 2, 128, s.metrics))
 
-				wi, conns, fromCache := s.grabWorker(ci)
+				wi, conns, fromCache := s.grabWorker(si)
 				So(wi.Worker.ID, ShouldEqual, "id2")
 				So(conns, ShouldEqual, 1)
 				So(fromCache, ShouldBeFalse)
@@ -278,8 +281,8 @@ func TestServerMethods(t *testing.T) {
 				s.workers.Set("id1", NewWorker("id1", net.TCPAddr{}, 2, 2, 128, s.metrics))
 				s.workers.Set("id2", w2)
 
-				w2.AddCache(s.workerContainerCache, ci, "id2", &WorkerContainer{Worker: w2})
-				w, conns, fromCache := s.grabWorker(ci)
+				w2.AddCache(s.workerContainerCache, si, "id2", &WorkerContainer{Worker: w2})
+				w, conns, fromCache := s.grabWorker(si)
 				So(w.Worker.ID, ShouldEqual, "id2")
 				So(conns, ShouldEqual, 1)
 				So(fromCache, ShouldBeTrue)
@@ -288,8 +291,8 @@ func TestServerMethods(t *testing.T) {
 				w2 := NewWorker("id2", net.TCPAddr{}, 1, 1, 128, s.metrics)
 				s.workers.Set("id1", NewWorker("id1", net.TCPAddr{}, 2, 2, 128, s.metrics))
 
-				w2.AddCache(s.workerContainerCache, ci, "id1", &WorkerContainer{Worker: w2})
-				w, conns, fromCache := s.grabWorker(ci)
+				w2.AddCache(s.workerContainerCache, si, "id1", &WorkerContainer{Worker: w2})
+				w, conns, fromCache := s.grabWorker(si)
 				So(w.Worker.ID, ShouldEqual, "id1")
 				So(conns, ShouldEqual, 1)
 				So(fromCache, ShouldBeFalse)
@@ -300,17 +303,17 @@ func TestServerMethods(t *testing.T) {
 				s.workers.Set("id1", w1)
 				s.workers.Set("id2", w2)
 
-				w1.AddCache(s.workerContainerCache, ci, "id1", &WorkerContainer{Worker: w1})
-				w2.AddCache(s.workerContainerCache, ci, "id2", &WorkerContainer{Worker: w2})
-				w, conns, fromCache := s.grabWorker(ci)
+				w1.AddCache(s.workerContainerCache, si, "id1", &WorkerContainer{Worker: w1})
+				w2.AddCache(s.workerContainerCache, si, "id2", &WorkerContainer{Worker: w2})
+				w, conns, fromCache := s.grabWorker(si)
 				So(w.Worker.ID, ShouldEqual, "id1")
 				So(conns, ShouldEqual, 1)
 				So(fromCache, ShouldBeTrue)
-				w1.RemoveCache(s.workerContainerCache, ci, "id1")
-				So(s.workerContainerCache[ci], ShouldHaveLength, 1)
+				w1.RemoveCache(s.workerContainerCache, si, "id1")
+				So(s.workerContainerCache[*si], ShouldHaveLength, 1)
 			})
 			Convey("returns nil if there are no workers", func() {
-				w, _, _ := s.grabWorker(ci)
+				w, _, _ := s.grabWorker(si)
 				So(w, ShouldBeNil)
 			})
 		})
@@ -337,7 +340,7 @@ func TestServerMethods(t *testing.T) {
 		})
 
 		Convey("ContainerRemoved returns unregistered error on unknown id", func() {
-			_, e := s.ContainerRemoved(context.Background(), &pb.ContainerRemovedRequest{Id: "id1"})
+			_, e := s.ContainerRemoved(context.Background(), &pb.ContainerRemovedRequest{Id: "id1", Runtime: runtime})
 			So(e, ShouldEqual, ErrUnknownWorkerID)
 		})
 		Convey("Heartbeat returns unregistered error on unknown id", func() {
@@ -362,31 +365,31 @@ func TestServerMethods(t *testing.T) {
 				So(e, ShouldBeNil)
 			})
 			Convey("given container in cache", func() {
-				ci := ScriptInfo{SourceHash: "hash", UserID: "user"}
+				si := &script.ScriptInfo{Runtime: runtime, SourceHash: "hash", UserID: "user"}
 				wc := &WorkerContainer{Worker: wi}
-				wi.AddCache(s.workerContainerCache, ci, "id1", wc)
+				wi.AddCache(s.workerContainerCache, si, "id1", wc)
 				So(wi.scripts, ShouldNotBeEmpty)
 				So(s.workerContainerCache, ShouldNotBeEmpty)
 
 				Convey("ContainerRemoved removes container from cache if refcount gets to 0", func() {
 					_, e := s.ContainerRemoved(context.Background(),
-						&pb.ContainerRemovedRequest{Id: "id1", SourceHash: ci.SourceHash, UserId: ci.UserID})
+						&pb.ContainerRemovedRequest{Id: "id1", Runtime: runtime, SourceHash: si.SourceHash, UserId: si.UserID})
 					So(e, ShouldBeNil)
 					So(wi.scripts, ShouldBeEmpty)
 					So(s.workerContainerCache, ShouldBeEmpty)
 				})
 				Convey("ContainerRemoved keeps container in cache if refcount > 1", func() {
 					wc := &WorkerContainer{Worker: wi}
-					wi.AddCache(s.workerContainerCache, ci, "id1", wc)
+					wi.AddCache(s.workerContainerCache, si, "id1", wc)
 					So(len(wi.scripts), ShouldEqual, 1)
 
 					_, e := s.ContainerRemoved(context.Background(),
-						&pb.ContainerRemovedRequest{Id: "id1", SourceHash: ci.SourceHash, UserId: ci.UserID})
+						&pb.ContainerRemovedRequest{Id: "id1", Runtime: runtime, SourceHash: si.SourceHash, UserId: si.UserID})
 					So(e, ShouldBeNil)
 
 					So(len(wi.scripts), ShouldEqual, 1)
 					So(s.workerContainerCache, ShouldNotBeEmpty)
-					So(s.workerContainerCache[ci], ShouldContainKey, "id1")
+					So(s.workerContainerCache[*si], ShouldContainKey, "id1")
 				})
 				Convey("Disconnect removes worker and all containers from cache", func() {
 					_, e := s.Disconnect(context.Background(), &pb.DisconnectRequest{Id: "id1"})

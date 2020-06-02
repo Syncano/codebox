@@ -44,10 +44,6 @@ var (
 		SizeLimit:        25 << 20,
 		DefaultTimeout:   24 * time.Hour,
 	}
-	ErrCacheCommandUnrecognized        = errors.New("cache command unrecognized")
-	ErrCacheCommandMalformed           = errors.New("cache command malformed")
-	ErrCacheKeyLengthExceeded          = errors.New("cache key length exceeded")
-	ErrCacheValueLengthExceeded        = errors.New("cache value length exceeded")
 	errLengthExceeded                  = errors.New("length exceeded")
 	initOnceCache                      sync.Once
 	redisPopCacheSHA, redisDecrSizeSHA string
