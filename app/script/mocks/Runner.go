@@ -42,6 +42,22 @@ func (_m *Runner) CreatePool() (string, error) {
 	return r0, r1
 }
 
+// DeleteContainers provides a mock function with given fields: i, id
+func (_m *Runner) DeleteContainers(i *script.Index, id string) []*script.Container {
+	ret := _m.Called(i, id)
+
+	var r0 []*script.Container
+	if rf, ok := ret.Get(0).(func(*script.Index, string) []*script.Container); ok {
+		r0 = rf(i, id)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]*script.Container)
+		}
+	}
+
+	return r0
+}
+
 // DownloadAllImages provides a mock function with given fields:
 func (_m *Runner) DownloadAllImages() error {
 	ret := _m.Called()
@@ -89,13 +105,13 @@ func (_m *Runner) Options() script.Options {
 	return r0
 }
 
-// Run provides a mock function with given fields: ctx, logger, requestID, scriptInfo, options
-func (_m *Runner) Run(ctx context.Context, logger logrus.FieldLogger, requestID string, scriptInfo *script.ScriptInfo, options *script.RunOptions) (*script.Result, error) {
-	ret := _m.Called(ctx, logger, requestID, scriptInfo, options)
+// Run provides a mock function with given fields: ctx, logger, requestID, def, options
+func (_m *Runner) Run(ctx context.Context, logger logrus.FieldLogger, requestID string, def *script.Definition, options *script.RunOptions) (*script.Result, error) {
+	ret := _m.Called(ctx, logger, requestID, def, options)
 
 	var r0 *script.Result
-	if rf, ok := ret.Get(0).(func(context.Context, logrus.FieldLogger, string, *script.ScriptInfo, *script.RunOptions) *script.Result); ok {
-		r0 = rf(ctx, logger, requestID, scriptInfo, options)
+	if rf, ok := ret.Get(0).(func(context.Context, logrus.FieldLogger, string, *script.Definition, *script.RunOptions) *script.Result); ok {
+		r0 = rf(ctx, logger, requestID, def, options)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*script.Result)
@@ -103,8 +119,8 @@ func (_m *Runner) Run(ctx context.Context, logger logrus.FieldLogger, requestID 
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(context.Context, logrus.FieldLogger, string, *script.ScriptInfo, *script.RunOptions) error); ok {
-		r1 = rf(ctx, logger, requestID, scriptInfo, options)
+	if rf, ok := ret.Get(1).(func(context.Context, logrus.FieldLogger, string, *script.Definition, *script.RunOptions) error); ok {
+		r1 = rf(ctx, logger, requestID, def, options)
 	} else {
 		r1 = ret.Error(1)
 	}

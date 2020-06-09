@@ -94,7 +94,7 @@ func TestNewRunner(t *testing.T) {
 
 		cont := &Container{
 			ID: cID,
-			ScriptInfo: NewScriptInfo(defaultRuntime,
+			Definition: NewDefinition(defaultRuntime,
 				"hash", envKey,
 				"user",
 				"",
@@ -136,7 +136,7 @@ func TestNewRunner(t *testing.T) {
 			Convey("Run runs script in container", func() {
 				Convey("fails when pool is not running", func() {
 					_, e := r.Run(context.Background(), logrus.StandardLogger(), "reqID",
-						NewScriptInfo(defaultRuntime,
+						NewDefinition(defaultRuntime,
 							"hash", "",
 							"user",
 							"",
@@ -147,7 +147,7 @@ func TestNewRunner(t *testing.T) {
 				})
 				Convey("fails on unsupported runtime", func() {
 					_, e := r.Run(context.Background(), logrus.StandardLogger(), "reqID",
-						NewScriptInfo("runtime",
+						NewDefinition("runtime",
 							"hash", "",
 							"user",
 							"main.js",
@@ -192,7 +192,7 @@ func TestNewRunner(t *testing.T) {
 								dockerMgr.On("ContainerAttach", mock.Anything, cID2).Return(cont.resp, nil).Once()
 
 								_, e := r.Run(context.Background(), logrus.StandardLogger(), "reqID",
-									cont.ScriptInfo,
+									cont.Definition,
 									&RunOptions{})
 								So(e, ShouldEqual, io.EOF)
 								cont2 := <-r.containerPool[defaultRuntime]
@@ -201,7 +201,7 @@ func TestNewRunner(t *testing.T) {
 							Convey("from cache", func() {
 								r.containerCache.Add(cont.Hash(), cont)
 								_, e := r.Run(context.Background(), logrus.StandardLogger(), "reqID",
-									cont.ScriptInfo,
+									cont.Definition,
 									&RunOptions{})
 								So(e, ShouldEqual, io.EOF)
 							})
@@ -210,7 +210,7 @@ func TestNewRunner(t *testing.T) {
 							files := map[string]*File{"file": {Data: []byte("content")}}
 							r.containerCache.Add(cont.Hash(), cont)
 							_, e := r.Run(context.Background(), logrus.StandardLogger(), "reqID",
-								cont.ScriptInfo,
+								cont.Definition,
 								&RunOptions{Files: files})
 							So(e, ShouldEqual, io.EOF)
 						})
@@ -225,7 +225,7 @@ func TestNewRunner(t *testing.T) {
 						ctx, cancel := context.WithCancel(context.Background())
 						cancel()
 						_, e := r.Run(ctx, logrus.StandardLogger(), "reqID",
-							cont.ScriptInfo,
+							cont.Definition,
 							&RunOptions{})
 						So(e, ShouldResemble, ErrSemaphoreNotAcquired)
 						cont2 := <-r.containerPool[defaultRuntime]
@@ -235,25 +235,25 @@ func TestNewRunner(t *testing.T) {
 						files := map[string]*File{"file": {Data: []byte("content")}}
 						r.containerPool[defaultRuntime] <- cont
 						expectedErr := err
-						scriptInfo := cont.ScriptInfo
+						def := cont.Definition
 
 						opts := &RunOptions{Files: files}
 						ctx := context.Background()
 
 						Convey("ContainerUpdate error", func() {
-							scriptInfo.MCPU = 2000
+							def.MCPU = 2000
 							dockerMgr.On("ContainerUpdate", mock.Anything, cID, mock.Anything).Return(err).Once()
 						})
 						Convey("Link source error", func() {
 							repo.On("Link", volKey, mock.Anything, mock.Anything).Return(err).Once()
 						})
 						Convey("Link environment error", func() {
-							scriptInfo.Environment = "env"
+							def.Environment = "env"
 							repo.On("Link", volKey, mock.Anything, mock.Anything).Return(nil).Once()
 							repo.On("Mount", volKey, mock.Anything, mock.Anything, mock.Anything).Return(err).Once()
 						})
 						Convey("for container conn dial", func() {
-							scriptInfo.Environment = ""
+							def.Environment = ""
 							cont.session = nil
 							cont.addr = "invalid"
 							expectedErr = &net.OpError{Net: "tcp", Op: "dial",
@@ -282,7 +282,7 @@ func TestNewRunner(t *testing.T) {
 							doneCh <- true
 						})
 
-						_, e := r.Run(ctx, logrus.StandardLogger(), "reqID", scriptInfo, opts)
+						_, e := r.Run(ctx, logrus.StandardLogger(), "reqID", def, opts)
 						So(e, ShouldResemble, expectedErr)
 						cont2 := <-r.containerPool[defaultRuntime]
 						So(cont2.ID, ShouldEqual, cID2)
@@ -359,7 +359,7 @@ func TestNewRunner(t *testing.T) {
 			Convey("onEvictedHandler gets called on container removal from cache", func() {
 				cont := &Container{ID: "someId", volumeKey: "someKey",
 					state: ContainerStateRunning,
-					ScriptInfo: NewScriptInfo(defaultRuntime,
+					Definition: NewDefinition(defaultRuntime,
 						"hash", "",
 						"user",
 						"",
@@ -531,12 +531,15 @@ func TestRunnerMethods(t *testing.T) {
 			r.poolSemaphore = semaphore.NewWeighted(int64(opts.Concurrency))
 			r.poolSemaphore.Acquire(context.Background(), 1)
 
-			So(func() { r.afterRun(&Container{ScriptInfo: &ScriptInfo{}}, "", &RunOptions{}, true, err) }, ShouldPanicWith, err)
+			So(func() {
+				r.afterRun(&Container{Definition: &Definition{Index: &Index{}}},
+					"", &RunOptions{}, true, err)
+			}, ShouldPanicWith, err)
 			So(time.Since(t), ShouldBeGreaterThan, time.Duration(r.options.CreateRetryCount-1)*r.options.CreateRetrySleep)
 		})
 		Convey("given an initialized container", func() {
 			cont := &Container{ID: "someid", volumeKey: "volKey", connLimit: 2, conns: make(map[string]struct{}),
-				ScriptInfo: &ScriptInfo{Runtime: defaultRuntime}}
+				Definition: &Definition{Index: &Index{Runtime: defaultRuntime}}}
 			r.containerPool = make(map[string]chan *Container)
 			r.poolSemaphore = semaphore.NewWeighted(int64(opts.Concurrency))
 			r.poolSemaphore.Acquire(context.Background(), 1)

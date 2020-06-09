@@ -98,15 +98,16 @@ func TestServerMethods(t *testing.T) {
 					scriptCli := new(scriptmocks.ScriptRunnerClient)
 					conn, _ := grpc.Dial("localhost", grpc.WithInsecure())
 					worker := Worker{
-						ID:         "id",
-						mCPU:       1,
-						alive:      true,
-						repoCli:    repoCli,
-						scriptCli:  scriptCli,
-						containers: make(map[string]*WorkerContainer),
-						scripts:    make(map[script.ScriptInfo]int),
-						conn:       conn,
-						metrics:    Metrics(),
+						ID:                "id",
+						mCPU:              1,
+						alive:             true,
+						repoCli:           repoCli,
+						scriptCli:         scriptCli,
+						containers:        make(map[string]*WorkerContainer),
+						scripts:           make(map[string]*script.Definition),
+						scriptsRefCounter: make(map[string]int),
+						conn:              conn,
+						metrics:           Metrics(),
 					}
 					stdout := []byte("stdout")
 					s.workers.Set("id", &worker)
@@ -264,14 +265,14 @@ func TestServerMethods(t *testing.T) {
 		})
 
 		Convey("given some Container, grabWorker", func() {
-			si := &script.ScriptInfo{SourceHash: "hash", UserID: "user"}
+			si := &script.Definition{Index: &script.Index{SourceHash: "hash", UserID: "user"}}
 
 			Convey("returns worker with max free slots", func() {
 				s.workers.Set("id1", NewWorker("id1", net.TCPAddr{}, 1, 1, 128, s.metrics))
 				s.workers.Set("id2", NewWorker("id2", net.TCPAddr{}, 2, 2, 128, s.metrics))
 				s.workers.Set("id3", NewWorker("id2", net.TCPAddr{}, 1, 2, 128, s.metrics))
 
-				wi, conns, fromCache := s.grabWorker(si)
+				wi, conns, fromCache := s.grabWorkerContainer(si)
 				So(wi.Worker.ID, ShouldEqual, "id2")
 				So(conns, ShouldEqual, 1)
 				So(fromCache, ShouldBeFalse)
@@ -281,8 +282,8 @@ func TestServerMethods(t *testing.T) {
 				s.workers.Set("id1", NewWorker("id1", net.TCPAddr{}, 2, 2, 128, s.metrics))
 				s.workers.Set("id2", w2)
 
-				w2.AddCache(s.workerContainerCache, si, "id2", &WorkerContainer{Worker: w2})
-				w, conns, fromCache := s.grabWorker(si)
+				s.addCache(&WorkerContainer{Worker: w2, ID: "cont_id2"}, si)
+				w, conns, fromCache := s.grabWorkerContainer(si)
 				So(w.Worker.ID, ShouldEqual, "id2")
 				So(conns, ShouldEqual, 1)
 				So(fromCache, ShouldBeTrue)
@@ -291,8 +292,8 @@ func TestServerMethods(t *testing.T) {
 				w2 := NewWorker("id2", net.TCPAddr{}, 1, 1, 128, s.metrics)
 				s.workers.Set("id1", NewWorker("id1", net.TCPAddr{}, 2, 2, 128, s.metrics))
 
-				w2.AddCache(s.workerContainerCache, si, "id1", &WorkerContainer{Worker: w2})
-				w, conns, fromCache := s.grabWorker(si)
+				s.addCache(&WorkerContainer{Worker: w2, ID: "cont_id2"}, si)
+				w, conns, fromCache := s.grabWorkerContainer(si)
 				So(w.Worker.ID, ShouldEqual, "id1")
 				So(conns, ShouldEqual, 1)
 				So(fromCache, ShouldBeFalse)
@@ -303,17 +304,17 @@ func TestServerMethods(t *testing.T) {
 				s.workers.Set("id1", w1)
 				s.workers.Set("id2", w2)
 
-				w1.AddCache(s.workerContainerCache, si, "id1", &WorkerContainer{Worker: w1})
-				w2.AddCache(s.workerContainerCache, si, "id2", &WorkerContainer{Worker: w2})
-				w, conns, fromCache := s.grabWorker(si)
+				s.addCache(&WorkerContainer{Worker: w1, ID: "cont_id1"}, si)
+				s.addCache(&WorkerContainer{Worker: w2, ID: "cont_id2"}, si)
+				w, conns, fromCache := s.grabWorkerContainer(si)
 				So(w.Worker.ID, ShouldEqual, "id1")
 				So(conns, ShouldEqual, 1)
 				So(fromCache, ShouldBeTrue)
-				w1.RemoveCache(s.workerContainerCache, si, "id1")
-				So(s.workerContainerCache[*si], ShouldHaveLength, 1)
+				s.removeCache(w.Worker, si, "cont_id1")
+				So(s.workerContainersCached[si.Hash()], ShouldHaveLength, 1)
 			})
 			Convey("returns nil if there are no workers", func() {
-				w, _, _ := s.grabWorker(si)
+				w, _, _ := s.grabWorkerContainer(si)
 				So(w, ShouldBeNil)
 			})
 		})
@@ -365,22 +366,22 @@ func TestServerMethods(t *testing.T) {
 				So(e, ShouldBeNil)
 			})
 			Convey("given container in cache", func() {
-				si := &script.ScriptInfo{Runtime: runtime, SourceHash: "hash", UserID: "user"}
-				wc := &WorkerContainer{Worker: wi}
-				wi.AddCache(s.workerContainerCache, si, "id1", wc)
+				si := &script.Definition{Index: &script.Index{Runtime: runtime, SourceHash: "hash", UserID: "user"}}
+				wc := &WorkerContainer{Worker: wi, ID: "cont_id1"}
+				s.addCache(wc, si)
 				So(wi.scripts, ShouldNotBeEmpty)
-				So(s.workerContainerCache, ShouldNotBeEmpty)
+				So(s.workerContainersCached, ShouldNotBeEmpty)
 
 				Convey("ContainerRemoved removes container from cache if refcount gets to 0", func() {
 					_, e := s.ContainerRemoved(context.Background(),
-						&pb.ContainerRemovedRequest{Id: "id1", Runtime: runtime, SourceHash: si.SourceHash, UserId: si.UserID})
+						&pb.ContainerRemovedRequest{Id: "id1", ContainerId: "cont_id1", Runtime: runtime, SourceHash: si.SourceHash, UserId: si.UserID})
 					So(e, ShouldBeNil)
 					So(wi.scripts, ShouldBeEmpty)
-					So(s.workerContainerCache, ShouldBeEmpty)
+					So(s.workerContainersCached, ShouldBeEmpty)
 				})
 				Convey("ContainerRemoved keeps container in cache if refcount > 1", func() {
-					wc := &WorkerContainer{Worker: wi}
-					wi.AddCache(s.workerContainerCache, si, "id1", wc)
+					wc := &WorkerContainer{Worker: wi, ID: "cont_id1"}
+					s.addCache(wc, si)
 					So(len(wi.scripts), ShouldEqual, 1)
 
 					_, e := s.ContainerRemoved(context.Background(),
@@ -388,14 +389,14 @@ func TestServerMethods(t *testing.T) {
 					So(e, ShouldBeNil)
 
 					So(len(wi.scripts), ShouldEqual, 1)
-					So(s.workerContainerCache, ShouldNotBeEmpty)
-					So(s.workerContainerCache[*si], ShouldContainKey, "id1")
+					So(s.workerContainersCached, ShouldNotBeEmpty)
+					So(s.workerContainersCached[si.Hash()], ShouldContainKey, "cont_id1")
 				})
 				Convey("Disconnect removes worker and all containers from cache", func() {
 					_, e := s.Disconnect(context.Background(), &pb.DisconnectRequest{Id: "id1"})
 					So(e, ShouldBeNil)
 					So(s.workers.Get("id1"), ShouldBeNil)
-					So(s.workerContainerCache, ShouldBeEmpty)
+					So(s.workerContainersCached, ShouldBeEmpty)
 				})
 
 			})

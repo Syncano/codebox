@@ -26,9 +26,10 @@ import (
 // Server defines a Load Balancer server implementing both worker plug and script runner interface.
 //go:generate go run github.com/vektra/mockery/cmd/mockery -dir ../../proto/gen/go/syncano/codebox/lb -all
 type Server struct {
-	mu                   sync.Mutex
-	workers              *cache.LRUCache // workerID->Worker
-	workerContainerCache ContainerWorkerCache
+	mu                     sync.Mutex
+	workers                *cache.LRUCache                        // workerID->Worker
+	workerContainersCached map[string]map[string]*WorkerContainer // script.Definition hash->container ID->*WorkerContainer
+	workersByIndex         map[string]map[string]int              // script.Index hash->Worker ID->ref count
 
 	fileRepo filerepo.Repo
 	options  ServerOptions
@@ -76,12 +77,13 @@ func NewServer(fileRepo filerepo.Repo, options *ServerOptions) *Server {
 		AutoRefresh: false,
 	})
 	s := &Server{
-		options:              *options,
-		workers:              workers,
-		workerContainerCache: make(ContainerWorkerCache),
-		fileRepo:             fileRepo,
-		limiter:              limiter.New(&limiter.Options{}),
-		metrics:              Metrics(),
+		options:                *options,
+		workers:                workers,
+		workerContainersCached: make(map[string]map[string]*WorkerContainer),
+		workersByIndex:         make(map[string]map[string]int),
+		fileRepo:               fileRepo,
+		limiter:                limiter.New(&limiter.Options{}),
+		metrics:                Metrics(),
 	}
 	workers.OnValueEvicted(s.onEvictedWorkerHandler)
 
@@ -187,7 +189,7 @@ func (s *Server) processRun(ctx context.Context, logger logrus.FieldLogger, stre
 
 	logger.Debug("grpc:lb:Run start")
 
-	scriptInfo := script.CreateScriptInfoFromScriptMeta(scriptMeta)
+	def := script.CreateDefinitionFromScriptMeta(scriptMeta)
 
 	chunkReader := common.NewChunkReader(func() (*scriptpb.RunChunk, error) {
 		req, err := stream.Recv()
@@ -218,7 +220,7 @@ func (s *Server) processRun(ctx context.Context, logger logrus.FieldLogger, stre
 
 	for retry := 0; retry < s.options.WorkerRetry; retry++ {
 		// Grab worker.
-		cont, conns, fromCache = s.grabWorker(scriptInfo)
+		cont, conns, fromCache = s.grabWorkerContainer(def)
 		if cont == nil {
 			logger.Warn("grpc:lb:Run no workers available")
 
@@ -237,7 +239,7 @@ func (s *Server) processRun(ctx context.Context, logger logrus.FieldLogger, stre
 			defer s.limiter.Unlock(runMeta.ConcurrencyKey, int(runMeta.ConcurrencyLimit))
 		}
 
-		logger = logger.WithFields(logrus.Fields{"container": cont, "script": scriptInfo, "try": retry, "fromCache": fromCache})
+		logger = logger.WithFields(logrus.Fields{"container": cont, "script": def, "try": retry, "fromCache": fromCache})
 
 		var err error
 
@@ -267,16 +269,73 @@ func (s *Server) processRun(ctx context.Context, logger logrus.FieldLogger, stre
 
 	if response != nil && response.Cached {
 		// Add container to worker cache if we got any response.
-		scriptInfo.MCPU = cont.mCPU
+		def.MCPU = cont.mCPU
 
-		s.mu.Lock()
-		cont.Worker.AddCache(s.workerContainerCache, scriptInfo, response.ContainerId, cont)
-		s.mu.Unlock()
+		s.addCache(cont, def)
 	}
 
 	logger.WithField("took", time.Since(start)).Info("grpc:lb:Run")
 
 	return err
+}
+
+func (s *Server) addCache(cont *WorkerContainer, def *script.Definition) {
+	idx := def.Index.Hash()
+	defHash := def.Hash()
+
+	s.mu.Lock()
+	cont.Worker.AddCache(def, cont)
+
+	// Add container to script definition cache.
+	if v, ok := s.workerContainersCached[defHash]; ok {
+		v[cont.ID] = cont
+	} else {
+		s.workerContainersCached[defHash] = map[string]*WorkerContainer{cont.ID: cont}
+	}
+
+	// Increase script index for given worker ref count.
+	if v, ok := s.workersByIndex[idx]; ok {
+		v[cont.Worker.ID]++
+	} else {
+		s.workersByIndex[idx] = map[string]int{cont.Worker.ID: 1}
+	}
+
+	s.mu.Unlock()
+}
+
+func (s *Server) removeCache(w *Worker, def *script.Definition, id string) {
+	idx := def.Index.Hash()
+	defHash := def.Hash()
+
+	s.mu.Lock()
+
+	if w.RemoveCache(def, id) {
+		// Remove worker container with specified definition from cache map.
+		if m, ok := s.workerContainersCached[defHash]; ok {
+			delete(m, id)
+
+			if len(m) == 0 {
+				delete(s.workerContainersCached, defHash)
+			}
+		}
+
+		// Decrease refcount of script index for given worker.
+		if m, ok := s.workersByIndex[idx]; ok {
+			if v, ok := m[w.ID]; ok {
+				if v <= 1 {
+					delete(m, w.ID)
+				} else {
+					m[w.ID]--
+				}
+			}
+
+			if len(m) == 0 {
+				delete(s.workersByIndex, idx)
+			}
+		}
+	}
+
+	s.mu.Unlock()
 }
 
 func (s *Server) relayReponse(logger logrus.FieldLogger, stream pb.ScriptRunner_RunServer, cont *WorkerContainer, resCh <-chan interface{}) (*scriptpb.RunResponse, error) {
@@ -339,9 +398,9 @@ func (s *Server) processWorkerRun(ctx context.Context, logger logrus.FieldLogger
 	return cont.Run(ctx, meta, chunkReader)
 }
 
-// grabWorker finds worker with container in cache and highest amount of free CPU.
+// grabWorkerContainer finds worker with container in cache and highest amount of free CPU.
 // Fallback to any worker with highest amount of free CPU.
-func (s *Server) grabWorker(scriptInfo *script.ScriptInfo) (*WorkerContainer, int, bool) { // nolint: gocyclo
+func (s *Server) grabWorkerContainer(def *script.Definition) (*WorkerContainer, int, bool) { // nolint: gocyclo
 	var (
 		container *WorkerContainer
 		conns     int
@@ -353,12 +412,14 @@ func (s *Server) grabWorker(scriptInfo *script.ScriptInfo) (*WorkerContainer, in
 
 	blacklist := make(map[string]struct{})
 
+	key := def.Hash()
+
 	s.mu.Lock()
 
 	for {
 		freeCPU = 0
 
-		if m, ok := s.workerContainerCache[*scriptInfo]; ok {
+		if m, ok := s.workerContainersCached[key]; ok {
 			for _, cont := range m {
 				w := cont.Worker
 				cpu := w.FreeCPU()
@@ -368,7 +429,7 @@ func (s *Server) grabWorker(scriptInfo *script.ScriptInfo) (*WorkerContainer, in
 				}
 
 				// Choose alive container with worker that has the highest free CPU or has free async connection.
-				if s.workers.Get(cont.Worker.ID) != nil && (scriptInfo.Async <= 1 && cpu > freeCPU) || (scriptInfo.Async > 1 && cont.Conns() < scriptInfo.Async) {
+				if s.workers.Get(cont.Worker.ID) != nil && (def.Async <= 1 && cpu > freeCPU) || (def.Async > 1 && cont.Conns() < def.Async) {
 					fromCache = true
 					container = cont
 					freeCPU = cpu
@@ -382,7 +443,7 @@ func (s *Server) grabWorker(scriptInfo *script.ScriptInfo) (*WorkerContainer, in
 
 			if workerMax != nil {
 				fromCache = false
-				container = workerMax.NewContainer(scriptInfo.Async, scriptInfo.MCPU)
+				container = workerMax.NewContainer(def.Async, def.MCPU)
 			} else {
 				// If still cannot find a worker - abandon all hope.
 				break
@@ -414,22 +475,20 @@ func (s *Server) handleWorkerError(cont *WorkerContainer, err error) {
 
 // ContainerRemoved handles notifications sent by client whenever a container gets removed from cache.
 func (s *Server) ContainerRemoved(ctx context.Context, in *pb.ContainerRemovedRequest) (*pb.ContainerRemovedResponse, error) {
-	scriptInfo := script.CreateScriptInfoFromContainerRemove(in)
+	def := script.CreateDefinitionFromContainerRemove(in)
 
 	ctx, reqID := util.AddDefaultRequestID(ctx)
 	peerAddr := util.PeerAddr(ctx)
 	logger := logrus.WithFields(logrus.Fields{"peer": peerAddr, "reqID": reqID})
 
-	logger.WithFields(logrus.Fields{"id": in.GetId(), "script": scriptInfo}).Debug("grpc:lb:ContainerRemoved")
+	logger.WithFields(logrus.Fields{"id": in.GetId(), "script": def}).Debug("grpc:lb:ContainerRemoved")
 
 	cur := s.workers.Get(in.Id)
 	if cur == nil {
 		return nil, ErrUnknownWorkerID
 	}
 
-	s.mu.Lock()
-	cur.(*Worker).RemoveCache(s.workerContainerCache, scriptInfo, in.ContainerId)
-	s.mu.Unlock()
+	s.removeCache(cur.(*Worker), def, in.ContainerId)
 
 	return &pb.ContainerRemovedResponse{}, nil
 }
@@ -474,6 +533,38 @@ func (s *Server) Disconnect(ctx context.Context, in *pb.DisconnectRequest) (*pb.
 	return &pb.DisconnectResponse{}, nil
 }
 
+func (s *Server) Delete(ctx context.Context, req *scriptpb.DeleteRequest) (*scriptpb.DeleteResponse, error) {
+	var (
+		ret *scriptpb.DeleteResponse
+		err error
+	)
+
+	ret = &scriptpb.DeleteResponse{}
+	idx := &script.Index{
+		Runtime:    req.Runtime,
+		SourceHash: req.SourceHash,
+		UserID:     req.UserId,
+	}
+
+	if m, ok := s.workersByIndex[idx.Hash()]; ok {
+		for wID := range m {
+			w := s.workers.Get(wID)
+			if w == nil {
+				continue
+			}
+
+			res, e := w.(*Worker).scriptCli.Delete(ctx, req)
+			if e != nil {
+				err = e
+			} else {
+				ret.ContainerIds = append(ret.ContainerIds, res.ContainerIds...)
+			}
+		}
+	}
+
+	return ret, err
+}
+
 func (s *Server) onEvictedWorkerHandler(key string, val interface{}) {
 	// Decrease worker count.
 	s.metrics.WorkerCount().Add(-1)
@@ -481,7 +572,35 @@ func (s *Server) onEvictedWorkerHandler(key string, val interface{}) {
 	w := val.(*Worker)
 
 	s.mu.Lock()
-	w.Shutdown(s.workerContainerCache)
+	scriptDefs := w.Shutdown()
+
+	for _, def := range scriptDefs {
+		idx := def.Index.Hash()
+		defHash := def.Hash()
+
+		// Delete all containers cached for given worker+script definition pair.
+		if m, ok := s.workerContainersCached[defHash]; ok {
+			for contID, cont := range m {
+				if cont.Worker == w {
+					delete(m, contID)
+				}
+			}
+
+			if len(m) == 0 {
+				delete(s.workerContainersCached, defHash)
+			}
+		}
+
+		// Delete script index entry for worker.
+		if m, ok := s.workersByIndex[idx]; ok {
+			delete(m, w.ID)
+
+			if len(m) == 0 {
+				delete(s.workersByIndex, idx)
+			}
+		}
+	}
+
 	logrus.WithField("worker", w).Info("Worker removed")
 	s.mu.Unlock()
 }

@@ -33,8 +33,10 @@ type DockerRunner struct {
 	poolID         string
 	running        uint32
 	createMu       sync.Mutex
-	containerCache *cache.LRUSetCache
-	containerPool  map[string]chan *Container
+	scriptIndexMu  sync.Mutex
+	scriptIndex    map[string]map[string]*Definition // script index hash -> script definition hash -> script definition
+	containerCache *cache.LRUSetCache                // script definition hash -> container
+	containerPool  map[string]chan *Container        // runtime -> container pool
 	poolSemaphore  *semaphore.Weighted
 	taskWaitGroup  sync.WaitGroup
 
@@ -205,6 +207,7 @@ func NewRunner(options *Options, dockerMgr docker.Manager, checker sys.SystemChe
 		fileRepo:       repo,
 		sys:            checker,
 		options:        *options,
+		scriptIndex:    make(map[string]map[string]*Definition),
 		containerCache: containerCache,
 		redisCli:       redisCli,
 		metrics:        Metrics(),
@@ -290,10 +293,10 @@ func (r *DockerRunner) DownloadAllImages() error {
 	return nil
 }
 
-func (r *DockerRunner) processRun(ctx context.Context, logger logrus.FieldLogger, requestID string, scriptInfo *ScriptInfo, options *RunOptions) (*Result, *Container, bool, error) {
+func (r *DockerRunner) processRun(ctx context.Context, logger logrus.FieldLogger, requestID string, def *Definition, options *RunOptions) (*Result, *Container, bool, error) {
 	start := time.Now()
 
-	conn, cont, newContainer, err := r.getContainer(ctx, requestID, scriptInfo, options)
+	conn, cont, newContainer, err := r.getContainer(ctx, requestID, def, options)
 	if err != nil {
 		return nil, cont, newContainer, err
 	}
@@ -325,7 +328,7 @@ func (r *DockerRunner) processRun(ctx context.Context, logger logrus.FieldLogger
 
 	var output []byte
 
-	if scriptInfo.Async <= 1 {
+	if def.Async <= 1 {
 		output, ret.Stdout, ret.Stderr, err = r.processOutput(ctx, conn, cont.Stdout(), cont.Stderr(), delim, limit)
 	} else {
 		output, err = r.processOutputAsync(ctx, conn, limit)
@@ -386,12 +389,12 @@ func (r *DockerRunner) processOutputAsync(ctx context.Context, conn io.Reader, l
 }
 
 // Run executes given script in a docker container.
-func (r *DockerRunner) Run(ctx context.Context, logger logrus.FieldLogger, requestID string, scriptInfo *ScriptInfo, options *RunOptions) (*Result, error) {
-	if scriptInfo == nil || options == nil {
+func (r *DockerRunner) Run(ctx context.Context, logger logrus.FieldLogger, requestID string, def *Definition, options *RunOptions) (*Result, error) {
+	if def == nil || options == nil {
 		return nil, common.ErrInvalidArgument
 	}
 
-	if _, ok := SupportedRuntimes[scriptInfo.Runtime]; !ok {
+	if _, ok := SupportedRuntimes[def.Runtime]; !ok {
 		return nil, ErrUnsupportedRuntime
 	}
 
@@ -399,20 +402,20 @@ func (r *DockerRunner) Run(ctx context.Context, logger logrus.FieldLogger, reque
 		options.Timeout = defaultTimeout
 	}
 
-	if scriptInfo.MCPU == 0 {
-		scriptInfo.MCPU = uint32(r.options.Constraints.CPULimit / 1e6)
+	if def.MCPU == 0 {
+		def.MCPU = uint32(r.options.Constraints.CPULimit / 1e6)
 	}
 
 	if options.Weight == 0 {
-		options.Weight = uint(math.Ceil(float64(scriptInfo.MCPU) * 1e6 / float64(r.options.Constraints.CPULimit)))
+		options.Weight = uint(math.Ceil(float64(def.MCPU) * 1e6 / float64(r.options.Constraints.CPULimit)))
 	}
 
 	logger = logger.WithFields(logrus.Fields{
 		"reqID":   requestID,
-		"script":  scriptInfo,
+		"script":  def,
 		"options": options,
 		"weight":  options.Weight,
-		"async":   scriptInfo.Async,
+		"async":   def.Async,
 	})
 
 	if !r.IsRunning() {
@@ -423,14 +426,14 @@ func (r *DockerRunner) Run(ctx context.Context, logger logrus.FieldLogger, reque
 	start := time.Now()
 
 	// Check and refresh source and environment.
-	if r.fileRepo.Get(scriptInfo.SourceHash) == "" || (scriptInfo.Environment != "" && r.fileRepo.Get(scriptInfo.Environment) == "") {
+	if r.fileRepo.Get(def.SourceHash) == "" || (def.Environment != "" && r.fileRepo.Get(def.Environment) == "") {
 		logger.Error("grpc:script:Run source not available")
 		return nil, ErrSourceNotAvailable
 	}
 
 	r.taskWaitGroup.Add(1)
 
-	ret, cont, newContainer, err := r.processRun(ctx, logger, requestID, scriptInfo, options)
+	ret, cont, newContainer, err := r.processRun(ctx, logger, requestID, def, options)
 	took := time.Since(start)
 
 	if err != nil {
@@ -486,8 +489,7 @@ func (r *DockerRunner) processContainerDone(cont *Container, requestID string, o
 		}
 
 		logFunc("Recovering from container error")
-		r.containerCache.Delete(cont.Hash(), cont)
-		cont.StopAcceptingConnections()
+		r.deleteContainer(cont)
 	}
 	// Add new container if needed.
 	if recreate {
@@ -669,6 +671,10 @@ func (r *DockerRunner) StopPool() {
 	// Clear cache.
 	logrus.Info("Stopping cached containers")
 	r.containerCache.Flush()
+
+	r.scriptIndexMu.Lock()
+	r.scriptIndex = make(map[string]map[string]*Definition)
+	r.scriptIndexMu.Unlock()
 }
 
 // Shutdown stops everything.
@@ -741,7 +747,7 @@ func (r *DockerRunner) releaseContainer(cont *Container, requestID string, optio
 	return nil
 }
 
-func (r *DockerRunner) getContainer(ctx context.Context, requestID string, scriptInfo *ScriptInfo, options *RunOptions) (conn io.ReadWriteCloser, cont *Container, newContainer bool, err error) { // nolint: gocyclo
+func (r *DockerRunner) getContainer(ctx context.Context, requestID string, def *Definition, options *RunOptions) (conn io.ReadWriteCloser, cont *Container, newContainer bool, err error) { // nolint: gocyclo
 	constraints := &docker.Constraints{
 		CPUPeriod:   r.options.Constraints.CPUPeriod,
 		CPUQuota:    int64(options.Weight) * r.options.Constraints.CPUQuota,
@@ -749,7 +755,7 @@ func (r *DockerRunner) getContainer(ctx context.Context, requestID string, scrip
 	}
 
 	// Try to get a container from cache.
-	containerHash := scriptInfo.Hash()
+	containerHash := def.Hash()
 	cacheVal := r.containerCache.Get(containerHash)
 
 	for _, c := range cacheVal {
@@ -772,13 +778,13 @@ func (r *DockerRunner) getContainer(ctx context.Context, requestID string, scrip
 	}
 
 	// With async, before using container from pool first make a lock to avoid multiple multi-conn containers at once.
-	if scriptInfo.Async > 1 {
+	if def.Async > 1 {
 		r.containerWaitLock.Lock()
 		if ch, ok := r.containerWait[containerHash]; ok {
 			r.containerWaitLock.Unlock()
 			<-ch
 
-			return r.getContainer(ctx, requestID, scriptInfo, options)
+			return r.getContainer(ctx, requestID, def, options)
 		}
 
 		ch := make(chan struct{})
@@ -795,8 +801,8 @@ func (r *DockerRunner) getContainer(ctx context.Context, requestID string, scrip
 	}
 
 	// Fallback to pool.
-	cont = <-r.containerPool[scriptInfo.Runtime]
-	cont.ScriptInfo = scriptInfo
+	cont = <-r.containerPool[def.Runtime]
+	cont.Definition = def
 	cont.Configure(&ContainerOptions{
 		Timeout: options.Timeout,
 	},
@@ -810,7 +816,7 @@ func (r *DockerRunner) getContainer(ctx context.Context, requestID string, scrip
 	}
 
 	// Linking sources.
-	logger := logrus.WithFields(logrus.Fields{"container": cont, "script": cont.ScriptInfo})
+	logger := logrus.WithFields(logrus.Fields{"container": cont, "script": cont.Definition})
 
 	if err = r.fileRepo.Link(cont.volumeKey, cont.SourceHash, userMount); err != nil {
 		logger.WithError(err).WithField("sourceHash", cont.SourceHash).Error("Linking error")
@@ -837,8 +843,7 @@ func (r *DockerRunner) getContainer(ctx context.Context, requestID string, scrip
 		if err := cont.ProcessCache(); err != nil {
 			if cont.IsAcceptingConnections() {
 				logger.WithError(err).Warn("Cache streaming error")
-				r.containerCache.Delete(cont.Hash(), cont)
-				cont.StopAcceptingConnections()
+				r.deleteContainer(cont)
 			}
 		}
 	}()
@@ -856,8 +861,7 @@ func (r *DockerRunner) getContainer(ctx context.Context, requestID string, scrip
 				if err != nil {
 					if cont.IsAcceptingConnections() {
 						logger.WithError(err).Warn("Stdout streaming error")
-						r.containerCache.Delete(cont.Hash(), cont)
-						cont.StopAcceptingConnections()
+						r.deleteContainer(cont)
 					}
 
 					break
@@ -876,8 +880,7 @@ func (r *DockerRunner) getContainer(ctx context.Context, requestID string, scrip
 				if err != nil {
 					if cont.IsAcceptingConnections() {
 						logger.WithError(err).Warn("Stderr streaming error")
-						r.containerCache.Delete(cont.Hash(), cont)
-						cont.StopAcceptingConnections()
+						r.deleteContainer(cont)
 					}
 
 					break
@@ -893,7 +896,77 @@ func (r *DockerRunner) getContainer(ctx context.Context, requestID string, scrip
 	// Add container to cache.
 	r.containerCache.Add(containerHash, cont)
 
+	// Add scriptindex to map.
+	idx := cont.Index.Hash()
+
+	r.scriptIndexMu.Lock()
+	if v, ok := r.scriptIndex[idx]; ok {
+		v[cont.Definition.Hash()] = cont.Definition
+	} else {
+		r.scriptIndex[idx] = map[string]*Definition{cont.Definition.Hash(): cont.Definition}
+	}
+	r.scriptIndexMu.Unlock()
+
 	return conn, cont, true, err
+}
+
+func (r *DockerRunner) DeleteContainers(i *Index, id string) []*Container {
+	conts := r.containersByIndexAndID(i, id)
+
+	for _, c := range conts {
+		r.deleteContainer(c)
+	}
+
+	return conts
+}
+
+func (r *DockerRunner) containersByIndexAndID(i *Index, id string) []*Container {
+	idx := i.Hash()
+
+	r.scriptIndexMu.Lock()
+
+	hashes, ok := r.scriptIndex[idx]
+	if ok {
+		delete(r.scriptIndex, idx)
+	}
+
+	r.scriptIndexMu.Unlock()
+
+	if !ok {
+		return nil
+	}
+
+	var (
+		ret    []*Container
+		c      *Container
+		filter func(*Container) bool
+	)
+
+	if id == "" {
+		filter = func(*Container) bool { return true }
+	} else {
+		filter = func(c *Container) bool { return c.ID == id }
+	}
+
+	for hash := range hashes {
+		containers := r.containerCache.Get(hash)
+
+		for _, cont := range containers {
+			c = cont.(*Container)
+			if !filter(c) {
+				continue
+			}
+
+			ret = append(ret, c)
+		}
+	}
+
+	return ret
+}
+
+func (r *DockerRunner) deleteContainer(cont *Container) {
+	r.containerCache.Delete(cont.Hash(), cont)
+	cont.StopAcceptingConnections()
 }
 
 func (r *DockerRunner) createFreshContainer(ctx context.Context, runtime string) (*Container, error) {
@@ -1003,6 +1076,24 @@ func (r *DockerRunner) onEvictedContainerHandler(key string, val interface{}) {
 
 	if cont.ConnsNum() == 0 {
 		r.cleanupContainer(cont)
+	}
+
+	// Delete from script index if it's the last one for given script definition hash.
+	if len(r.containerCache.Get(key)) == 0 {
+		idx := cont.Index.Hash()
+		defHash := cont.Definition.Hash()
+
+		r.scriptIndexMu.Lock()
+
+		if v, ok := r.scriptIndex[idx]; ok {
+			delete(v, defHash)
+
+			if len(v) == 0 {
+				delete(r.scriptIndex, idx)
+			}
+		}
+
+		r.scriptIndexMu.Unlock()
 	}
 }
 

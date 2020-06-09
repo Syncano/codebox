@@ -1,6 +1,7 @@
 package script
 
 import (
+	"context"
 	"io"
 	"sync"
 	"time"
@@ -122,7 +123,7 @@ func (s *Server) Run(stream pb.ScriptRunner_RunServer) error {
 	}
 
 	ret, err := s.Runner.Run(ctx, logger, reqID,
-		CreateScriptInfoFromScriptMeta(meta),
+		CreateDefinitionFromScriptMeta(meta),
 		&RunOptions{
 			OutputLimit: opts.GetOutputLimit(),
 			Timeout:     time.Duration(opts.GetTimeout()) * time.Millisecond,
@@ -214,6 +215,25 @@ func (s *Server) sendResponse(stream pb.ScriptRunner_RunServer, ret *Result) err
 	}
 
 	return nil
+}
+
+func (s *Server) Delete(ctx context.Context, req *pb.DeleteRequest) (*pb.DeleteResponse, error) {
+	idx := &Index{
+		Runtime:    req.Runtime,
+		SourceHash: req.SourceHash,
+		UserID:     req.UserId,
+	}
+
+	conts := s.Runner.DeleteContainers(idx, req.ContainerId)
+	cIDs := make([]string, len(conts))
+
+	for _, cont := range conts {
+		cIDs = append(cIDs, cont.ID)
+	}
+
+	return &pb.DeleteResponse{
+		ContainerIds: cIDs,
+	}, nil
 }
 
 // ParseError converts standard error to gRPC error with detected code.

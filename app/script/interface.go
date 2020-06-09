@@ -17,12 +17,13 @@ type Runner interface {
 	Options() Options
 	DownloadAllImages() error
 	CleanupUnused()
-	Run(ctx context.Context, logger logrus.FieldLogger, requestID string, scriptInfo *ScriptInfo, options *RunOptions) (*Result, error)
+	Run(ctx context.Context, logger logrus.FieldLogger, requestID string, def *Definition, options *RunOptions) (*Result, error)
 	CreatePool() (string, error)
 	StopPool()
 	Shutdown()
 	OnContainerRemoved(f ContainerRemovedHandler)
 	IsRunning() bool
+	DeleteContainers(i *Index, id string) []*Container
 }
 
 // Assert that DockerRunner is compatible with our interface.
