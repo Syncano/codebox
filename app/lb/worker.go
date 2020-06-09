@@ -32,22 +32,20 @@ type Worker struct {
 	defaultMCPU uint32
 	memory      uint64
 
-	freeCPU    int32
-	freeMemory uint64
-	mu         sync.RWMutex
-	alive      bool
-	repoCli    repopb.RepoClient
-	scriptCli  scriptpb.ScriptRunnerClient
-	scripts    map[script.ScriptInfo]int
-	containers map[string]*WorkerContainer
-	metrics    *MetricsData
+	freeCPU           int32
+	freeMemory        uint64
+	mu                sync.RWMutex
+	alive             bool
+	repoCli           repopb.RepoClient
+	scriptCli         scriptpb.ScriptRunnerClient
+	scriptsRefCounter map[string]int                // script definition hash -> ref count
+	scripts           map[string]*script.Definition // script definition hash -> definition
+	containers        map[string]*WorkerContainer   // container ID -> worker container
+	metrics           *MetricsData
 
 	// These are processed atomically.
 	errorCount uint32
 }
-
-// ContainerWorkerCache defines a map - ScriptInfo->container ID->set of *WorkerContainer.
-type ContainerWorkerCache map[script.ScriptInfo]map[string]*WorkerContainer
 
 const (
 	chunkSize = 2 * 1024 * 1024
@@ -66,15 +64,16 @@ func NewWorker(id string, addr net.TCPAddr, mCPU, defaultMCPU uint32, memory uin
 		ID:   id,
 		Addr: addr,
 
-		alive:       true,
-		scripts:     make(map[script.ScriptInfo]int),
-		containers:  make(map[string]*WorkerContainer),
-		conn:        conn,
-		mCPU:        mCPU,
-		defaultMCPU: defaultMCPU,
-		freeMemory:  memory,
-		freeCPU:     int32(mCPU),
-		metrics:     metrics,
+		alive:             true,
+		scripts:           make(map[string]*script.Definition),
+		scriptsRefCounter: make(map[string]int),
+		containers:        make(map[string]*WorkerContainer),
+		conn:              conn,
+		mCPU:              mCPU,
+		defaultMCPU:       defaultMCPU,
+		freeMemory:        memory,
+		freeCPU:           int32(mCPU),
+		metrics:           metrics,
 
 		repoCli:   repopb.NewRepoClient(conn),
 		scriptCli: scriptpb.NewScriptRunnerClient(conn),
@@ -243,65 +242,58 @@ func uploadDir(stream repopb.Repo_UploadClient, fs afero.Fs, key, sourcePath str
 	return nil
 }
 
-// AddCache increases ref count of Container in Worker and adds it to ContainerWorkerCache.
-func (w *Worker) AddCache(cache ContainerWorkerCache, scriptInfo *script.ScriptInfo, contID string, container *WorkerContainer) {
+// AddCache increases ref count of Container in Worker.
+func (w *Worker) AddCache(def *script.Definition, container *WorkerContainer) {
+	defHash := def.Hash()
+
 	w.mu.Lock()
 
-	container.ID = contID
-	w.scripts[*scriptInfo]++
-	w.containers[contID] = container
-
-	if v, ok := cache[*scriptInfo]; ok {
-		v[contID] = container
-	} else {
-		cache[*scriptInfo] = map[string]*WorkerContainer{contID: container}
-	}
+	w.scriptsRefCounter[defHash]++
+	w.scripts[defHash] = def
+	w.containers[container.ID] = container
 
 	w.mu.Unlock()
 }
 
-// RemoveCache decreases ref count of Container in Worker and if needed removes it from ContainerWorkerCache.
-func (w *Worker) RemoveCache(cache ContainerWorkerCache, scriptInfo *script.ScriptInfo, contID string) {
+// RemoveCache decreases ref count of Container in Worker.
+func (w *Worker) RemoveCache(def *script.Definition, contID string) bool {
+	defHash := def.Hash()
+
 	w.mu.Lock()
 
 	delete(w.containers, contID)
 
-	ref := w.scripts[*scriptInfo]
+	ref := w.scriptsRefCounter[defHash]
 	if ref > 1 {
-		w.scripts[*scriptInfo]--
+		w.scriptsRefCounter[defHash]--
+		w.scripts[defHash] = def
 	} else {
-		delete(w.scripts, *scriptInfo)
+		delete(w.scripts, defHash)
 
-		if m, ok := cache[*scriptInfo]; ok {
-			if len(m) == 1 {
-				delete(cache, *scriptInfo)
-			} else {
-				delete(m, contID)
-			}
-		}
+		w.mu.Unlock()
+
+		return true
 	}
 
 	w.mu.Unlock()
+
+	return false
 }
 
-// Shutdown removes all Containers in Worker from ContainerWorkerCache and stops connection when drained.
-func (w *Worker) Shutdown(cache ContainerWorkerCache) {
+// Shutdown stops connection when drained and returns cached Definitions.
+func (w *Worker) Shutdown() []*script.Definition {
 	w.mu.Lock()
+
+	ret := make([]*script.Definition, len(w.scripts))
 
 	w.alive = false
 
-	for ci := range w.scripts {
-		if m, ok := cache[ci]; ok {
-			for contID, cont := range m {
-				if cont.Worker == w {
-					delete(m, contID)
-				}
-			}
+	i := 0
 
-			if len(m) == 0 {
-				delete(cache, ci)
-			}
-		}
+	for _, scriptHash := range w.scripts {
+		ret[i] = scriptHash
+
+		i++
 	}
 
 	w.metrics.WorkerCPU().Add(-int64(w.freeCPU))
@@ -313,6 +305,8 @@ func (w *Worker) Shutdown(cache ContainerWorkerCache) {
 
 		w.conn.Close() // nolint
 	}()
+
+	return ret
 }
 
 // WorkerContainer defines worker container info.

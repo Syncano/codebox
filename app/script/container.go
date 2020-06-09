@@ -37,7 +37,7 @@ const (
 
 // Container defines unique container information.
 type Container struct {
-	*ScriptInfo
+	*Definition
 
 	ID string
 
@@ -72,9 +72,11 @@ func (c *Container) String() string {
 // NewContainer creates new container and returns it.
 func NewContainer(runtime string, redisCli RedisClient) *Container {
 	return &Container{
-		ScriptInfo: &ScriptInfo{Runtime: runtime},
-		conns:      make(map[string]struct{}),
-		redisCli:   redisCli,
+		Definition: &Definition{
+			Index: &Index{Runtime: runtime},
+		},
+		conns:    make(map[string]struct{}),
+		redisCli: redisCli,
 	}
 }
 

@@ -17,6 +17,36 @@ type ScriptRunnerClient struct {
 	mock.Mock
 }
 
+// Delete provides a mock function with given fields: ctx, in, opts
+func (_m *ScriptRunnerClient) Delete(ctx context.Context, in *script.DeleteRequest, opts ...grpc.CallOption) (*script.DeleteResponse, error) {
+	_va := make([]interface{}, len(opts))
+	for _i := range opts {
+		_va[_i] = opts[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, ctx, in)
+	_ca = append(_ca, _va...)
+	ret := _m.Called(_ca...)
+
+	var r0 *script.DeleteResponse
+	if rf, ok := ret.Get(0).(func(context.Context, *script.DeleteRequest, ...grpc.CallOption) *script.DeleteResponse); ok {
+		r0 = rf(ctx, in, opts...)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*script.DeleteResponse)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(context.Context, *script.DeleteRequest, ...grpc.CallOption) error); ok {
+		r1 = rf(ctx, in, opts...)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // Run provides a mock function with given fields: ctx, opts
 func (_m *ScriptRunnerClient) Run(ctx context.Context, opts ...grpc.CallOption) (script.ScriptRunner_RunClient, error) {
 	_va := make([]interface{}, len(opts))
