@@ -17,6 +17,7 @@ import (
 	"time"
 
 	redis "github.com/go-redis/redis/v7"
+	"github.com/golang/protobuf/ptypes"
 	"github.com/sirupsen/logrus"
 	. "github.com/smartystreets/goconvey/convey"
 	"github.com/stretchr/testify/mock"
@@ -532,7 +533,6 @@ func TestServerMethods(t *testing.T) {
 				Convey("given payload with cache, sets it correctly in redis", func() {
 					stdout := "stdout"
 					stderr := "stderr"
-					t := int64(50)
 					payload := `{"cache": 2.5, "name": "endpoint/name", "output_limit": 10, "files": {"a": "b"}, "source_hash": "sourcehash", "entrypoint": "entry", "environment": "env", "environment_url": "env_url", "trace": "trace_raw",
 					"run": {"additional_args": "\"args\"", "config": "\"cfg\"", "meta": "\"meta\"", "runtime_name": "\"runtime\"", "timeout": 30}}`
 					cacheKey := createCacheKey("1", "endpoint/name", "sourcehash")
@@ -555,7 +555,7 @@ func TestServerMethods(t *testing.T) {
 
 					runStream.On("Recv", mock.Anything).Return(&scriptpb.RunResponse{
 						Code:   0,
-						Time:   t,
+						Time:   ptypes.TimestampNow(),
 						Stdout: []byte(stdout),
 						Stderr: []byte(stderr),
 					}, nil).Once()

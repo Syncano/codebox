@@ -13,7 +13,7 @@ func TestCelery(t *testing.T) {
 	Convey("NewScriptTrace works with utf8", t, func() {
 		trace := NewScriptTrace(1, &scriptpb.RunResponse{
 			Code:   0,
-			Time:   10,
+			Time:   nil,
 			Stdout: []byte("zażółć"),
 			Stderr: []byte("zażółć"),
 		})
