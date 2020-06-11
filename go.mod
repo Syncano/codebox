@@ -7,7 +7,7 @@ require (
 	contrib.go.opencensus.io/exporter/prometheus v0.1.0
 	github.com/Microsoft/go-winio v0.4.14 // indirect
 	github.com/Syncano/pkg-go v0.2.1
-	github.com/Syncano/syncanoapis/gen v0.2.1
+	github.com/Syncano/syncanoapis/gen v1.0.0
 	github.com/blang/semver v3.5.1+incompatible
 	github.com/certifi/gocertifi v0.0.0-20200211180108-c7c1fbc02894 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.0 // indirect
@@ -22,6 +22,7 @@ require (
 	github.com/go-playground/universal-translator v0.17.0 // indirect
 	github.com/go-redis/redis/v7 v7.3.0
 	github.com/gogo/protobuf v1.3.1 // indirect
+	github.com/golang/protobuf v1.4.2
 	github.com/gotestyourself/gotestyourself v2.2.0+incompatible // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware v1.2.0
 	github.com/hashicorp/yamux v0.0.0-20190923154419-df201c70410d
@@ -48,6 +49,7 @@ require (
 	golang.org/x/sync v0.0.0-20200317015054-43a5402ce75a
 	golang.org/x/tools v0.0.0-20200522201501-cb1345f3a375
 	google.golang.org/grpc v1.29.1
+	google.golang.org/protobuf v1.24.0
 	gopkg.in/go-playground/validator.v9 v9.31.0
 	gotest.tools v2.2.0+incompatible // indirect
 )

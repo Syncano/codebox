@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/golang/protobuf/ptypes"
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/stats"
 	"go.opencensus.io/stats/view"
@@ -189,7 +190,7 @@ func (s *Server) sendResponse(stream pb.ScriptRunner_RunServer, ret *Result) err
 			Stderr:      ret.Stderr,
 			Response:    httpResponse,
 			Took:        resTook,
-			Time:        time.Now().UnixNano(),
+			Time:        ptypes.TimestampNow(),
 			Cached:      ret.Cached,
 			Weight:      uint32(ret.Weight),
 		},
