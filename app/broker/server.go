@@ -63,7 +63,7 @@ type ServerOptions struct {
 var DefaultOptions = &ServerOptions{
 	DownloadConcurrency: 16,
 	LBRetry:             3,
-	MaxPayloadSize:      6 << 20,
+	MaxPayloadSize:      15 << 20,
 	MaxTimeout:          8 * time.Minute,
 }
 
