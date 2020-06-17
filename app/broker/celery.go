@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/golang/protobuf/ptypes"
+
 	scriptpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/script/v1"
 
 	"github.com/Syncano/pkg-go/celery"
@@ -88,7 +90,7 @@ func NewScriptTrace(traceID uint64, result *scriptpb.RunResponse) *ScriptTrace {
 			Stderr:   json.RawMessage(util.ToQuoteJSON(result.GetStderr())),
 			Response: scriptResponse,
 		}
-		executed = time.Unix(0, result.GetTime())
+		executed, _ = ptypes.Timestamp(result.GetTime())
 	} else {
 		executed = time.Now()
 	}

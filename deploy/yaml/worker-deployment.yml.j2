@@ -74,7 +74,7 @@ spec:
                 name: codebox
           volumeMounts:
             - name: script-storage
-              mountPath: /home/codebox/storage
+              mountPath: "{{ REPO_PATH | default('/home/codebox/storage', true) }}"
               mountPropagation: Bidirectional
             - name: docker-run
               mountPath: /var/run

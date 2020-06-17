@@ -40,14 +40,15 @@ func TestWorker(t *testing.T) {
 		repoCli := new(repomocks.RepoClient)
 		scriptCli := new(scriptmocks.ScriptRunnerClient)
 		worker := &Worker{
-			ID:         "id",
-			freeCPU:    2000,
-			alive:      true,
-			repoCli:    repoCli,
-			scriptCli:  scriptCli,
-			containers: make(map[string]*WorkerContainer),
-			scripts:    make(map[script.ScriptInfo]int),
-			metrics:    Metrics(),
+			ID:                "id",
+			freeCPU:           2000,
+			alive:             true,
+			repoCli:           repoCli,
+			scriptCli:         scriptCli,
+			containers:        make(map[string]*WorkerContainer),
+			scripts:           make(map[string]*script.Definition),
+			scriptsRefCounter: make(map[string]int),
+			metrics:           Metrics(),
 		}
 		cont := &WorkerContainer{Worker: worker}
 

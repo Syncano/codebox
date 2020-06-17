@@ -1,10 +1,12 @@
 package script
 
 import (
+	"context"
 	"io"
 	"sync"
 	"time"
 
+	"github.com/golang/protobuf/ptypes"
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/stats"
 	"go.opencensus.io/stats/view"
@@ -122,7 +124,7 @@ func (s *Server) Run(stream pb.ScriptRunner_RunServer) error {
 	}
 
 	ret, err := s.Runner.Run(ctx, logger, reqID,
-		CreateScriptInfoFromScriptMeta(meta),
+		CreateDefinitionFromScriptMeta(meta),
 		&RunOptions{
 			OutputLimit: opts.GetOutputLimit(),
 			Timeout:     time.Duration(opts.GetTimeout()) * time.Millisecond,
@@ -188,7 +190,7 @@ func (s *Server) sendResponse(stream pb.ScriptRunner_RunServer, ret *Result) err
 			Stderr:      ret.Stderr,
 			Response:    httpResponse,
 			Took:        resTook,
-			Time:        time.Now().UnixNano(),
+			Time:        ptypes.TimestampNow(),
 			Cached:      ret.Cached,
 			Weight:      uint32(ret.Weight),
 		},
@@ -214,6 +216,25 @@ func (s *Server) sendResponse(stream pb.ScriptRunner_RunServer, ret *Result) err
 	}
 
 	return nil
+}
+
+func (s *Server) Delete(ctx context.Context, req *pb.DeleteRequest) (*pb.DeleteResponse, error) {
+	idx := &Index{
+		Runtime:    req.Runtime,
+		SourceHash: req.SourceHash,
+		UserID:     req.UserId,
+	}
+
+	conts := s.Runner.DeleteContainers(idx, req.ContainerId)
+	cIDs := make([]string, len(conts))
+
+	for _, cont := range conts {
+		cIDs = append(cIDs, cont.ID)
+	}
+
+	return &pb.DeleteResponse{
+		ContainerIds: cIDs,
+	}, nil
 }
 
 // ParseError converts standard error to gRPC error with detected code.

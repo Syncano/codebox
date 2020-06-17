@@ -63,7 +63,7 @@ type ServerOptions struct {
 var DefaultOptions = &ServerOptions{
 	DownloadConcurrency: 16,
 	LBRetry:             3,
-	MaxPayloadSize:      6 << 20,
+	MaxPayloadSize:      15 << 20,
 	MaxTimeout:          8 * time.Minute,
 }
 
@@ -199,6 +199,26 @@ func (s *Server) Run(stream brokerpb.ScriptRunner_RunServer) error {
 	})
 
 	return s.processRun(ctx, logger, meta, lbMeta, scriptMeta, chunkReader, stream)
+}
+
+func (s *Server) Delete(ctx context.Context, req *scriptpb.DeleteRequest) (*scriptpb.DeleteResponse, error) {
+	var (
+		ret *scriptpb.DeleteResponse
+		err error
+	)
+
+	ret = &scriptpb.DeleteResponse{}
+
+	for _, lb := range s.lbServers {
+		res, e := lb.lbCli.Delete(ctx, req)
+		if e != nil {
+			err = e
+		} else {
+			ret.ContainerIds = append(ret.ContainerIds, res.ContainerIds...)
+		}
+	}
+
+	return ret, err
 }
 
 func (s *Server) processRun(ctx context.Context, logger logrus.FieldLogger,

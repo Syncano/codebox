@@ -42,10 +42,10 @@ github.com/Joker/jade v1.0.1-0.20190614124447-d475f43051e7/go.mod h1:6E6s8o2AE4K
 github.com/Microsoft/go-winio v0.4.14 h1:+hMXMk01us9KgxGb7ftKQt2Xpf5hH/yky+TDA+qxleU=
 github.com/Microsoft/go-winio v0.4.14/go.mod h1:qXqCSQ3Xa7+6tgxaGTIe4Kpcdsi+P8jBhyzoq1bpyYA=
 github.com/Shopify/goreferrer v0.0.0-20181106222321-ec9c9a553398/go.mod h1:a1uqRtAwp2Xwc6WNPJEufxJ7fx3npB4UV/JOLmbu5I0=
-github.com/Syncano/pkg-go v0.1.4 h1:cRskCI8whmmpVH5zFOJcr6ZjPTcOYMyDX3zZX3rnboY=
-github.com/Syncano/pkg-go v0.1.4/go.mod h1:wGZLHIfNQREtVLHK5gLMR0enXEaq6FkbH0rm4ljthqU=
-github.com/Syncano/syncanoapis/gen v0.1.2 h1:tyiDrGAnMQp0UdKQGmbkoPhOvNrW3Pg4bqjcu4Ane4Y=
-github.com/Syncano/syncanoapis/gen v0.1.2/go.mod h1:I1+7CW9sF/sLeKhuAN83+sPVi/iveumVkxx/+oTHsGE=
+github.com/Syncano/pkg-go v0.2.1 h1:TU1wjBSRVJLF1A5ywvYBWMBdjm6TRKFPqnBBdAWnISA=
+github.com/Syncano/pkg-go v0.2.1/go.mod h1:wGZLHIfNQREtVLHK5gLMR0enXEaq6FkbH0rm4ljthqU=
+github.com/Syncano/syncanoapis/gen v1.0.0 h1:zJDgIpDkldJpgCAOYWzEqYo5tuz3eTO+F3st3hTURYo=
+github.com/Syncano/syncanoapis/gen v1.0.0/go.mod h1:I1+7CW9sF/sLeKhuAN83+sPVi/iveumVkxx/+oTHsGE=
 github.com/TheZeroSlave/zapsentry v1.4.0/go.mod h1:yNua4EoU6jRUxYq1B32EaXV1u7yslGQm+JvaPBYuX+M=
 github.com/ajg/form v1.5.1/go.mod h1:uL1WgH+h2mgNtvBq0339dVnzXdBETtL2LeUXaIv25UY=
 github.com/alecthomas/template v0.0.0-20160405071501-a0175ee3bccc/go.mod h1:LOuyumcjzFXgccqObfd/Ljyb9UuFJ6TxHnclSeseNhc=

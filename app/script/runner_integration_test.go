@@ -117,7 +117,7 @@ func TestRunnerIntegration(t *testing.T) {
 
 				for i := 0; i < 2; i++ {
 					res, err := runner.Run(context.Background(), logrus.StandardLogger(), "reqID",
-						script.NewScriptInfo(data.runtime,
+						script.NewDefinition(data.runtime,
 							hash, "",
 							"user",
 							"",
@@ -149,7 +149,7 @@ func TestRunnerIntegration(t *testing.T) {
 				err := uploadFile(repo, hash, []byte(data.script), script.SupportedRuntimes[data.runtime].DefaultEntryPoint)
 				So(err, ShouldBeNil)
 				res, err := runner.Run(context.Background(), logrus.StandardLogger(), "reqID",
-					script.NewScriptInfo(data.runtime,
+					script.NewDefinition(data.runtime,
 						hash, "",
 						"user",
 						"",
@@ -180,7 +180,7 @@ func TestRunnerIntegration(t *testing.T) {
 				err := uploadFile(repo, hash, []byte(data.script), script.SupportedRuntimes[data.runtime].DefaultEntryPoint)
 				So(err, ShouldBeNil)
 				res, err := runner.Run(context.Background(), logrus.StandardLogger(), "reqID",
-					script.NewScriptInfo(data.runtime,
+					script.NewDefinition(data.runtime,
 						hash, "",
 						"user",
 						"",
@@ -230,7 +230,7 @@ func TestRunnerIntegration(t *testing.T) {
 				So(err, ShouldBeNil)
 
 				res, err := runner.Run(context.Background(), logrus.StandardLogger(), "reqID",
-					script.NewScriptInfo(data.runtime,
+					script.NewDefinition(data.runtime,
 						hash, env,
 						"user",
 						"test/entry.js",
@@ -259,7 +259,7 @@ func TestRunnerIntegration(t *testing.T) {
 				So(err, ShouldBeNil)
 
 				res, err := runner.Run(context.Background(), logrus.StandardLogger(), "reqID",
-					script.NewScriptInfo(data.runtime,
+					script.NewDefinition(data.runtime,
 						hash, env,
 						"user",
 						"",
@@ -281,7 +281,7 @@ func TestRunnerIntegration(t *testing.T) {
 				err := uploadFile(repo, hash, []byte(data.script), "test/entry.js")
 				So(err, ShouldBeNil)
 				res, err := runner.Run(context.Background(), logrus.StandardLogger(), "reqID",
-					script.NewScriptInfo(data.runtime,
+					script.NewDefinition(data.runtime,
 						hash, "",
 						"user",
 						"test/entry.js",
@@ -311,7 +311,7 @@ func TestRunnerIntegration(t *testing.T) {
 				err := uploadFile(repo, hash, []byte(data.script), script.SupportedRuntimes[data.runtime].DefaultEntryPoint)
 				So(err, ShouldBeNil)
 				res, err := runner.Run(context.Background(), logrus.StandardLogger(), "reqID",
-					script.NewScriptInfo(data.runtime,
+					script.NewDefinition(data.runtime,
 						hash, "",
 						"user",
 						"",
@@ -345,7 +345,7 @@ func TestRunnerIntegration(t *testing.T) {
 				err := uploadFile(repo, hash, []byte(data.script), script.SupportedRuntimes[data.runtime].DefaultEntryPoint)
 				So(err, ShouldBeNil)
 				res, err := runner.Run(context.Background(), logrus.StandardLogger(), "reqID",
-					script.NewScriptInfo(data.runtime,
+					script.NewDefinition(data.runtime,
 						hash, "",
 						"user",
 						"",
@@ -371,7 +371,7 @@ func TestRunnerIntegration(t *testing.T) {
 				err := uploadFile(repo, hash, []byte(data.script), script.SupportedRuntimes[data.runtime].DefaultEntryPoint)
 				So(err, ShouldBeNil)
 				res, err := runner.Run(context.Background(), logrus.StandardLogger(), "reqID",
-					script.NewScriptInfo(data.runtime,
+					script.NewDefinition(data.runtime,
 						hash, "",
 						"user",
 						"",
@@ -398,7 +398,7 @@ func TestRunnerIntegration(t *testing.T) {
 				err := uploadFile(repo, hash, []byte(data.script), script.SupportedRuntimes[data.runtime].DefaultEntryPoint)
 				So(err, ShouldBeNil)
 				res, err := runner.Run(context.Background(), logrus.StandardLogger(), "reqID",
-					script.NewScriptInfo(data.runtime,
+					script.NewDefinition(data.runtime,
 						hash, "",
 						"user",
 						"",
@@ -426,7 +426,7 @@ func TestRunnerIntegration(t *testing.T) {
 				err := uploadFile(repo, hash, []byte(data.script), script.SupportedRuntimes[data.runtime].DefaultEntryPoint)
 				So(err, ShouldBeNil)
 				res, err := runner.Run(context.Background(), logrus.StandardLogger(), "reqID",
-					script.NewScriptInfo(data.runtime,
+					script.NewDefinition(data.runtime,
 						hash, "",
 						"user",
 						"",

@@ -4,7 +4,7 @@ import "time"
 
 const (
 	// MaxGRPCMessageSize defines max send/recv grpc payload.
-	MaxGRPCMessageSize = 10 << 20
+	MaxGRPCMessageSize = 20 << 20
 
 	// KeepaliveParamsTime defines duration after which server will ping client to see if the transport is still alive.
 	KeepaliveParamsTime = 10 * time.Second
