@@ -77,7 +77,7 @@ spec:
             - name: dind-data
               mountPath: /var/lib/docker
             - name: script-storage
-              mountPath: "{{ HOST_STORAGE_PATH }}"
+              mountPath: "{{ HOST_STORAGE_PATH | default('/home/codebox/storage', true) }}"
               mountPropagation: HostToContainer
             - name: docker-run
               mountPath: /var/run
