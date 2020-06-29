@@ -6,7 +6,7 @@ jobs:
       - checkout
 
       - run:
-          name: Setup system
+          name: Setup
           command: |
             sudo mount --make-rshared /
 
@@ -36,7 +36,7 @@ jobs:
       - checkout
 
       - run:
-          name: Setup system
+          name: Setup
           command: |
               docker login -u="$DOCKER_LOGIN" -p="$DOCKER_PASS" $DOCKER_SERVER
               sudo mount --make-rshared /
@@ -55,11 +55,6 @@ jobs:
           command: |
             pip install jinja2-cli[yaml]
       - run:
-          name: Install kops
-          command: |
-            sudo curl -L -o /usr/local/bin/kops https://github.com/kubernetes/kops/releases/download/v1.16.0/kops-linux-amd64
-            sudo chmod +x /usr/local/bin/kops
-      - run:
           name: Install gcloud and kubectl
           command: |
             sudo /opt/google-cloud-sdk/bin/gcloud --quiet components update
@@ -72,11 +67,13 @@ jobs:
             make decrypt
 
             if [ "$CIRCLE_BRANCH" == "master" ]; then
-              kops export kubecfg --name=k8s.syncano.rocks --state=s3://k8s-syncano-rocks-state-store
+              echo $GCLOUD_STG_SERVICE_KEY > gcloud-service-key.json
+              gcloud auth activate-service-account --key-file=gcloud-service-key.json
+              gcloud container clusters get-credentials syncano-stg --zone europe-west1 --project syncano-staging
+
               make deploy-staging
 
             elif [ "$CIRCLE_BRANCH" == "stable" ]; then
-              kops export kubecfg --name=k8s.syncano.io --state=s3://k8s-syncano-io-state-store
               echo $GCLOUD_EU1_SERVICE_KEY > gcloud-service-key.json
               gcloud auth activate-service-account --key-file=gcloud-service-key.json
               gcloud container clusters get-credentials syncano-eu1 --zone europe-west1 --project pioner-syncano-prod-9cfb
