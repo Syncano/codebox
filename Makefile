@@ -113,7 +113,7 @@ deploy-staging: ## Deploy application to staging
 deploy-production: ## Deploy application to production
 	echo "=== deploying eu1 ==="
 	kubectl config use-context gke_pioner-syncano-prod-9cfb_europe-west1_syncano-eu1
-	./deploy.sh us1 $(GITSHA) $(ARGS)
+	./deploy.sh eu1 $(GITSHA) $(ARGS)
 
 encrypt: ## Encrypt unencrypted files (for secrets).
 	find deploy -name "*.unenc" -exec sh -c 'gpg --batch --yes --passphrase "$(CODEBOX_VAULT_PASS)" --symmetric --cipher-algo AES256 -o "$${1%.unenc}.gpg" "$$1"' _ {} \;
