@@ -34,6 +34,7 @@ const SCRIPT_FUNC = new vm.Script(`
 
   __f.catch(function (error) {
     __conn.handleError(error)
+    __conn.sendResponse()
   })
 
   __f.then(function (r) {

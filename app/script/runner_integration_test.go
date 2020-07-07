@@ -391,7 +391,9 @@ func TestRunnerIntegration(t *testing.T) {
 		Convey("runs async scripts", func() {
 			var tests = []scriptTest{
 				{"nodejs_v8", `exports.default = (ctx) => { ctx.log('codebox'); abrakadabra }`},
+				{"nodejs_v8", `exports.default = async (ctx) => { ctx.log('codebox'); abrakadabra }`},
 				{"nodejs_v12", `exports.default = (ctx) => { ctx.log('codebox'); abrakadabra }`},
+				{"nodejs_v12", `exports.default = async (ctx) => { ctx.log('codebox'); abrakadabra }`},
 			}
 			for _, data := range tests {
 				hash := util.GenerateKey()
