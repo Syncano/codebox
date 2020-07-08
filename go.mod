@@ -4,9 +4,9 @@ go 1.14
 
 require (
 	contrib.go.opencensus.io/exporter/jaeger v0.2.0
-	contrib.go.opencensus.io/exporter/prometheus v0.1.0
+	contrib.go.opencensus.io/exporter/prometheus v0.2.0
 	github.com/Microsoft/go-winio v0.4.14 // indirect
-	github.com/Syncano/pkg-go v0.2.1
+	github.com/Syncano/pkg-go v1.4.0
 	github.com/Syncano/syncanoapis/gen v1.0.0
 	github.com/blang/semver v3.5.1+incompatible
 	github.com/certifi/gocertifi v0.0.0-20200211180108-c7c1fbc02894 // indirect
@@ -20,12 +20,12 @@ require (
 	github.com/facebookgo/stack v0.0.0-20160209184415-751773369052
 	github.com/getsentry/raven-go v0.2.0 // indirect
 	github.com/go-playground/universal-translator v0.17.0 // indirect
-	github.com/go-redis/redis/v7 v7.3.0
+	github.com/go-redis/redis/v7 v7.4.0
 	github.com/gogo/protobuf v1.3.1 // indirect
 	github.com/golang/protobuf v1.4.2
 	github.com/gotestyourself/gotestyourself v2.2.0+incompatible // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware v1.2.0
-	github.com/hashicorp/yamux v0.0.0-20190923154419-df201c70410d
+	github.com/hashicorp/yamux v0.0.0-20200609203250-aecfd211c9ce
 	github.com/imdario/mergo v0.3.9
 	github.com/juju/ratelimit v1.0.1
 	github.com/kevinburke/go-bindata v3.21.0+incompatible
@@ -34,21 +34,21 @@ require (
 	github.com/mitchellh/hashstructure v1.0.0
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.0.1 // indirect
-	github.com/prometheus/client_golang v1.6.0 // indirect
+	github.com/prometheus/client_golang v1.7.1 // indirect
 	github.com/sirupsen/logrus v1.6.0
 	github.com/smartystreets/goconvey v1.6.4
-	github.com/spf13/afero v1.2.2
-	github.com/streadway/amqp v0.0.0-20200108173154-1c71cc93ed71
-	github.com/stretchr/testify v1.5.1
+	github.com/spf13/afero v1.3.1
+	github.com/streadway/amqp v1.0.0
+	github.com/stretchr/testify v1.6.1
 	github.com/urfave/cli/v2 v2.2.0
 	github.com/vektra/mockery v1.1.2
-	github.com/vmihailenco/msgpack/v4 v4.3.11
-	go.opencensus.io v0.22.3
-	golang.org/x/crypto v0.0.0-20200510223506-06a226fb4e37
-	golang.org/x/net v0.0.0-20200520182314-0ba52f642ac2
-	golang.org/x/sync v0.0.0-20200317015054-43a5402ce75a
-	golang.org/x/tools v0.0.0-20200522201501-cb1345f3a375
-	google.golang.org/grpc v1.29.1
+	github.com/vmihailenco/msgpack/v4 v4.3.12
+	go.opencensus.io v0.22.4
+	golang.org/x/crypto v0.0.0-20200707235045-ab33eee955e0
+	golang.org/x/net v0.0.0-20200707034311-ab3426394381
+	golang.org/x/sync v0.0.0-20200625203802-6e8e738ad208
+	golang.org/x/tools v0.0.0-20200708003708-134513de8882
+	google.golang.org/grpc v1.30.0
 	gopkg.in/go-playground/validator.v9 v9.31.0
 	gotest.tools v2.2.0+incompatible // indirect
 )
