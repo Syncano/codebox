@@ -42,13 +42,29 @@ func (_m *Runner) CreatePool() (string, error) {
 	return r0, r1
 }
 
-// DeleteContainers provides a mock function with given fields: i, id
-func (_m *Runner) DeleteContainers(i *script.Index, id string) []*script.Container {
-	ret := _m.Called(i, id)
+// DeleteContainers provides a mock function with given fields: i
+func (_m *Runner) DeleteContainers(i *script.Index) []*script.Container {
+	ret := _m.Called(i)
+
+	var r0 []*script.Container
+	if rf, ok := ret.Get(0).(func(*script.Index) []*script.Container); ok {
+		r0 = rf(i)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]*script.Container)
+		}
+	}
+
+	return r0
+}
+
+// DeleteContainersByID provides a mock function with given fields: i, containerID
+func (_m *Runner) DeleteContainersByID(i *script.Index, containerID string) []*script.Container {
+	ret := _m.Called(i, containerID)
 
 	var r0 []*script.Container
 	if rf, ok := ret.Get(0).(func(*script.Index, string) []*script.Container); ok {
-		r0 = rf(i, id)
+		r0 = rf(i, containerID)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]*script.Container)

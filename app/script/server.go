@@ -225,7 +225,7 @@ func (s *Server) Delete(ctx context.Context, req *pb.DeleteRequest) (*pb.DeleteR
 		UserID:     req.UserId,
 	}
 
-	conts := s.Runner.DeleteContainers(idx, req.ContainerId)
+	conts := s.Runner.DeleteContainersByID(idx, req.ContainerId)
 	cIDs := make([]string, len(conts))
 
 	for _, cont := range conts {

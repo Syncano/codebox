@@ -142,7 +142,9 @@ func TestServerMethods(t *testing.T) {
 						repoCli.On("Exists", mock.Anything, mock.Anything).Return(nil, errCanceled)
 						e := s.Run(stream)
 						So(e, ShouldEqual, errCanceled)
-						So(s.limiter.Lock(ctx, "ckey", 1), ShouldBeNil)
+
+						_, e = s.limiter.Lock(ctx, "ckey", 1)
+						So(e, ShouldBeNil)
 					})
 					Convey("given simple valid request", func() {
 						stream.On("Recv").Return(validReq1, nil).Once()

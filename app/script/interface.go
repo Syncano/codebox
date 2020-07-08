@@ -23,7 +23,8 @@ type Runner interface {
 	Shutdown()
 	OnContainerRemoved(f ContainerRemovedHandler)
 	IsRunning() bool
-	DeleteContainers(i *Index, id string) []*Container
+	DeleteContainers(i *Index) []*Container
+	DeleteContainersByID(i *Index, containerID string) []*Container
 }
 
 // Assert that DockerRunner is compatible with our interface.
