@@ -410,6 +410,7 @@ func TestServerMethods(t *testing.T) {
 			handler := http.HandlerFunc(s.ReadyHandler)
 
 			Convey("writes 200 if worker count is satisfied", func() {
+				s.options.WorkerMinReady = 0
 				handler.ServeHTTP(rr, req)
 				So(rr.Code, ShouldEqual, http.StatusOK)
 			})
