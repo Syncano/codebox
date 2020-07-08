@@ -149,8 +149,8 @@ func (w *Worker) release(mCPU, conns uint32) {
 }
 
 // IncreaseErrorCount increases error count of worker.
-func (w *Worker) IncreaseErrorCount() uint32 {
-	return atomic.AddUint32(&w.errorCount, 1)
+func (w *Worker) IncreaseErrorCount() uint {
+	return uint(atomic.AddUint32(&w.errorCount, 1))
 }
 
 // ResetErrorCount resets error count of worker.
