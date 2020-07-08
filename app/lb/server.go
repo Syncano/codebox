@@ -230,8 +230,13 @@ func (s *Server) processRun(ctx context.Context, logger logrus.FieldLogger, stre
 		defer cont.Release()
 
 		// Limiter.
+		var lockInfo *limiter.LockInfo
+
 		if conns == 1 && runMeta != nil && runMeta.ConcurrencyLimit > 0 {
-			if err := s.limiter.Lock(ctx, runMeta.ConcurrencyKey, int(runMeta.ConcurrencyLimit)); err != nil {
+			var err error
+
+			lockInfo, err = s.limiter.Lock(ctx, runMeta.ConcurrencyKey, int(runMeta.ConcurrencyLimit))
+			if err != nil {
 				logger.WithError(err).Warn("grpc:lb:Run Lock failed")
 				return status.Error(codes.ResourceExhausted, err.Error())
 			}
@@ -239,7 +244,7 @@ func (s *Server) processRun(ctx context.Context, logger logrus.FieldLogger, stre
 			defer s.limiter.Unlock(runMeta.ConcurrencyKey, int(runMeta.ConcurrencyLimit))
 		}
 
-		logger = logger.WithFields(logrus.Fields{"container": cont, "script": def, "try": retry, "fromCache": fromCache})
+		logger = logger.WithFields(logrus.Fields{"container": cont, "script": def, "try": retry + 1, "fromCache": fromCache, "lock": lockInfo})
 
 		var err error
 
@@ -269,12 +274,10 @@ func (s *Server) processRun(ctx context.Context, logger logrus.FieldLogger, stre
 
 	if response != nil && response.Cached {
 		// Add container to worker cache if we got any response.
-		def.MCPU = cont.mCPU
-
 		s.addCache(cont, def)
 	}
 
-	logger.WithField("took", time.Since(start)).Info("grpc:lb:Run")
+	logger.WithFields(logrus.Fields{"took": time.Since(start), "mcpu": cont.mCPU}).Info("grpc:lb:Run")
 
 	return err
 }

@@ -910,7 +910,11 @@ func (r *DockerRunner) getContainer(ctx context.Context, requestID string, def *
 	return conn, cont, true, err
 }
 
-func (r *DockerRunner) DeleteContainers(i *Index, id string) []*Container {
+func (r *DockerRunner) DeleteContainers(i *Index) []*Container {
+	return r.DeleteContainersByID(i, "")
+}
+
+func (r *DockerRunner) DeleteContainersByID(i *Index, id string) []*Container {
 	conts := r.containersByIndexAndID(i, id)
 
 	for _, c := range conts {
