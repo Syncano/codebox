@@ -403,7 +403,7 @@ func (r *DockerRunner) Run(ctx context.Context, logger logrus.FieldLogger, reque
 	}
 
 	if def.MCPU == 0 {
-		def.MCPU = uint32(r.options.Constraints.CPULimit / 1e6)
+		def.MCPU = r.options.Constraints.MCPU()
 	}
 
 	if options.Weight == 0 {

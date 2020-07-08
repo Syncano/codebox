@@ -46,7 +46,9 @@ type ServerOptions struct {
 	WorkerRetry          int
 	WorkerKeepalive      time.Duration
 	WorkerMinReady       int
-	WorkerErrorThreshold uint32
+	WorkerErrorThreshold uint
+
+	DefaultScriptMcpu uint
 
 	// Limiter
 	LimiterOptions limiter.Options
@@ -56,7 +58,10 @@ type ServerOptions struct {
 var DefaultOptions = &ServerOptions{
 	WorkerRetry:          3,
 	WorkerKeepalive:      30 * time.Second,
+	WorkerMinReady:       1,
 	WorkerErrorThreshold: 2,
+
+	DefaultScriptMcpu: 125,
 }
 
 const (
@@ -171,6 +176,15 @@ func (s *Server) Run(stream pb.ScriptRunner_RunServer) error {
 		return common.ErrInvalidArgument
 	}
 
+	// Set defaults
+	if scriptMeta.Options == nil {
+		scriptMeta.Options = &scriptpb.RunMeta_Options{}
+	}
+
+	if scriptMeta.Options.Mcpu == 0 {
+		scriptMeta.Options.Mcpu = uint32(s.options.DefaultScriptMcpu)
+	}
+
 	return s.processRun(ctx, logger, stream, meta, scriptMeta)
 }
 
@@ -274,6 +288,7 @@ func (s *Server) processRun(ctx context.Context, logger logrus.FieldLogger, stre
 
 	if response != nil && response.Cached {
 		// Add container to worker cache if we got any response.
+		cont.ID = response.ContainerId
 		s.addCache(cont, def)
 	}
 
@@ -306,16 +321,21 @@ func (s *Server) addCache(cont *WorkerContainer, def *script.Definition) {
 	s.mu.Unlock()
 }
 
-func (s *Server) removeCache(w *Worker, def *script.Definition, id string) {
+func (s *Server) removeCache(w *Worker, def *script.Definition, containerID string) bool {
 	idx := def.Index.Hash()
 	defHash := def.Hash()
+	removed := true
 
 	s.mu.Lock()
 
-	if w.RemoveCache(def, id) {
+	if w.RemoveCache(def, containerID) {
 		// Remove worker container with specified definition from cache map.
 		if m, ok := s.workerContainersCached[defHash]; ok {
-			delete(m, id)
+			if _, ok = m[containerID]; ok {
+				delete(m, containerID)
+			} else {
+				removed = false
+			}
 
 			if len(m) == 0 {
 				delete(s.workerContainersCached, defHash)
@@ -330,6 +350,8 @@ func (s *Server) removeCache(w *Worker, def *script.Definition, id string) {
 				} else {
 					m[w.ID]--
 				}
+			} else {
+				removed = false
 			}
 
 			if len(m) == 0 {
@@ -339,6 +361,8 @@ func (s *Server) removeCache(w *Worker, def *script.Definition, id string) {
 	}
 
 	s.mu.Unlock()
+
+	return removed
 }
 
 func (s *Server) relayReponse(logger logrus.FieldLogger, stream pb.ScriptRunner_RunServer, cont *WorkerContainer, resCh <-chan interface{}) (*scriptpb.RunResponse, error) {
@@ -491,7 +515,11 @@ func (s *Server) ContainerRemoved(ctx context.Context, in *pb.ContainerRemovedRe
 		return nil, ErrUnknownWorkerID
 	}
 
-	s.removeCache(cur.(*Worker), def, in.ContainerId)
+	if s.removeCache(cur.(*Worker), def, in.ContainerId) {
+		logger.Info("Removed container from worker cache")
+	} else {
+		logger.Warn("Container not found in worker cache!")
+	}
 
 	return &pb.ContainerRemovedResponse{}, nil
 }
