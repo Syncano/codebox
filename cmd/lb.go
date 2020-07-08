@@ -69,8 +69,16 @@ As there is no authentication, always run it in a private network.`,
 			EnvVars: []string{"WORKER_RETRY"}, Value: lb.DefaultOptions.WorkerRetry, Destination: &lbOptions.WorkerRetry,
 		},
 		&cli.IntFlag{
-			Name: "worker-min-ready", Usage: "number of retries on failed worker run",
-			EnvVars: []string{"WORKER_MIN_READY"}, Destination: &lbOptions.WorkerMinReady,
+			Name: "worker-min-ready", Usage: "number of required workers available",
+			EnvVars: []string{"WORKER_MIN_READY"}, Value: lb.DefaultOptions.WorkerMinReady, Destination: &lbOptions.WorkerMinReady,
+		},
+		&cli.UintFlag{
+			Name: "worker-error-threshold", Usage: "worker error max threshold",
+			EnvVars: []string{"WORKER_ERROR_THRESHOLD"}, Value: lb.DefaultOptions.WorkerErrorThreshold, Destination: &lbOptions.WorkerErrorThreshold,
+		},
+		&cli.UintFlag{
+			Name: "default-script-mcpu", Usage: "default script run mcpu",
+			EnvVars: []string{"DEFAULT_SCRIPT_MCPU"}, Value: lb.DefaultOptions.DefaultScriptMcpu, Destination: &lbOptions.DefaultScriptMcpu,
 		},
 		// LB Limiter options.
 		&cli.DurationFlag{

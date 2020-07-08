@@ -58,6 +58,10 @@ type Constraints struct {
 	StorageLimit    string
 }
 
+func (c *Constraints) MCPU() uint32 {
+	return uint32(c.CPULimit / 1e6)
+}
+
 const (
 	containerWorkdir = "/tmp"
 	defaultTimeout   = 30 * time.Second
