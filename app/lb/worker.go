@@ -268,6 +268,7 @@ func (w *Worker) RemoveCache(def *script.Definition, contID string) bool {
 		w.scriptsRefCounter[defHash]--
 		w.scripts[defHash] = def
 	} else {
+		delete(w.scriptsRefCounter, defHash)
 		delete(w.scripts, defHash)
 
 		w.mu.Unlock()

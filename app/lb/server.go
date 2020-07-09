@@ -324,7 +324,8 @@ func (s *Server) addCache(cont *WorkerContainer, def *script.Definition) {
 func (s *Server) removeCache(w *Worker, def *script.Definition, containerID string) bool {
 	idx := def.Index.Hash()
 	defHash := def.Hash()
-	removed := true
+	removedContainer := false
+	removedIdx := false
 
 	s.mu.Lock()
 
@@ -332,9 +333,9 @@ func (s *Server) removeCache(w *Worker, def *script.Definition, containerID stri
 		// Remove worker container with specified definition from cache map.
 		if m, ok := s.workerContainersCached[defHash]; ok {
 			if _, ok = m[containerID]; ok {
+				removedContainer = true
+
 				delete(m, containerID)
-			} else {
-				removed = false
 			}
 
 			if len(m) == 0 {
@@ -345,13 +346,13 @@ func (s *Server) removeCache(w *Worker, def *script.Definition, containerID stri
 		// Decrease refcount of script index for given worker.
 		if m, ok := s.workersByIndex[idx]; ok {
 			if v, ok := m[w.ID]; ok {
+				removedIdx = true
+
 				if v <= 1 {
 					delete(m, w.ID)
 				} else {
 					m[w.ID]--
 				}
-			} else {
-				removed = false
 			}
 
 			if len(m) == 0 {
@@ -362,7 +363,7 @@ func (s *Server) removeCache(w *Worker, def *script.Definition, containerID stri
 
 	s.mu.Unlock()
 
-	return removed
+	return removedContainer && removedIdx
 }
 
 func (s *Server) relayReponse(logger logrus.FieldLogger, stream pb.ScriptRunner_RunServer, cont *WorkerContainer, resCh <-chan interface{}) (*scriptpb.RunResponse, error) {
@@ -506,9 +507,9 @@ func (s *Server) ContainerRemoved(ctx context.Context, in *pb.ContainerRemovedRe
 
 	ctx, reqID := util.AddDefaultRequestID(ctx)
 	peerAddr := util.PeerAddr(ctx)
-	logger := logrus.WithFields(logrus.Fields{"peer": peerAddr, "reqID": reqID})
+	logger := logrus.WithFields(logrus.Fields{"peer": peerAddr, "reqID": reqID, "id": in.GetId(), "script": def, "containerID": in.GetContainerId()})
 
-	logger.WithFields(logrus.Fields{"id": in.GetId(), "script": def}).Debug("grpc:lb:ContainerRemoved")
+	logger.Debug("grpc:lb:ContainerRemoved")
 
 	cur := s.workers.Get(in.Id)
 	if cur == nil {
