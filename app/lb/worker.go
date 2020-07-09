@@ -320,6 +320,14 @@ type WorkerContainer struct {
 	async uint32
 }
 
+func (w *WorkerContainer) String() string {
+	if w.ID == "" {
+		return fmt.Sprintf("{ID:Fresh, Worker:%s}", w.Worker.ID)
+	}
+
+	return fmt.Sprintf("{ID:%s, Worker:%s}", w.ID, w.Worker.ID)
+}
+
 // Conns returns number of current connections.
 func (w *WorkerContainer) Conns() uint32 {
 	return atomic.LoadUint32(&w.conns)

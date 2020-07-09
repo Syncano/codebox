@@ -282,14 +282,16 @@ func (s *Server) processRun(ctx context.Context, logger logrus.FieldLogger, stre
 		break
 	}
 
-	cont.Worker.ResetErrorCount()
-
 	response, err := s.relayReponse(logger, stream, cont, resCh)
 
-	if response != nil && response.Cached {
-		// Add container to worker cache if we got any response.
-		cont.ID = response.ContainerId
-		s.addCache(cont, def)
+	if response != nil {
+		cont.Worker.ResetErrorCount()
+
+		if response.Cached {
+			// Add container to worker cache if we got cached response.
+			cont.ID = response.ContainerId
+			s.addCache(cont, def)
+		}
 	}
 
 	logger.WithFields(logrus.Fields{"took": time.Since(start), "mcpu": cont.mCPU}).Info("grpc:lb:Run")
@@ -329,35 +331,35 @@ func (s *Server) removeCache(w *Worker, def *script.Definition, containerID stri
 
 	s.mu.Lock()
 
-	if w.RemoveCache(def, containerID) {
-		// Remove worker container with specified definition from cache map.
-		if m, ok := s.workerContainersCached[defHash]; ok {
-			if _, ok = m[containerID]; ok {
-				removedContainer = true
+	w.RemoveCache(def, containerID)
 
-				delete(m, containerID)
-			}
+	// Remove worker container with specified definition from cache map.
+	if m, ok := s.workerContainersCached[defHash]; ok {
+		if _, ok = m[containerID]; ok {
+			removedContainer = true
 
-			if len(m) == 0 {
-				delete(s.workerContainersCached, defHash)
+			delete(m, containerID)
+		}
+
+		if len(m) == 0 {
+			delete(s.workerContainersCached, defHash)
+		}
+	}
+
+	// Decrease refcount of script index for given worker.
+	if m, ok := s.workersByIndex[idx]; ok {
+		if v, ok := m[w.ID]; ok {
+			removedIdx = true
+
+			if v <= 1 {
+				delete(m, w.ID)
+			} else {
+				m[w.ID]--
 			}
 		}
 
-		// Decrease refcount of script index for given worker.
-		if m, ok := s.workersByIndex[idx]; ok {
-			if v, ok := m[w.ID]; ok {
-				removedIdx = true
-
-				if v <= 1 {
-					delete(m, w.ID)
-				} else {
-					m[w.ID]--
-				}
-			}
-
-			if len(m) == 0 {
-				delete(s.workersByIndex, idx)
-			}
+		if len(m) == 0 {
+			delete(s.workersByIndex, idx)
 		}
 	}
 
