@@ -428,7 +428,7 @@ func (r *DockerRunner) Run(ctx context.Context, logger logrus.FieldLogger, reque
 	// Check and refresh source and environment.
 	if r.fileRepo.Get(def.SourceHash) == "" || (def.Environment != "" && r.fileRepo.Get(def.Environment) == "") {
 		logger.Error("grpc:script:Run source not available")
-		return nil, ErrSourceNotAvailable
+		return nil, common.ErrSourceNotAvailable
 	}
 
 	r.taskWaitGroup.Add(1)

@@ -2,17 +2,9 @@ package script
 
 import (
 	"errors"
-
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 var (
-	// gRPC errors.
-
-	// ErrSourceNotAvailable signals that specified source hash was not found.
-	ErrSourceNotAvailable = status.Error(codes.FailedPrecondition, "source not available")
-
 	// Result errors.
 
 	// ErrIncorrectData signals when output structure is malformed.
