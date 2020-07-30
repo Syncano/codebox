@@ -24,9 +24,9 @@ import (
 	dockermock "github.com/Syncano/codebox/app/docker/mocks"
 	"github.com/Syncano/codebox/app/filerepo"
 	repomock "github.com/Syncano/codebox/app/filerepo/mocks"
-	"github.com/Syncano/pkg-go/cache"
-	"github.com/Syncano/pkg-go/sys"
-	sysmock "github.com/Syncano/pkg-go/sys/mocks"
+	"github.com/Syncano/pkg-go/v2/cache"
+	"github.com/Syncano/pkg-go/v2/sys"
+	sysmock "github.com/Syncano/pkg-go/v2/sys/mocks"
 )
 
 type MockConn struct {
@@ -465,8 +465,8 @@ func TestRunnerMethods(t *testing.T) {
 		r := DockerRunner{sys: checker,
 			fileRepo:       repo,
 			dockerMgr:      dockerMgr,
-			options:        *opts,
-			containerCache: cache.NewLRUSetCache(&cache.Options{}),
+			options:        opts,
+			containerCache: cache.NewLRUSetCache(),
 			metrics:        Metrics(),
 		}
 		r.containerCache.OnValueEvicted(r.onEvictedContainerHandler)

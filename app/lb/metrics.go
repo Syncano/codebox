@@ -8,7 +8,7 @@ import (
 	"go.opencensus.io/metric/metricproducer"
 
 	"github.com/Syncano/codebox/internal/metrics"
-	"github.com/Syncano/pkg-go/util"
+	"github.com/Syncano/pkg-go/v2/util"
 )
 
 var (

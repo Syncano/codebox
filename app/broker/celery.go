@@ -8,8 +8,8 @@ import (
 
 	scriptpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/script/v1"
 
-	"github.com/Syncano/pkg-go/celery"
-	"github.com/Syncano/pkg-go/util"
+	"github.com/Syncano/pkg-go/v2/celery"
+	"github.com/Syncano/pkg-go/v2/util"
 )
 
 var (

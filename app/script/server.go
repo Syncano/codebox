@@ -14,7 +14,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/Syncano/codebox/app/filerepo"
-	"github.com/Syncano/pkg-go/util"
+	"github.com/Syncano/pkg-go/v2/util"
 	pb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/script/v1"
 )
 

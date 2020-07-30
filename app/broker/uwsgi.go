@@ -14,7 +14,7 @@ import (
 	"github.com/vmihailenco/msgpack/v4"
 
 	"github.com/Syncano/codebox/app/common"
-	"github.com/Syncano/pkg-go/util"
+	"github.com/Syncano/pkg-go/v2/util"
 	brokerpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/broker/v1"
 	lbpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/lb/v1"
 	scriptpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/script/v1"

@@ -23,9 +23,9 @@ import (
 	"github.com/Syncano/codebox/app/docker"
 	"github.com/Syncano/codebox/app/filerepo"
 	codewrapper "github.com/Syncano/codebox/codewrapper/server"
-	"github.com/Syncano/pkg-go/cache"
-	"github.com/Syncano/pkg-go/sys"
-	"github.com/Syncano/pkg-go/util"
+	"github.com/Syncano/pkg-go/v2/cache"
+	"github.com/Syncano/pkg-go/v2/sys"
+	"github.com/Syncano/pkg-go/v2/util"
 )
 
 // DockerRunner provides methods to use to run user scripts securely.
@@ -50,7 +50,7 @@ type DockerRunner struct {
 	fileRepo  filerepo.Repo
 	sys       sys.SystemChecker
 	redisCli  RedisClient
-	options   Options
+	options   *Options
 	metrics   *MetricsData
 }
 
@@ -165,12 +165,9 @@ const (
 )
 
 // NewRunner initializes a new script runner.
-func NewRunner(options *Options, dockerMgr docker.Manager, checker sys.SystemChecker, repo filerepo.Repo, redisCli RedisClient) (*DockerRunner, error) {
-	if options != nil {
-		mergo.Merge(options, DefaultOptions) // nolint - error not possible
-	} else {
-		options = DefaultOptions
-	}
+func NewRunner(opts *Options, dockerMgr docker.Manager, checker sys.SystemChecker, repo filerepo.Repo, redisCli RedisClient) (*DockerRunner, error) {
+	options := *DefaultOptions
+	_ = mergo.Merge(&options, opts, mergo.WithOverride)
 
 	// Set concurrency limits on docker.
 	dockerMCPU := uint(dockerMgr.Info().NCPU * 1000)
@@ -198,15 +195,15 @@ func NewRunner(options *Options, dockerMgr docker.Manager, checker sys.SystemChe
 		return nil, err
 	}
 
-	containerCache := cache.NewLRUSetCache(&cache.Options{
-		TTL:      options.ContainerTTL,
-		Capacity: options.ContainersCapacity,
-	})
+	containerCache := cache.NewLRUSetCache(
+		cache.WithTTL(options.ContainerTTL),
+		cache.WithCapacity(options.ContainersCapacity),
+	)
 	r := &DockerRunner{
 		dockerMgr:      dockerMgr,
 		fileRepo:       repo,
 		sys:            checker,
-		options:        *options,
+		options:        &options,
 		scriptIndex:    make(map[string]map[string]*Definition),
 		containerCache: containerCache,
 		redisCli:       redisCli,
@@ -220,7 +217,7 @@ func NewRunner(options *Options, dockerMgr docker.Manager, checker sys.SystemChe
 
 // Options returns a copy of runner options struct.
 func (r *DockerRunner) Options() Options {
-	return r.options
+	return *r.options
 }
 
 // CleanupUnused removes unused docker containers.

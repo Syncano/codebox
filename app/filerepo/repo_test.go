@@ -15,7 +15,7 @@ import (
 	. "github.com/smartystreets/goconvey/convey"
 	"github.com/stretchr/testify/mock"
 
-	"github.com/Syncano/pkg-go/sys/mocks"
+	"github.com/Syncano/pkg-go/v2/sys/mocks"
 )
 
 func verifyFile(filepath, content string) {
@@ -33,11 +33,11 @@ func TestRepo(t *testing.T) {
 		repo := New(&opts, sc, new(LinkFs), new(Command))
 
 		Convey("related options are properly set up", func() {
-			cacheOpts := repo.fileCache.Options()
+			cacheCfg := repo.fileCache.Config()
 
-			So(cacheOpts.CleanupInterval, ShouldEqual, opts.CleanupInterval)
-			So(cacheOpts.Capacity, ShouldEqual, opts.Capacity)
-			So(cacheOpts.TTL, ShouldEqual, opts.TTL)
+			So(cacheCfg.CleanupInterval, ShouldEqual, opts.CleanupInterval)
+			So(cacheCfg.Capacity, ShouldEqual, opts.Capacity)
+			So(cacheCfg.TTL, ShouldEqual, opts.TTL)
 
 			So(repo.storeID, ShouldNotBeBlank)
 			storagePath := repo.StoragePath()

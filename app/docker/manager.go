@@ -20,7 +20,7 @@ import (
 type StdManager struct {
 	client                Client
 	storageLimitSupported bool
-	options               Options
+	options               *Options
 	info                  types.Info
 	runtime               string
 }
@@ -72,12 +72,9 @@ const (
 )
 
 // NewManager initializes a new manager for docker.
-func NewManager(options *Options, cli Client) (*StdManager, error) {
-	if options != nil {
-		mergo.Merge(options, DefaultOptions) // nolint - error not possible
-	} else {
-		options = DefaultOptions
-	}
+func NewManager(opts *Options, cli Client) (*StdManager, error) {
+	options := *DefaultOptions
+	_ = mergo.Merge(&options, opts, mergo.WithOverride)
 
 	// Get and save Info from docker.
 	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
@@ -90,7 +87,7 @@ func NewManager(options *Options, cli Client) (*StdManager, error) {
 
 	m := StdManager{
 		client:  cli,
-		options: *options,
+		options: &options,
 		info:    info,
 		runtime: gvisorRuntime,
 	}
@@ -142,7 +139,7 @@ func NewManager(options *Options, cli Client) (*StdManager, error) {
 
 // Options returns a copy of manager options struct.
 func (m *StdManager) Options() Options {
-	return m.options
+	return *m.options
 }
 
 // Info returns a copy of docker info struct.
