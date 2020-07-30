@@ -79,7 +79,10 @@ const (
 // New initializes a new file repo.
 func New(opts *Options, checker sys.SystemChecker, fs Fs, command Commander) *FsRepo {
 	options := DefaultOptions
-	_ = mergo.Merge(&options, opts, mergo.WithOverride)
+
+	if opts != nil {
+		_ = mergo.Merge(&options, opts, mergo.WithOverride)
+	}
 
 	util.Must(fs.MkdirAll(options.BasePath, os.ModePerm))
 

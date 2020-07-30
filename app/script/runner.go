@@ -167,7 +167,10 @@ const (
 // NewRunner initializes a new script runner.
 func NewRunner(opts *Options, dockerMgr docker.Manager, checker sys.SystemChecker, repo filerepo.Repo, redisCli RedisClient) (*DockerRunner, error) {
 	options := DefaultOptions
-	_ = mergo.Merge(&options, opts, mergo.WithOverride)
+
+	if opts != nil {
+		_ = mergo.Merge(&options, opts, mergo.WithOverride)
+	}
 
 	// Set concurrency limits on docker.
 	dockerMCPU := uint(dockerMgr.Info().NCPU * 1000)

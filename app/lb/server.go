@@ -72,7 +72,10 @@ const (
 // NewServer initializes new LB server.
 func NewServer(fileRepo filerepo.Repo, opts *ServerOptions) *Server {
 	options := DefaultOptions
-	_ = mergo.Merge(&options, opts, mergo.WithOverride)
+
+	if opts != nil {
+		_ = mergo.Merge(&options, opts, mergo.WithOverride)
+	}
 
 	workers := cache.NewLRUCache(false,
 		cache.WithTTL(options.WorkerKeepalive),

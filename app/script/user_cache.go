@@ -37,7 +37,7 @@ type UserCache struct {
 }
 
 var (
-	DefaultUserCacheConstraints = &UserCacheConstraints{
+	DefaultUserCacheConstraints = UserCacheConstraints{
 		MaxKeyLen:        128,
 		MaxValueLen:      5 << 20,
 		CardinalityLimit: 50,
@@ -94,8 +94,11 @@ const (
 )
 
 func NewUserCache(userID string, rw io.ReadWriter, redisCli RedisClient, constr *UserCacheConstraints) *UserCache {
-	constraints := *DefaultUserCacheConstraints
-	_ = mergo.Merge(&constraints, constr, mergo.WithOverride)
+	constraints := DefaultUserCacheConstraints
+
+	if constr != nil {
+		_ = mergo.Merge(&constraints, constr, mergo.WithOverride)
+	}
 
 	initOnceCache.Do(func() {
 		var err error

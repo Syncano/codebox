@@ -56,10 +56,20 @@ func TestLBAcceptance(t *testing.T) {
 		wStderr, _ := workerCmd.StderrPipe()
 		workerCmd.Start()
 
+		go func() {
+			scanner := bufio.NewScanner(wStderr)
+
+			for scanner.Scan() {
+				l := scanner.Text()
+				fmt.Println(l)
+			}
+		}()
+
 		// Wait for worker to connect.
 		scanner := bufio.NewScanner(lbStderr)
 		for scanner.Scan() {
 			l := scanner.Text()
+			fmt.Println(l)
 			if strings.Contains(l, "grpc:lb:Register") {
 				break
 			}
