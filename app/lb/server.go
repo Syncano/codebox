@@ -55,13 +55,14 @@ type ServerOptions struct {
 }
 
 // DefaultOptions holds default options values for LB server.
-var DefaultOptions = &ServerOptions{
+var DefaultOptions = ServerOptions{
 	WorkerRetry:          3,
 	WorkerKeepalive:      30 * time.Second,
 	WorkerMinReady:       1,
 	WorkerErrorThreshold: 2,
 
 	DefaultScriptMcpu: 125,
+	LimiterConfig:     limiter.DefaultConfig,
 }
 
 const (
@@ -70,7 +71,7 @@ const (
 
 // NewServer initializes new LB server.
 func NewServer(fileRepo filerepo.Repo, opts *ServerOptions) *Server {
-	options := *DefaultOptions
+	options := DefaultOptions
 	_ = mergo.Merge(&options, opts, mergo.WithOverride)
 
 	workers := cache.NewLRUCache(false,
@@ -83,8 +84,8 @@ func NewServer(fileRepo filerepo.Repo, opts *ServerOptions) *Server {
 		workersByIndex:         make(map[string]map[string]int),
 		fileRepo:               fileRepo,
 		limiter: limiter.New(
-			limiter.WithQueue(opts.LimiterConfig.Queue),
-			limiter.WithTTL(opts.LimiterConfig.TTL),
+			limiter.WithQueue(options.LimiterConfig.Queue),
+			limiter.WithTTL(options.LimiterConfig.TTL),
 		),
 		metrics: Metrics(),
 	}

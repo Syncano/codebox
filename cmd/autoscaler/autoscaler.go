@@ -33,7 +33,7 @@ type Options struct {
 }
 
 // DefaultOptions holds default options values for LB Autoscaler.
-var DefaultOptions = &Options{
+var DefaultOptions = Options{
 	UpscaleConsecutive:   2,
 	DownscaleConsecutive: 5,
 	MinScale:             1,

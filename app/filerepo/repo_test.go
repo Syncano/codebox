@@ -311,8 +311,8 @@ func TestRepo(t *testing.T) {
 		})
 
 		Convey("Options returns a copy of options struct", func() {
-			So(repo.Options(), ShouldNotEqual, repo.options)
-			So(repo.Options(), ShouldResemble, repo.options)
+			So(repo.Options(), ShouldNotEqual, *repo.options)
+			So(repo.Options(), ShouldResemble, *repo.options)
 		})
 
 		Convey("RelativePath returns path relative to BasePath", func() {

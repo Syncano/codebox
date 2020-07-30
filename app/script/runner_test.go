@@ -465,7 +465,7 @@ func TestRunnerMethods(t *testing.T) {
 		r := DockerRunner{sys: checker,
 			fileRepo:       repo,
 			dockerMgr:      dockerMgr,
-			options:        opts,
+			options:        &opts,
 			containerCache: cache.NewLRUSetCache(),
 			metrics:        Metrics(),
 		}
@@ -474,8 +474,8 @@ func TestRunnerMethods(t *testing.T) {
 		defaultRuntime := "nodejs_v8"
 
 		Convey("Options returns a copy of options struct", func() {
-			So(r.Options(), ShouldNotEqual, r.options)
-			So(r.Options(), ShouldResemble, r.options)
+			So(r.Options(), ShouldNotEqual, *r.options)
+			So(r.Options(), ShouldResemble, *r.options)
 		})
 
 		Convey("CleanupUnused cleans file repo and docker", func() {

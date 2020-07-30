@@ -48,7 +48,7 @@ type Options struct {
 }
 
 // DefaultOptions holds default options values for file repo.
-var DefaultOptions = &Options{
+var DefaultOptions = Options{
 	BasePath:         "/home/codebox/storage",
 	MaxDiskUsage:     90,
 	TTL:              3 * time.Hour,
@@ -78,7 +78,7 @@ const (
 
 // New initializes a new file repo.
 func New(opts *Options, checker sys.SystemChecker, fs Fs, command Commander) *FsRepo {
-	options := *DefaultOptions
+	options := DefaultOptions
 	_ = mergo.Merge(&options, opts, mergo.WithOverride)
 
 	util.Must(fs.MkdirAll(options.BasePath, os.ModePerm))

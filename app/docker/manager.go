@@ -36,7 +36,7 @@ type Options struct {
 }
 
 // DefaultOptions holds default options values for docker manager.
-var DefaultOptions = &Options{
+var DefaultOptions = Options{
 	BlkioDevice:   "/dev/sda",
 	Network:       "isolated_nw",
 	NetworkSubnet: "172.25.0.0/16",
@@ -73,7 +73,7 @@ const (
 
 // NewManager initializes a new manager for docker.
 func NewManager(opts *Options, cli Client) (*StdManager, error) {
-	options := *DefaultOptions
+	options := DefaultOptions
 	_ = mergo.Merge(&options, opts, mergo.WithOverride)
 
 	// Get and save Info from docker.

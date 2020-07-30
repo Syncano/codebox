@@ -66,7 +66,7 @@ func TestServerMethods(t *testing.T) {
 			celery.New(amqpCh),
 			&ServerOptions{
 				LBAddr:              []string{"127.0.0.1"},
-				LBRetry:             0,
+				LBRetry:             -1,
 				DownloadConcurrency: 1,
 			})
 		So(e, ShouldBeNil)
@@ -78,8 +78,8 @@ func TestServerMethods(t *testing.T) {
 		s.lbServers[0].repoCli = repoCli
 
 		Convey("Options returns a copy of options struct", func() {
-			So(s.Options(), ShouldNotEqual, s.options)
-			So(s.Options(), ShouldResemble, s.options)
+			So(s.Options(), ShouldNotEqual, *s.options)
+			So(s.Options(), ShouldResemble, *s.options)
 		})
 		Convey("Run returns error on invalid request", func() {
 			stream.On("Context").Return(context.Background())

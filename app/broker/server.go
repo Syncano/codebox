@@ -61,7 +61,7 @@ type ServerOptions struct {
 }
 
 // DefaultOptions holds default options values for Broker server.
-var DefaultOptions = &ServerOptions{
+var DefaultOptions = ServerOptions{
 	DownloadConcurrency: 16,
 	LBRetry:             3,
 	MaxPayloadSize:      15 << 20,
@@ -92,7 +92,7 @@ const (
 
 // NewServer initializes new Broker server.
 func NewServer(redisClient RedisClient, cel *celery.Celery, opts *ServerOptions) (*Server, error) {
-	options := *DefaultOptions
+	options := DefaultOptions
 	_ = mergo.Merge(&options, opts, mergo.WithOverride)
 
 	// Register prometheus exports.
