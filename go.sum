@@ -30,6 +30,8 @@ cloud.google.com/go/storage v1.8.0/go.mod h1:Wv1Oy7z6Yz3DshWRJFhqM/UCfaWIRTdp0RX
 cloud.google.com/go/storage v1.10.0/go.mod h1:FLPqc6j+Ki4BU591ie1oL6qBQGu2Bl/tZ9ullr3+Kg0=
 contrib.go.opencensus.io/exporter/jaeger v0.2.0 h1:nhTv/Ry3lGmqbJ/JGvCjWxBl5ozRfqo86Ngz59UAlfk=
 contrib.go.opencensus.io/exporter/jaeger v0.2.0/go.mod h1:ukdzwIYYHgZ7QYtwVFQUjiT28BJHiMhTERo32s6qVgM=
+contrib.go.opencensus.io/exporter/jaeger v0.2.1 h1:yGBYzYMewVL0yO9qqJv3Z5+IRhPdU7e9o/2oKpX4YvI=
+contrib.go.opencensus.io/exporter/jaeger v0.2.1/go.mod h1:Y8IsLgdxqh1QxYxPC5IgXVmBaeLUeQFfBeBi9PbeZd0=
 contrib.go.opencensus.io/exporter/prometheus v0.2.0 h1:9PUk0/8V0LGoPqVCrf8fQZJkFGBxudu8jOjQSMwoD6w=
 contrib.go.opencensus.io/exporter/prometheus v0.2.0/go.mod h1:TYmVAyE8Tn1lyPcltF5IYYfWp2KHu7lQGIZnj8iZMys=
 dmitri.shuralyov.com/gpu/mtl v0.0.0-20190408044501-666a987793e9/go.mod h1:H6x//7gZCb22OMCxBHrMx7a5I7Hp++hsVxbQ4BYO7hU=
@@ -48,6 +50,8 @@ github.com/Syncano/pkg-go/v2 v2.1.0 h1:yDBIqEWuGl2Lola17XQvxZzsowlCGZexAAOVdoy7a
 github.com/Syncano/pkg-go/v2 v2.1.0/go.mod h1:Eg4s0ruWN7BSYbnGWoc8aStsO2bjFa5NHHYfIU6d6+Y=
 github.com/Syncano/syncanoapis/gen v1.0.0 h1:zJDgIpDkldJpgCAOYWzEqYo5tuz3eTO+F3st3hTURYo=
 github.com/Syncano/syncanoapis/gen v1.0.0/go.mod h1:I1+7CW9sF/sLeKhuAN83+sPVi/iveumVkxx/+oTHsGE=
+github.com/Syncano/syncanoapis/gen v1.0.1 h1:/u9/qWwYezl/Hv0GsAU40OIhNfpPeey1agT3o4WWmmk=
+github.com/Syncano/syncanoapis/gen v1.0.1/go.mod h1:I1+7CW9sF/sLeKhuAN83+sPVi/iveumVkxx/+oTHsGE=
 github.com/TheZeroSlave/zapsentry v1.4.1/go.mod h1:yNua4EoU6jRUxYq1B32EaXV1u7yslGQm+JvaPBYuX+M=
 github.com/ajg/form v1.5.1/go.mod h1:uL1WgH+h2mgNtvBq0339dVnzXdBETtL2LeUXaIv25UY=
 github.com/alecthomas/template v0.0.0-20160405071501-a0175ee3bccc/go.mod h1:LOuyumcjzFXgccqObfd/Ljyb9UuFJ6TxHnclSeseNhc=
@@ -493,6 +497,8 @@ github.com/stretchr/testify v1.6.1 h1:hDPOHmpOpP40lSULcqw7IrRb/u7w6RpDC9399XyoNd
 github.com/stretchr/testify v1.6.1/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
 github.com/uber/jaeger-client-go v2.15.0+incompatible h1:NP3qsSqNxh8VYr956ur1N/1C1PjvOJnJykCzcD5QHbk=
 github.com/uber/jaeger-client-go v2.15.0+incompatible/go.mod h1:WVhlPFC8FDjOFMMWRy2pZqQJSXxYSwNYOkTr/Z6d3Kk=
+github.com/uber/jaeger-client-go v2.25.0+incompatible h1:IxcNZ7WRY1Y3G4poYlx24szfsn/3LvK9QHCq9oQw8+U=
+github.com/uber/jaeger-client-go v2.25.0+incompatible/go.mod h1:WVhlPFC8FDjOFMMWRy2pZqQJSXxYSwNYOkTr/Z6d3Kk=
 github.com/ugorji/go v1.1.4/go.mod h1:uQMGLiO92mf5W77hV/PUCpI3pbzQx3CRekS0kk+RGrc=
 github.com/ugorji/go v1.1.7/go.mod h1:kZn38zHttfInRq0xu/PH0az30d+z6vm202qpg1oXVMw=
 github.com/ugorji/go/codec v0.0.0-20181204163529-d75b2dcb6bc8/go.mod h1:VFNgLljTbGfSG7qAOspJ7OScBnGdDN/yBr0sguwnwf0=

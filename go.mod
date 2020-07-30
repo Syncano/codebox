@@ -3,11 +3,11 @@ module github.com/Syncano/codebox
 go 1.14
 
 require (
-	contrib.go.opencensus.io/exporter/jaeger v0.2.0
+	contrib.go.opencensus.io/exporter/jaeger v0.2.1
 	contrib.go.opencensus.io/exporter/prometheus v0.2.0
 	github.com/Microsoft/go-winio v0.4.14 // indirect
 	github.com/Syncano/pkg-go/v2 v2.1.0
-	github.com/Syncano/syncanoapis/gen v1.0.0
+	github.com/Syncano/syncanoapis/gen v1.0.1
 	github.com/blang/semver v3.5.1+incompatible
 	github.com/certifi/gocertifi v0.0.0-20200211180108-c7c1fbc02894 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.0 // indirect
