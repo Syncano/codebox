@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/imdario/mergo"
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/plugin/ocgrpc"
 	"go.opencensus.io/stats"
@@ -17,8 +18,8 @@ import (
 	"google.golang.org/grpc/metadata"
 
 	"github.com/Syncano/codebox/app/common"
-	"github.com/Syncano/pkg-go/celery"
-	"github.com/Syncano/pkg-go/util"
+	"github.com/Syncano/pkg-go/v2/celery"
+	"github.com/Syncano/pkg-go/v2/util"
 	brokerpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/broker/v1"
 	repopb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/filerepo/v1"
 	lbpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/lb/v1"
@@ -36,7 +37,7 @@ type Server struct {
 	uploads    map[string]chan struct{}
 	downloader util.Downloader
 
-	options ServerOptions
+	options *ServerOptions
 }
 
 type loadBalancer struct {
@@ -60,7 +61,7 @@ type ServerOptions struct {
 }
 
 // DefaultOptions holds default options values for Broker server.
-var DefaultOptions = &ServerOptions{
+var DefaultOptions = ServerOptions{
 	DownloadConcurrency: 16,
 	LBRetry:             3,
 	MaxPayloadSize:      15 << 20,
@@ -90,7 +91,13 @@ const (
 )
 
 // NewServer initializes new Broker server.
-func NewServer(redisClient RedisClient, cel *celery.Celery, options *ServerOptions) (*Server, error) {
+func NewServer(redisClient RedisClient, cel *celery.Celery, opts *ServerOptions) (*Server, error) {
+	options := DefaultOptions
+
+	if opts != nil {
+		_ = mergo.Merge(&options, opts, mergo.WithOverride)
+	}
+
 	// Register prometheus exports.
 	initOnce.Do(func() {
 		util.Must(view.Register(overheadDurationView))
@@ -121,14 +128,14 @@ func NewServer(redisClient RedisClient, cel *celery.Celery, options *ServerOptio
 		cel:        cel,
 		lbServers:  lbServers,
 		uploads:    make(map[string]chan struct{}),
-		downloader: util.NewDownloader(&util.DownloaderOptions{Concurrency: options.DownloadConcurrency}),
-		options:    *options,
+		downloader: util.NewDownloader(util.WithConcurrency(options.DownloadConcurrency)),
+		options:    &options,
 	}, nil
 }
 
 // Options returns a copy of Broker options struct.
 func (s *Server) Options() ServerOptions {
-	return s.options
+	return *s.options
 }
 
 // Shutdown stops gracefully Broker server.

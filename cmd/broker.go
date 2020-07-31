@@ -22,7 +22,7 @@ import (
 	"github.com/Syncano/codebox/app/common"
 	"github.com/Syncano/codebox/app/version"
 	"github.com/Syncano/codebox/cmd/amqp"
-	"github.com/Syncano/pkg-go/celery"
+	"github.com/Syncano/pkg-go/v2/celery"
 	pb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/broker/v1"
 )
 

@@ -13,16 +13,16 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/afero"
 
-	"github.com/Syncano/pkg-go/cache"
-	"github.com/Syncano/pkg-go/sys"
-	"github.com/Syncano/pkg-go/util"
+	"github.com/Syncano/pkg-go/v2/cache"
+	"github.com/Syncano/pkg-go/v2/sys"
+	"github.com/Syncano/pkg-go/v2/util"
 )
 
 // FsRepo provides methods to store files and manipulate volumes.
 type FsRepo struct {
 	storeID   string
 	fileCache *cache.LRUCache
-	options   Options
+	options   *Options
 	sys       sys.SystemChecker
 	fs        Fs
 	command   Commander
@@ -48,7 +48,7 @@ type Options struct {
 }
 
 // DefaultOptions holds default options values for file repo.
-var DefaultOptions = &Options{
+var DefaultOptions = Options{
 	BasePath:         "/home/codebox/storage",
 	MaxDiskUsage:     90,
 	TTL:              3 * time.Hour,
@@ -77,18 +77,18 @@ const (
 )
 
 // New initializes a new file repo.
-func New(options *Options, checker sys.SystemChecker, fs Fs, command Commander) *FsRepo {
-	if options != nil {
-		mergo.Merge(options, DefaultOptions) // nolint - error not possible
-	} else {
-		options = DefaultOptions
+func New(opts *Options, checker sys.SystemChecker, fs Fs, command Commander) *FsRepo {
+	options := DefaultOptions
+
+	if opts != nil {
+		_ = mergo.Merge(&options, opts, mergo.WithOverride)
 	}
 
 	util.Must(fs.MkdirAll(options.BasePath, os.ModePerm))
 
 	r := FsRepo{
 		storeID:    util.GenerateKey(),
-		options:    *options,
+		options:    &options,
 		sys:        checker,
 		fs:         fs,
 		command:    command,
@@ -97,11 +97,12 @@ func New(options *Options, checker sys.SystemChecker, fs Fs, command Commander) 
 		storeLocks: make(map[string]chan struct{}),
 	}
 
-	r.fileCache = cache.NewLRUCache(&cache.Options{
-		TTL:             options.TTL,
-		CleanupInterval: options.CleanupInterval,
-		Capacity:        options.Capacity,
-	}, &cache.LRUOptions{})
+	r.fileCache = cache.NewLRUCache(
+		true,
+		cache.WithTTL(options.TTL),
+		cache.WithCleanupInterval(options.CleanupInterval),
+		cache.WithCapacity(options.Capacity),
+	)
 
 	r.fileCache.OnValueEvicted(r.onValueEvictedHandler)
 
@@ -110,7 +111,7 @@ func New(options *Options, checker sys.SystemChecker, fs Fs, command Commander) 
 
 // Options returns a copy of options struct.
 func (r *FsRepo) Options() Options {
-	return r.options
+	return *r.options
 }
 
 // GetFS returns FS used by repo.

@@ -143,11 +143,11 @@ func (mc mockReadCloser) Close() error               { return mc.closeErr }
 func TestManagerMethods(t *testing.T) {
 	Convey("Given manager with mocked docker client", t, func() {
 		cli := new(MockClient)
-		m := StdManager{client: cli}
+		m := StdManager{client: cli, options: &Options{}}
 
 		Convey("Options returns a copy of options struct", func() {
-			So(m.Options(), ShouldNotEqual, m.options)
-			So(m.Options(), ShouldResemble, m.options)
+			So(m.Options(), ShouldNotEqual, *m.options)
+			So(m.Options(), ShouldResemble, *m.options)
 		})
 
 		Convey("Info returns a copy of info struct", func() {

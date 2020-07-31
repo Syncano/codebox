@@ -10,7 +10,7 @@ import (
 
 	validator "gopkg.in/go-playground/validator.v9"
 
-	"github.com/Syncano/pkg-go/util"
+	"github.com/Syncano/pkg-go/v2/util"
 )
 
 var (
