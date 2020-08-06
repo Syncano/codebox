@@ -125,8 +125,8 @@ func init() {
 			EnvVars: []string{"SENTRY_DSN"},
 		},
 		&cli.IntFlag{
-			Name: "metric-port", Aliases: []string{"mp"}, Usage: "port for expvar server",
-			EnvVars: []string{"METRIC_PORT"}, Value: 9080,
+			Name: "metrics-port", Aliases: []string{"mp"}, Usage: "port for metrics",
+			EnvVars: []string{"METRICS_PORT"}, Value: 9080,
 		},
 
 		// Tracing options.
@@ -156,10 +156,10 @@ func init() {
 		}
 
 		// Serve expvar and checks.
-		logrus.WithField("port", c.Int("metric-port")).Info("Serving http for expvar and checks")
+		logrus.WithField("port", c.Int("metrics-port")).Info("Serving http for expvar and checks")
 
 		go func() {
-			if err := http.ListenAndServe(fmt.Sprintf(":%d", c.Int("metric-port")), nil); err != nil && err != http.ErrServerClosed {
+			if err := http.ListenAndServe(fmt.Sprintf(":%d", c.Int("metrics-port")), nil); err != nil && err != http.ErrServerClosed {
 				logrus.WithError(err).Fatal("Serve error")
 			}
 		}()
