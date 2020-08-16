@@ -4,7 +4,7 @@
 
 ## Dependencies
 
-- Golang version 1.14.
+- Golang version 1.15.
 - docker 17.03+ and docker-compose (`pip install docker-compose`).
 
 ## Testing

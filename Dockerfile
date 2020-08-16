@@ -1,4 +1,4 @@
-FROM golang:1.14
+FROM golang:1.15
 
 ENV SQUASHFUSE_VERSION=0.1.103 \
     GOPROXY=https://proxy.golang.org
