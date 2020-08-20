@@ -10,10 +10,10 @@ services:
       - rabbitmq
       - redis
     ports:
-      - "9000:80"
+      - "9000:9000"
       - "8080:8080"
     environment:
-      - LB_ADDRS=lb:80
+      - LB_ADDRS=lb:9000
       - SERVICE_NAME=codebox-broker
       - TRACING_SAMPLING=1
 
@@ -24,7 +24,7 @@ services:
     depends_on:
       - redis
     ports:
-      - "9001:80"
+      - "9001:9000"
     environment:
       - SERVICE_NAME=codebox-lb
 

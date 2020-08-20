@@ -175,7 +175,7 @@ var workerCmd = &cli.Command{
 		},
 		&cli.StringFlag{
 			Name: "lb-addr", Aliases: []string{"lb"}, Usage: "load balancer TCP address",
-			EnvVars: []string{"LB_ADDR"}, Value: "127.0.0.1:8000",
+			EnvVars: []string{"LB_ADDR"}, Value: "127.0.0.1:9000",
 		},
 
 		// User Cache options.
