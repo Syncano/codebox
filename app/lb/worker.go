@@ -101,9 +101,10 @@ func (w *Worker) FreeMemory() uint64 {
 // Alive returns true if worker is alive.
 func (w *Worker) Alive() bool {
 	w.mu.RLock()
-	defer w.mu.RUnlock()
+	ret := w.alive
+	w.mu.RUnlock()
 
-	return w.alive
+	return ret
 }
 
 // Reserve checks if worker is alive, decreases resources and increases waitgroup.

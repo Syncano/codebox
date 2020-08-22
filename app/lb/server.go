@@ -77,7 +77,7 @@ func NewServer(fileRepo filerepo.Repo, opts *ServerOptions) *Server {
 		_ = mergo.Merge(&options, opts, mergo.WithOverride)
 	}
 
-	workers := cache.NewLRUCache(false,
+	workers := cache.NewLRUCache(true,
 		cache.WithTTL(options.WorkerKeepalive),
 	)
 	s := &Server{

@@ -38,7 +38,7 @@ const (
 
 var (
 	dockerOptions = &docker.Options{}
-	scriptOptions = &script.Options{Constraints: new(docker.Constraints),
+	scriptOptions = script.Options{Constraints: new(docker.Constraints),
 		UserCacheConstraints: new(script.UserCacheConstraints)}
 )
 
@@ -247,13 +247,16 @@ var workerCmd = &cli.Command{
 
 		// Initialize script runner.
 		logrus.WithField("options", scriptOptions).Debug("Initializing script runner")
-		runner, err := script.NewRunner(scriptOptions, dockerMgr, syschecker, repo, redisClient)
+		runner, err := script.NewRunner(&scriptOptions, dockerMgr, syschecker, repo, redisClient)
 		if err != nil {
 			return err
 		}
 		if err = runner.DownloadAllImages(); err != nil {
 			return err
 		}
+
+		// Use computed options.
+		scriptOptions = runner.Options()
 
 		// Setup health check.
 		http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
