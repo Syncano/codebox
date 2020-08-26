@@ -16,7 +16,7 @@ import (
 	"github.com/juju/ratelimit"
 
 	codewrapper "github.com/Syncano/codebox/codewrapper/server"
-	"github.com/Syncano/pkg-go/util"
+	"github.com/Syncano/pkg-go/v2/util"
 )
 
 var (

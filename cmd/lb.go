@@ -19,8 +19,8 @@ import (
 	"github.com/Syncano/codebox/app/lb"
 	"github.com/Syncano/codebox/app/version"
 	"github.com/Syncano/codebox/cmd/autoscaler"
-	"github.com/Syncano/pkg-go/limiter"
-	"github.com/Syncano/pkg-go/sys"
+	"github.com/Syncano/pkg-go/v2/limiter"
+	"github.com/Syncano/pkg-go/v2/sys"
 	repopb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/filerepo/v1"
 	lbpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/lb/v1"
 )
@@ -38,7 +38,7 @@ As there is no authentication, always run it in a private network.`,
 	Flags: []cli.Flag{
 		&cli.IntFlag{
 			Name: "port", Aliases: []string{"p"}, Usage: "port for grpc server",
-			EnvVars: []string{"PORT"}, Value: 8000,
+			EnvVars: []string{"PORT"}, Value: 9000,
 		},
 
 		// File Repo options.
@@ -83,11 +83,11 @@ As there is no authentication, always run it in a private network.`,
 		// LB Limiter options.
 		&cli.DurationFlag{
 			Name: "limiter-ttl", Usage: "limiter ttl",
-			EnvVars: []string{"LIMITER_TTL"}, Value: limiter.DefaultOptions.TTL, Destination: &lbOptions.LimiterOptions.TTL,
+			EnvVars: []string{"LIMITER_TTL"}, Value: limiter.DefaultConfig.TTL, Destination: &lbOptions.LimiterConfig.TTL,
 		},
 		&cli.IntFlag{
 			Name: "limiter-queue", Usage: "limiter queue",
-			EnvVars: []string{"LIMITER_QUEUE"}, Value: limiter.DefaultOptions.Queue, Destination: &lbOptions.LimiterOptions.Queue,
+			EnvVars: []string{"LIMITER_QUEUE"}, Value: limiter.DefaultConfig.Queue, Destination: &lbOptions.LimiterConfig.Queue,
 		},
 
 		// Autoscaler options.

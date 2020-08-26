@@ -20,7 +20,7 @@ import (
 type StdManager struct {
 	client                Client
 	storageLimitSupported bool
-	options               Options
+	options               *Options
 	info                  types.Info
 	runtime               string
 }
@@ -36,7 +36,7 @@ type Options struct {
 }
 
 // DefaultOptions holds default options values for docker manager.
-var DefaultOptions = &Options{
+var DefaultOptions = Options{
 	BlkioDevice:   "/dev/sda",
 	Network:       "isolated_nw",
 	NetworkSubnet: "172.25.0.0/16",
@@ -72,11 +72,11 @@ const (
 )
 
 // NewManager initializes a new manager for docker.
-func NewManager(options *Options, cli Client) (*StdManager, error) {
-	if options != nil {
-		mergo.Merge(options, DefaultOptions) // nolint - error not possible
-	} else {
-		options = DefaultOptions
+func NewManager(opts *Options, cli Client) (*StdManager, error) {
+	options := DefaultOptions
+
+	if opts != nil {
+		_ = mergo.Merge(&options, opts, mergo.WithOverride)
 	}
 
 	// Get and save Info from docker.
@@ -90,7 +90,7 @@ func NewManager(options *Options, cli Client) (*StdManager, error) {
 
 	m := StdManager{
 		client:  cli,
-		options: *options,
+		options: &options,
 		info:    info,
 		runtime: gvisorRuntime,
 	}
@@ -142,7 +142,7 @@ func NewManager(options *Options, cli Client) (*StdManager, error) {
 
 // Options returns a copy of manager options struct.
 func (m *StdManager) Options() Options {
-	return m.options
+	return *m.options
 }
 
 // Info returns a copy of docker info struct.

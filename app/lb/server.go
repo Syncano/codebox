@@ -16,9 +16,9 @@ import (
 	"github.com/Syncano/codebox/app/common"
 	"github.com/Syncano/codebox/app/filerepo"
 	"github.com/Syncano/codebox/app/script"
-	"github.com/Syncano/pkg-go/cache"
-	"github.com/Syncano/pkg-go/limiter"
-	"github.com/Syncano/pkg-go/util"
+	"github.com/Syncano/pkg-go/v2/cache"
+	"github.com/Syncano/pkg-go/v2/limiter"
+	"github.com/Syncano/pkg-go/v2/util"
 	pb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/lb/v1"
 	scriptpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/script/v1"
 )
@@ -32,7 +32,7 @@ type Server struct {
 	workersByIndex         map[string]map[string]int              // script.Index hash->Worker ID->ref count
 
 	fileRepo filerepo.Repo
-	options  ServerOptions
+	options  *ServerOptions
 	limiter  *limiter.Limiter
 	metrics  *MetricsData
 }
@@ -51,17 +51,18 @@ type ServerOptions struct {
 	DefaultScriptMcpu uint
 
 	// Limiter
-	LimiterOptions limiter.Options
+	LimiterConfig limiter.Config
 }
 
 // DefaultOptions holds default options values for LB server.
-var DefaultOptions = &ServerOptions{
+var DefaultOptions = ServerOptions{
 	WorkerRetry:          3,
 	WorkerKeepalive:      30 * time.Second,
 	WorkerMinReady:       1,
 	WorkerErrorThreshold: 2,
 
 	DefaultScriptMcpu: 125,
+	LimiterConfig:     limiter.DefaultConfig,
 }
 
 const (
@@ -69,26 +70,27 @@ const (
 )
 
 // NewServer initializes new LB server.
-func NewServer(fileRepo filerepo.Repo, options *ServerOptions) *Server {
-	if options != nil {
-		mergo.Merge(options, DefaultOptions) // nolint - error not possible
-	} else {
-		options = DefaultOptions
+func NewServer(fileRepo filerepo.Repo, opts *ServerOptions) *Server {
+	options := DefaultOptions
+
+	if opts != nil {
+		_ = mergo.Merge(&options, opts, mergo.WithOverride)
 	}
 
-	workers := cache.NewLRUCache(&cache.Options{
-		TTL: options.WorkerKeepalive,
-	}, &cache.LRUOptions{
-		AutoRefresh: false,
-	})
+	workers := cache.NewLRUCache(true,
+		cache.WithTTL(options.WorkerKeepalive),
+	)
 	s := &Server{
-		options:                *options,
+		options:                &options,
 		workers:                workers,
 		workerContainersCached: make(map[string]map[string]*WorkerContainer),
 		workersByIndex:         make(map[string]map[string]int),
 		fileRepo:               fileRepo,
-		limiter:                limiter.New(&limiter.Options{}),
-		metrics:                Metrics(),
+		limiter: limiter.New(
+			limiter.WithQueue(options.LimiterConfig.Queue),
+			limiter.WithTTL(options.LimiterConfig.TTL),
+		),
+		metrics: Metrics(),
 	}
 	workers.OnValueEvicted(s.onEvictedWorkerHandler)
 
@@ -97,7 +99,7 @@ func NewServer(fileRepo filerepo.Repo, options *ServerOptions) *Server {
 
 // Options returns a copy of LB options struct.
 func (s *Server) Options() ServerOptions {
-	return s.options
+	return *s.options
 }
 
 func (s *Server) Metrics() *MetricsData {

@@ -28,10 +28,10 @@ import (
 	"github.com/Syncano/codebox/app/common"
 	repomocks "github.com/Syncano/codebox/app/filerepo/mocks"
 	lbmocks "github.com/Syncano/codebox/app/lb/mocks"
-	"github.com/Syncano/pkg-go/celery"
-	celerymocks "github.com/Syncano/pkg-go/celery/mocks"
-	"github.com/Syncano/pkg-go/util"
-	utilmocks "github.com/Syncano/pkg-go/util/mocks"
+	"github.com/Syncano/pkg-go/v2/celery"
+	celerymocks "github.com/Syncano/pkg-go/v2/celery/mocks"
+	"github.com/Syncano/pkg-go/v2/util"
+	utilmocks "github.com/Syncano/pkg-go/v2/util/mocks"
 	brokerpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/broker/v1"
 	repopb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/filerepo/v1"
 	lbpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/lb/v1"
@@ -66,7 +66,7 @@ func TestServerMethods(t *testing.T) {
 			celery.New(amqpCh),
 			&ServerOptions{
 				LBAddr:              []string{"127.0.0.1"},
-				LBRetry:             0,
+				LBRetry:             -1,
 				DownloadConcurrency: 1,
 			})
 		So(e, ShouldBeNil)
@@ -78,8 +78,8 @@ func TestServerMethods(t *testing.T) {
 		s.lbServers[0].repoCli = repoCli
 
 		Convey("Options returns a copy of options struct", func() {
-			So(s.Options(), ShouldNotEqual, s.options)
-			So(s.Options(), ShouldResemble, s.options)
+			So(s.Options(), ShouldNotEqual, *s.options)
+			So(s.Options(), ShouldResemble, *s.options)
 		})
 		Convey("Run returns error on invalid request", func() {
 			stream.On("Context").Return(context.Background())

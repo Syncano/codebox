@@ -23,8 +23,8 @@ import (
 	"github.com/Syncano/codebox/app/filerepo"
 	"github.com/Syncano/codebox/app/script"
 	"github.com/Syncano/codebox/app/version"
-	"github.com/Syncano/pkg-go/sys"
-	"github.com/Syncano/pkg-go/util"
+	"github.com/Syncano/pkg-go/v2/sys"
+	"github.com/Syncano/pkg-go/v2/util"
 	repopb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/filerepo/v1"
 	lbpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/lb/v1"
 	scriptpb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/script/v1"
@@ -38,7 +38,7 @@ const (
 
 var (
 	dockerOptions = &docker.Options{}
-	scriptOptions = &script.Options{Constraints: new(docker.Constraints),
+	scriptOptions = script.Options{Constraints: new(docker.Constraints),
 		UserCacheConstraints: new(script.UserCacheConstraints)}
 )
 
@@ -175,7 +175,7 @@ var workerCmd = &cli.Command{
 		},
 		&cli.StringFlag{
 			Name: "lb-addr", Aliases: []string{"lb"}, Usage: "load balancer TCP address",
-			EnvVars: []string{"LB_ADDR"}, Value: "127.0.0.1:8000",
+			EnvVars: []string{"LB_ADDR"}, Value: "127.0.0.1:9000",
 		},
 
 		// User Cache options.
@@ -247,13 +247,16 @@ var workerCmd = &cli.Command{
 
 		// Initialize script runner.
 		logrus.WithField("options", scriptOptions).Debug("Initializing script runner")
-		runner, err := script.NewRunner(scriptOptions, dockerMgr, syschecker, repo, redisClient)
+		runner, err := script.NewRunner(&scriptOptions, dockerMgr, syschecker, repo, redisClient)
 		if err != nil {
 			return err
 		}
 		if err = runner.DownloadAllImages(); err != nil {
 			return err
 		}
+
+		// Use computed options.
+		scriptOptions = runner.Options()
 
 		// Setup health check.
 		http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {

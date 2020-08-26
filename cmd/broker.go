@@ -22,7 +22,7 @@ import (
 	"github.com/Syncano/codebox/app/common"
 	"github.com/Syncano/codebox/app/version"
 	"github.com/Syncano/codebox/cmd/amqp"
-	"github.com/Syncano/pkg-go/celery"
+	"github.com/Syncano/pkg-go/v2/celery"
 	pb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/broker/v1"
 )
 
@@ -38,7 +38,7 @@ As there is no authentication, always run it in a private network.`,
 	Flags: []cli.Flag{
 		&cli.IntFlag{
 			Name: "port", Aliases: []string{"p"}, Usage: "port for grpc server",
-			EnvVars: []string{"PORT"}, Value: 8000,
+			EnvVars: []string{"PORT"}, Value: 9000,
 		},
 		&cli.IntFlag{
 			Name: "uwsgi-port", Usage: "port for uwsgi server",
@@ -58,7 +58,7 @@ As there is no authentication, always run it in a private network.`,
 		// Broker Server options.
 		&cli.StringSliceFlag{
 			Name: "lb-addrs", Usage: "load balancer TCP addresses",
-			EnvVars: []string{"LB_ADDRS"}, Value: cli.NewStringSlice("127.0.0.1:8000"),
+			EnvVars: []string{"LB_ADDRS"}, Value: cli.NewStringSlice("127.0.0.1:9000"),
 		},
 		&cli.IntFlag{
 			Name: "lb-retry", Usage: "number of retries on failed lb run",

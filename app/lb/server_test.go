@@ -114,6 +114,7 @@ func TestServerMethods(t *testing.T) {
 
 					Convey("given meta with drained concurrency and cancelled context", func() {
 						cancel()
+
 						s.limiter.Lock(context.Background(), "ckey", 1)
 						stream.On("Recv").Return(&pb.RunRequest{
 							Value: &pb.RunRequest_Meta{
@@ -262,8 +263,8 @@ func TestServerMethods(t *testing.T) {
 		})
 
 		Convey("Options returns a copy of options struct", func() {
-			So(s.Options(), ShouldNotEqual, s.options)
-			So(s.Options(), ShouldResemble, s.options)
+			So(s.Options(), ShouldNotEqual, *s.options)
+			So(s.Options(), ShouldResemble, *s.options)
 		})
 
 		Convey("given some Container, grabWorker", func() {

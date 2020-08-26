@@ -24,9 +24,9 @@ import (
 	dockermock "github.com/Syncano/codebox/app/docker/mocks"
 	"github.com/Syncano/codebox/app/filerepo"
 	repomock "github.com/Syncano/codebox/app/filerepo/mocks"
-	"github.com/Syncano/pkg-go/cache"
-	"github.com/Syncano/pkg-go/sys"
-	sysmock "github.com/Syncano/pkg-go/sys/mocks"
+	"github.com/Syncano/pkg-go/v2/cache"
+	"github.com/Syncano/pkg-go/v2/sys"
+	sysmock "github.com/Syncano/pkg-go/v2/sys/mocks"
 )
 
 type MockConn struct {
@@ -465,8 +465,8 @@ func TestRunnerMethods(t *testing.T) {
 		r := DockerRunner{sys: checker,
 			fileRepo:       repo,
 			dockerMgr:      dockerMgr,
-			options:        *opts,
-			containerCache: cache.NewLRUSetCache(&cache.Options{}),
+			options:        &opts,
+			containerCache: cache.NewLRUSetCache(),
 			metrics:        Metrics(),
 		}
 		r.containerCache.OnValueEvicted(r.onEvictedContainerHandler)
@@ -474,8 +474,8 @@ func TestRunnerMethods(t *testing.T) {
 		defaultRuntime := "nodejs_v8"
 
 		Convey("Options returns a copy of options struct", func() {
-			So(r.Options(), ShouldNotEqual, r.options)
-			So(r.Options(), ShouldResemble, r.options)
+			So(r.Options(), ShouldNotEqual, *r.options)
+			So(r.Options(), ShouldResemble, *r.options)
 		})
 
 		Convey("CleanupUnused cleans file repo and docker", func() {

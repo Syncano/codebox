@@ -11,7 +11,7 @@ import (
 	"github.com/go-redis/redis/v7"
 	"github.com/imdario/mergo"
 
-	"github.com/Syncano/pkg-go/util"
+	"github.com/Syncano/pkg-go/v2/util"
 )
 
 // Only GET/SET are allowed for now.
@@ -37,7 +37,7 @@ type UserCache struct {
 }
 
 var (
-	DefaultUserCacheConstraints = &UserCacheConstraints{
+	DefaultUserCacheConstraints = UserCacheConstraints{
 		MaxKeyLen:        128,
 		MaxValueLen:      5 << 20,
 		CardinalityLimit: 50,
@@ -93,11 +93,11 @@ const (
 	sizeKey = "__size__"
 )
 
-func NewUserCache(userID string, rw io.ReadWriter, redisCli RedisClient, constraints *UserCacheConstraints) *UserCache {
-	if constraints != nil {
-		mergo.Merge(constraints, DefaultUserCacheConstraints) // nolint - error not possible
-	} else {
-		constraints = DefaultUserCacheConstraints
+func NewUserCache(userID string, rw io.ReadWriter, redisCli RedisClient, constr *UserCacheConstraints) *UserCache {
+	constraints := DefaultUserCacheConstraints
+
+	if constr != nil {
+		_ = mergo.Merge(&constraints, constr, mergo.WithOverride)
 	}
 
 	initOnceCache.Do(func() {
@@ -114,7 +114,7 @@ func NewUserCache(userID string, rw io.ReadWriter, redisCli RedisClient, constra
 		userID:      userID,
 		rw:          rw,
 		redisCli:    redisCli,
-		constraints: constraints,
+		constraints: &constraints,
 	}
 }
 

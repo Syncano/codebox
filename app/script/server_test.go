@@ -18,7 +18,7 @@ import (
 	"github.com/Syncano/codebox/app/filerepo"
 	. "github.com/Syncano/codebox/app/script"
 	"github.com/Syncano/codebox/app/script/mocks"
-	"github.com/Syncano/pkg-go/util"
+	"github.com/Syncano/pkg-go/v2/util"
 	pb "github.com/Syncano/syncanoapis/gen/go/syncano/codebox/script/v1"
 )
 

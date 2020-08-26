@@ -45,6 +45,6 @@ COPY codewrapper ${WRAPPERPATH}
 
 WORKDIR /home/codebox
 USER codebox
-EXPOSE 8000
+EXPOSE 9000
 CMD ["codebox"]
 ENTRYPOINT ["/sbin/tini", "--"]
