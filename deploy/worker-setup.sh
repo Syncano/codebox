@@ -20,7 +20,7 @@ fi
 if ! mount | grep -q /mnt/codebox; then
     mkdir -p /mnt/codebox
 
-    if [ -z "$DOCKER_DEVICE" ] || [ -e "$DOCKER_DEVICE" ]; then
+    if [ -z "$DOCKER_DEVICE" ] || [ ! -e "$DOCKER_DEVICE" ]; then
         >&2 echo "! docker device not set or does not exist, skipping mounting"
         exit 0
     fi
